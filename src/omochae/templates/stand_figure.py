@@ -4,9 +4,9 @@
 玩具ごとに刷る姿（figure）の値を 1 つ持つ。どの値も、出典の図を見て手で取った点（画素は使っていない）の輪郭と絵と、
 その玩具の既定の高さを持つ。立て方（stand）は、背の脚（easel）か、箱の台の溝に差す（base）かの 2 つ。
 
-出典との組み（大事）: 雛形は、どの出典（--source）が選ばれたかを知らない。姿の値と出典の記録は、場面（scenario）が組にして渡す。
-組の一覧は FIGURES の各値の "source" と、tests/test_stand_figure.py の組の表にあり、試験は場面の組がそれと合う事を見る。
-別の玩具の出典で刷ると、印は正しく刷られても、絵と出典が食い違う。
+出典との組み（大事）: 雛形の部品の関数は、どの出典（--source）が選ばれたかを知らない。姿の値と出典の記録は、場面（scenario）が組にして渡す。
+組の一覧は FIGURES の各値の "source"（それから作る SOURCES）と、tests/test_stand_figure.py の組の表にある。
+合わない組は compose が F1.source で落とし、--source を省けば SOURCES から姿に合う出典を選ぶ。試験は場面の組も表と合う事を見る。
 
 立つかの見込み（F5.stand）の前提:
 - 姿の面の重心（表の外形の面積の重心）が、支える足の形（床に触れる所を囲む凸の形）の内に、余白を持って入れば倒れないと見る。
@@ -17,6 +17,8 @@
   付け根の高さ s = L·sin(α + φ)/sin φ（φ = 90° − LEAN_DEG）と、足の形の奥行き c = L·sin α / sin φ が決まる。
   重心は姿の下の縁から zc·sin(LEAN_DEG) 後ろ。c がこれに余白を足した分より浅いと、後ろへ倒れる。
   開きの角は折り目の硬さで保つと見込む（実物で確かめていない。開きすぎる紙なら糸で脚と姿をつなぐ）。
+  倒れないかは開き具合で決まるので、開きの物差し（部品 4。印の間が c）を刷り、脚の先を印に合わせて置かせる。
+  台の形は、舌が溝をほぼ埋める（溝の長さ − 1mm）ので、姿の置き場は溝で決まり、印は要らない。
 - 台（base）: 箱（底つき）の上の面の真ん中に溝を切り、姿の下に足した差し込み（舌）を差して、舌の先を箱の底に当てる。
   舌は溝の縁と底の 2 点で支えるので、溝の隙間（溝の幅 − 紙の厚み × 重ねた枚数）だけ傾く: 傾き = atan(隙間 / 箱の高さ)。
   隙間が MIN_CLEAR より狭いと差せない。傾きが MAX_WOBBLE を越えると、ぐらついて立たない。傾いた分も重心をずらして見る。
@@ -604,6 +606,8 @@ FIGURES = {
     },
 }
 FORMS = tuple(FIGURES)
+# 形（姿）から出典を選ぶ表。--source を省いた時の既定と、合わない出典を落とす検査（compose の F1.source）が使う。
+SOURCES = {k: f["source"] for k, f in FIGURES.items()}
 
 
 def title(p):
@@ -812,6 +816,19 @@ def _figure_part(number, key, name, p, mirror):
     return Part(number, key, name, outline, label_xy=(lx, c.y - 1.8), label=str(number), art=art)
 
 
+GAUGE_W, GAUGE_END = 8, 4  # 開きの物差しの幅と、印の外の持ち手の長さ
+
+
+def _gauge(p):
+    """開きの物差し: 上の印を姿の下の縁に当て、下の印に脚の先を置くと、開きが式の c になる。"""
+    c = easel(p)["c"]
+    L = c + 2 * GAUGE_END
+    part = Part(4, "gauge", "開きの物差し", [(0, 0), (GAUGE_W, 0), (GAUGE_W, L), (0, L)], label_xy=(1, GAUGE_END + c / 2 - 1.8), label="4")
+    part.art = [{"kind": "poly", "pts": [(0.2, 0.2), (GAUGE_W - 0.2, 0.2), (GAUGE_W - 0.2, L - 0.2), (0.2, L - 0.2)], "fill": PAPER}]
+    part.art += [{"kind": "line", "pts": [(0.3, y), (GAUGE_W - 0.3, y)], "stroke": INK, "sw": 0.4} for y in (GAUGE_END, GAUGE_END + c)]
+    return part
+
+
 def _tab(p):
     tw, L, gl = p["tab_width"], p["tab_length"], p["tab_glue"]
     part = Part(3, "tab", "脚", [(0, 0), (tw, 0), (tw, gl + L), (0, gl + L)], label_xy=(1, gl + 2), label="3 脚")
@@ -853,7 +870,7 @@ def parts(p):
     out = [_figure_part(1, "front", "表の姿", p, False)]
     if p["back"]:
         out.append(_figure_part(2, "back", "裏の姿", p, True))
-    out.append(_tab(p) if p["stand"] == "easel" else base_net(p))
+    out += [_tab(p), _gauge(p)] if p["stand"] == "easel" else [base_net(p)]
     return out
 
 
@@ -861,7 +878,7 @@ def place(by_key, page, top, gap):
     """表・裏・立てる部品を、左から右へ、入らなければ次の段へ並べる。
     説明の列は最後の段の右に置く。物差し（100mm）が入らない時は、全部の部品の下に置く。"""
     x, y, row_h, right = page.x0, top, 0, page.x0
-    for key in ("front", "back", "tab", "base"):
+    for key in ("front", "back", "tab", "gauge", "base"):
         if key not in by_key:
             continue
         q = by_key[key]
@@ -889,6 +906,8 @@ def bom(p):
     if p["stand"] == "easel":
         rows.append({"number": 3, "key": "tab", "name": "脚", "qty": 1, "material": paper, "substituted": True,
                      "original_guess": "無し（元の玩具は立体で、脚は型紙のために足した）", "reason": "平らな紙の姿を立てるため"})
+        rows.append({"number": 4, "key": "gauge", "name": "開きの物差し", "qty": 1, "material": paper, "substituted": True,
+                     "original_guess": "無し（型紙のために足した）", "reason": "倒れないかは脚の開きで決まるので、開きを測るため"})
     else:
         rows.append({"number": 3, "key": "base", "name": "台の箱", "qty": 1, "material": paper, "substituted": True,
                      "original_guess": "無し（元の玩具は立体で、台は型紙のために足した）", "reason": "平らな紙の姿を立てるため"})
@@ -908,10 +927,11 @@ def steps(p):
         e = easel(p)
         where = "2 裏の姿の四角い印" if p["back"] else f"姿の背の、下の縁から {e['s']:.0f}mm の高さ"
         out += [f"3 脚の糊代を、{where}に貼る（折り線が下）",
-                f"脚を破線で後ろへ折り、姿との開きを約 {p['tab_angle']:g}° にして立てる"]
+                f"脚を破線で後ろへ折り、4 開きの物差しの上の線を姿の下の縁に当て、下の線（{e['c']:.0f}mm 後ろ）に脚の先を置いて立てる"
+                f"（開き約 {p['tab_angle']:g}°）"]
     else:
         out += ["3 台の箱の上の面の溝を切る（カッターは大人がする）", "3 台の箱を破線で谷折りし、糊代を内に貼って箱にする",
-                "姿の下の舌を溝に差し、舌の先を箱の底に当てる"]
+                "姿の下の舌を溝に差し、舌の先を箱の底に当てる（舌は溝をほぼ埋めるので、姿の置き場は溝で決まる）"]
     out.append("机を軽く叩いて、倒れないか見る")
     return out
 
