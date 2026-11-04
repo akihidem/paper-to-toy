@@ -63,7 +63,8 @@ limit = km["d"] + P["drive_arm"] - km["b"]  # 水車の腕の上限
 assert t.grashof(limit - 0.01, km["b"], P["drive_arm"], km["d"]) and not t.grashof(limit + 0.01, km["b"], P["drive_arm"], km["d"])
 assert not t.grashof(5, 3, 10, 10)  # 最短が水車の腕でなければ 1 周回せない
 fs = t.check_physics({**k, "crank": 30})
-assert [f.where for f in fs] == ["四節"] and "Grashof" in fs[0].message, fs
+# 腕 30 の水車は机もこする（4 回目の見直しで机を止める物にした）。ここでは Grashof で落ちる事を見る
+assert any(f.where == "四節" and "Grashof" in f.message for f in fs), fs
 # 1 周回る時、犬の振れはおよそ 2·asin(水車の腕 / 犬の腕)（連桿が長いので）
 assert abs(km["swing"] - 2 * math.degrees(math.asin(P["crank"] / P["drive_arm"]))) < 3, km
 
@@ -143,4 +144,51 @@ assert [f.floor for f in fs] == ["F5.link"] and "届かない" in fs[0].message,
 for k in ("hashigo", "yakko"):
     q = {**P, "kind": k}
     assert t.check_physics(q) == [] and t.reach(q) >= 0.8 * P["travel"], (k, t.reach(q))
+
+# 4 回目の見直し 1: 相撲の細い棒は膝と一緒に動き、腰 H の割ピンの頭に乗り上げうる。棒もすべての頭と比べ、当たれば落とす
+for da, tr in ((10, 7), (12, 8), (15, 12)):
+    fs = t.check_physics({**P, "drive_arm": da, "travel": tr})
+    assert any(f.where == "細い棒" and "頭" in f.message for f in fs), (da, tr, fs)
+assert t.motion(P)["rider_hit"] is None
+
+# 4 回目の見直し 2: 持つ所の印に、動く部品（足・細い棒）が動く間ずっと重ならない
+fs = t.check_physics({**P, "drive_arm": 45})
+assert any("持つ所" in f.message for f in fs), fs
+assert t.motion(P)["hold_hit"] is None
+
+# 4 回目の見直し 3: からくり台の水車と連桿は机（箱の下の縁）より下へ出ない
+assert t.check_physics({**P, "kind": "karakuri"}) == []
+fs = t.check_physics({**P, "kind": "karakuri", "crank": 16})
+assert any("机" in f.message for f in fs), fs
+
+# 4 回目の見直し 4: 組み方の文は穴を大きさ（小さい穴）でなく、印か置き場で言う
+for k in t.KINDS:
+    assert not any("小さい穴" in s for s in t.steps({**P, "kind": k})), k
+assert all(any(it.get("mark") == "pole" for it in q.art) for q in t.parts({**P, "kind": "saru_take"}) if q.key.endswith("bar"))
+
+# 4 回目の見直し 5: 噛む角の窓（3〜25°）が、穴の大きさで ±HOLE_TOL の広さを持つ。薄い紙の板では窓が狭く落ちる
+lo_d, hi_d = t.hole_window(P["pole_d"], P["plate_t"])
+assert lo_d + t.HOLE_TOL <= P["hole_d"] <= hi_d - t.HOLE_TOL, (lo_d, hi_d)
+assert abs(t.lock_angle(lo_d, P["pole_d"], P["plate_t"]) - t.MIN_LOCK) < 1e-6 and abs(t.lock_angle(hi_d, P["pole_d"], P["plate_t"]) - t.MAX_LOCK) < 1e-6
+fs = t.check_physics({**P, "kind": "saru_take", "plate_t": 0.3, "hole_d": 3.2})
+assert any("許し" in f.message for f in fs), fs
+
+# 4 回目の見直し 6: 竿の人形は 1 本のピンで吊るので、板を傾ける腕はピンまでの drive_arm で、粘土の置き場では変わらない。印はピンの真下
+ss = {**P, "kind": "saru_sao"}
+assert t.motion(ss)["load_arm"] == P["drive_arm"]
+fig = t.parts(ss)[0]
+clay = next(it for it in fig.art if it.get("mark") == "clay")
+assert abs(clay["at"][0] - fig.holes[0][0]) < 1e-6 and clay["at"][1] > fig.holes[0][1]
+
+# 4 回目の見直し 7: からくり台の水車の軸は、pin_d によらず 3mm の竹串
+for d in (2, 5):
+    row = next(r for r in t.bom({**P, "kind": "karakuri", "pin_d": d}) if r["key"] == "axle")
+    assert "3mm" in row["material"], row
+
+# 4 回目の見直し 8: 梯子の押す量の印は、範囲のどの押す量でも板の下の側に収まる（印の後ろの端 ≦ 板の端）
+for tr in range(2, 41, 2):
+    q = {**P, "kind": "hashigo", "travel": tr}
+    slat = next(x for x in t.parts(q) if x.key == "slat")
+    ticks = [it for it in slat.art if it.get("mark") == "travel"]
+    assert max(it["at"][0] for it in ticks) + 0.4 <= slat.width - 0.3, (tr, ticks)
 print("ok")

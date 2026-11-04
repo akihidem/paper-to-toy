@@ -40,9 +40,17 @@ Claude が変えてよいのは RANGES の名前の値だけ。
 - 溝: 溝の長さ − ピンの穴の直径（ピンの中心が動ける長さ）≧ travel。
 - 四節（karakuri）: Grashof の条件（最短 + 最長 ≦ 残りの 2 本の和）と、最短が水車の腕である事（手を 1 周回せる）。
   1 周の間の伝達角（連桿と犬の腕の間の角）が MIN_TRANSMISSION° 以上（小さいと紙のピンがきしんで回らない見込み・実物で未確認）。
-- 板の噛み（saru_take・saru_sao）: 厚さ t の板の穴 D を角 α だけ傾けると、竹串に直角な向きの通り幅は D·cos α − t·sin α。
-  これが竹串の太さ d になる角が噛む角 α_lock。MIN_LOCK° より小さいと水平でも滑らず、MAX_LOCK° より大きいと猿が垂れ下がって
-  耳の折り目が開く見込み。摩擦は入れない（薄い板は 2 点で竹串に当たるので、ふつうの紙の摩擦で噛むと見る。実物で未確認）。
+- 板の噛み（saru_take・saru_sao）: 厚さ t（plate_t。板は厚紙に貼る）の板の穴 D を角 α だけ傾けると、竹串に直角な向きの通り幅は
+  D·cos α − t·sin α。これが竹串の太さ d になる角が噛む角 α_lock。MIN_LOCK° より小さいと水平でも滑らず、MAX_LOCK° より大きいと
+  猿が垂れ下がって耳の折り目が開く見込み。窓の端の穴の大きさは D = (d + t·sin α) / cos α で、穴 D がこの窓の内に HOLE_TOL mm
+  以上の余りで入る事も見る（目打ちの狂い。限り: 余りの見込み 0.2mm は実物で未確認）。摩擦は入れない（板は 2 点で竹串に当たるので、
+  ふつうの紙の摩擦で噛むと見る。実物で未確認）。
+  板を傾ける重みの腕（load_arm）: 竿の人形はピン 1 本で吊るので、人形はピンの真下へ垂れ、重みは粘土の置き場によらずピンに掛かる
+  （腕 ＝ drive_arm）。粘土の印はピンの真下に刷る（人形がまっすぐ垂れる所）。竹登り猿は 2 本のピンで 2 枚の板と枠を作るので、
+  粘土の置き場（竹串からの横の距離）が重みの腕になる。
+- 机（karakuri）: 水車と連桿が、1 周の間に箱の下の縁（机）より下へ出ない。
+- 相撲の細い棒: 膝と一緒に、押す向きに平行に動く（手が水平に保つ）と見て、腰 H と両肩の割ピンの頭に当たらない事を見る。当たれば
+  棒が頭に乗り上げるので落とす。持つ所の印（B と A の足）に、足と細い棒が動く間ずっと重ならない事も見る（重なると持つ手が動きを止める）。
 - 絵の札（ebako）: 札が上下に travel/2 ずつ動いても、窓を COVER mm 以上の余りで覆い、枠の外へ出ない。
 """
 import math
@@ -61,14 +69,16 @@ DEFAULTS = {
     # ピンから押す点・揺れる腕の先までの長さ。図の人形の腿の長さの比から起こした。
     "drive_arm": 30, "travel": 20, "slot_len": 30,
     "crank": 10,
-    # 竹串 3mm に、穴 3.2mm。0.2mm の遊びで噛む角が 18° 前後になる。
-    "pole_d": 3, "hole_d": 3.2,
+    # 竹串 3mm に、穴 3.4mm。登る板は厚紙（1mm 前後）に貼るので、噛む角は 15° 前後になる。
+    # 薄い紙 1 枚の板だと、噛む角の窓（3〜25°）が穴の大きさで 0.3mm ほどしかなく、目打ちで当てられない（4 回目の見直し）。
+    # 厚い板は傾けた時に穴の縁が竹串に早く当たるので、窓が穴の大きさで 0.7mm ほどに広がる。
+    "pole_d": 3, "hole_d": 3.4, "plate_t": 1.0,
     # 0.15mm はふつうの厚めの紙の見込み。実物の紙を測ったら置き換える。
     "paper_thickness": 0.15,
 }
 RANGES = {
     "pin_d": (2, 5), "bar_w": (5, 20), "drive_arm": (10, 45), "travel": (2, 40), "slot_len": (10, 60),
-    "crank": (5, 40), "pole_d": (2, 6), "hole_d": (2, 8), "paper_thickness": (0.05, 0.5),
+    "crank": (5, 40), "pole_d": (2, 6), "hole_d": (2, 8), "plate_t": (0.1, 2.0), "paper_thickness": (0.05, 0.5),
 }
 KINDS = ("sumo", "saru_take", "saru_sao", "ebako", "karakuri", "hashigo", "yakko")
 # 刷る形を決める寸法（どの玩具か）。仕掛けが形ごとに違うので、寸法を直に渡す入口では必ず書かせる。
@@ -91,6 +101,9 @@ MIN_ANGLE = 15  # 揺れ・蹴りが目に見える角の見込み
 MIN_DIST = 8  # 滑る物が動いて見える量の見込み
 MIN_TRANSMISSION = 30  # 四節の伝達角の下限の見込み
 MIN_LOCK, MAX_LOCK = 3, 25  # 板の噛む角の窓の見込み
+HOLE_TOL = 0.2  # 目打ちで穴をあける時の大きさの狂いの見込み（mm）。穴の大きさが噛む角の窓の内に、この余りで入る事を見る
+AXLE_D = 3  # からくり台の水車の軸の竹串の太さ。割ピンの太さ（pin_d）とは別の物なので結び付けない
+FLOOR_Y = {"karakuri": 130.0}  # 机の高さ（組み図の y）。からくり台は箱の下の縁が机に乗る
 COVER = 2  # 絵の札が窓の縁を覆う余り
 # 止まる物や糸で入力が travel に届かない時、届く量がこの割合以上なら、届く量を印と文に刷って通す。下なら落とす。
 # 下まで黙って縮めると、寸法の travel が刷る量と別物になる（寸法の名前が言う事を守るため）。
@@ -164,17 +177,30 @@ def pull_angle(pivot, k0, g, s, sign, step=0.1):
     return 180.0, True
 
 
+def _angles(upto, step):
+    """0 から upto までの角の列。終わりの角そのものも必ず入れる（刻みだけだと、押し切った姿の当たりを見逃した。4 回目の見直し）。"""
+    out, n = [], 0
+    while n * step < upto - 1e-9:
+        out.append(n * step)
+        n += 1
+    return out + [max(0.0, upto)]
+
+
 def swing_hit(poly, pivot, sign, upto, obstacles, step=0.5):
     """部品の形 poly を pivot のまわりに sign の向きへ upto° まで回し、止まる物に最初に当たる角。当たらなければ None。"""
     if not obstacles:
         return None
-    n = 0
-    while n * step <= upto + 1e-9:
-        g = affinity.rotate(poly, sign * n * step, origin=pivot) if n else poly
+    for a in _angles(upto, step):
+        g = affinity.rotate(poly, sign * a, origin=pivot) if a else poly
         if any(g.intersects(o) for o in obstacles):
-            return n * step
-        n += 1
+            return a
     return None
+
+
+def hole_window(pole_d, t):
+    """噛む角が MIN_LOCK° と MAX_LOCK° になる穴の大きさ。D = (d + t·sin α) / cos α（lock_angle の式を D について解いた物）。"""
+    f = lambda a: (pole_d + t * math.sin(math.radians(a))) / math.cos(math.radians(a))
+    return f(MIN_LOCK), f(MAX_LOCK)
 
 
 def lock_angle(hole_d, pole_d, t):
@@ -250,7 +276,7 @@ def _limb(pts, w):
 
 
 def _disc(c, r):
-    return Point(c).buffer(r, quad_segs=8)
+    return Point(c).buffer(r, quad_segs=16)
 
 
 def _ellipse(c, rx, ry):
@@ -386,7 +412,8 @@ def _sumo(p):
                 [(box(78, 3, 106, 11), HAIR), (knot, HAIR), (box(76, 54, 106, 68), CLOTH)], holes=[(SB[0], SB[1], r), (H[0], H[1], r)])
     # 持つ所の印。B は棒の溝の 1 本のピンでしか棒につながらず、回りも滑りもするので、蹴る間は立つ足を押さえて B を止める。
     # 床（押す形の角・当たり）はこの持ち方を前提に、B の腰 H を止まった軸と見る。A の足の印は押し合う時に持つ所。
-    for pc, (fx, fy) in ((B, (103, 108)), (A, (15, 108))):
+    holds = [(103, 108), (15, 108)]
+    for pc, (fx, fy) in zip((B, A), holds):
         pc["part"].art.append(_tick(fx - 2 - pc["T"][0], fy - 2 - pc["T"][1], 4, 4, "hold"))
     leg_len = 50
     leg_shape = unary_union([_limb([H, (H[0], H[1] + leg_len)], 11), _disc(H, 7), box(H[0] - 11, H[1] + leg_len - 5, H[0] + 5, H[1] + leg_len + 1)])
@@ -400,8 +427,11 @@ def _sumo(p):
     bar = _bar(5, "bar", "長い棒", SA, SB, p["bar_w"], [(0, r)], [(span, p["slot_len"], r)], ext0=ext, ext1=p["slot_len"] / 2 + ext - r,
                fill=WOOD, marks="stripe")
     pieces = [A, B, leg, rod, bar]
+    # 細い棒は膝のピン K と一緒に、押す向きに平行に動く（rider）。棒は K 以外のすべての割ピンの頭（H・両肩）と比べる。
     mech = {"type": "push", "mover": leg, "pivot": H, "input": K, "u": (-1.0, 0.0), "sign": 1,
-            "obstacles": [_disc(SA, HEAD_R), _disc(SB, HEAD_R)], "slot": True, "out": "B の足"}
+            "obstacles": [_disc(SA, HEAD_R), _disc(SB, HEAD_R)], "slot": True, "out": "B の足",
+            "riders": [(rod, [_disc(H, HEAD_R), _disc(SA, HEAD_R), _disc(SB, HEAD_R)])],
+            "holds": [box(x - 2, y - 2, x + 2, y + 2) for x, y in holds]}
     return pieces, mech
 
 
@@ -422,7 +452,10 @@ def _climber_bar(number, key, name, p, pin):
     part.art = [{"kind": "poly", "pts": [(0.3, 0.3), (total - 0.3, 0.3), (total - 0.3, w - 0.3), (0.3, w - 0.3)], "fill": WOOD_DARK},
                 {"kind": "poly", "pts": [(fx - EAR / 2 + 0.3, w + 0.3), (total - 0.3, w + 0.3), (total - 0.3, w + EAR - 0.3), (fx - EAR / 2 + 0.3, w + EAR - 0.3)],
                  "fill": WOOD}]
-    part.label_xy = _label_spot(Polygon(outline), holes, [])
+    # 竹串の穴の印（朱の三角）。穴の大きさは胴へのピンの穴と近く、大きさでは見分けられないので、組み方の文は印で言う。
+    tx = e0 + hr + 1
+    part.art.append({"kind": "poly", "pts": [(tx, w / 2 - 1.8), (tx + 3, w / 2), (tx, w / 2 + 1.8)], "fill": RED, "mark": "pole", "at": (tx + 1, w / 2)})
+    part.label_xy = _label_spot(Polygon(outline), holes, [(tx, w / 2 - 1.8, 3, 3.6)])
     # 印字の座標 (x, y) → 組み図 (x − e0 + 0, y + (ピンの y − EAR/2) − w)。耳のピンの穴が人形の穴 pin に重なる。
     return {"part": part, "T": (pin[0] - p["drive_arm"] - e0, pin[1] - EAR / 2 - w, 0.0), "slots": [], "keepouts": []}
 
@@ -440,6 +473,7 @@ def _saru(p, two):
         shape = unary_union([body, head, cap] + limbs)
         fig = _figure(1, "monkey", "猿", shape, MONKEY, [(cap, CLOTH), (_disc((12 + off, 31), 4), SKIN)], holes=[(P1[0], P1[1], r), (P2[0], P2[1], r)])
         clay = (36 + off, 58)
+        load_arm = clay[0]  # 竹串は x = 0。2 本のピンで枠になるので、粘土の横の距離が板を傾ける重みの腕
         bars = [_climber_bar(2, "armbar", "腕の板", p, P1), _climber_bar(3, "legbar", "足の板", p, P2)]
         name = "猿"
     else:
@@ -451,15 +485,17 @@ def _saru(p, two):
         shape = unary_union([body, head, hat] + limbs)
         fig = _figure(1, "figure", "人形", shape, STONE, [(hat, WOOD), (_disc((22 + off, 35), 4), SKIN), (box(10 + off, 58, 50 + off, 76), WOOD_DARK)],
                       holes=[(P1[0], P1[1], r)])
-        clay = (36 + off, 62)
+        # ピン 1 本で吊るので、人形はピンの真下へ垂れ、重みはピンに掛かる。粘土の印はピンの真下（まっすぐ垂れる所）。
+        clay = (P1[0], P1[1] + 14)
+        load_arm = p["drive_arm"]
         bars = [_climber_bar(2, "handbar", "手の板", p, P1)]
         name = "人形"
-    # 粘土の置き場の印。竹串から遠い背の側に置くと、重みの腕が長くなり、板を傾けて噛ませる見込み（実物で未確認）。
+    # 粘土の置き場の印。竹登り猿は竹串から遠い背の側（重みの腕が長くなり、板を傾けて噛ませる見込み・実物で未確認）。竿の人形はピンの真下。
     q = fig["part"]
     cx, cy = clay[0] - fig["T"][0], clay[1] - fig["T"][1]
     q.art.append({"kind": "poly", "pts": [(cx + 2.5 * math.cos(i * math.pi / 8), cy + 2.5 * math.sin(i * math.pi / 8)) for i in range(16)],
                   "fill": RED, "mark": "clay", "at": (cx, cy)})
-    mech = {"type": "clamp", "out": name, "slot": False}
+    mech = {"type": "clamp", "out": name, "slot": False, "load_arm": load_arm}
     return [fig] + bars, mech
 
 
@@ -494,7 +530,9 @@ def _ebako(p):
 
 def _karakuri(p):
     r = pin_r(p)
-    O, A = (40.0, 13.0), (92.0, 115.0)
+    # 軸 A は箱の上の縁から 10mm。水車が箱の下の縁（机）より下へ出ないよう、前の 115 から上げた（4 回目の見直し）。
+    O, A = (40.0, 13.0), (92.0, 110.0)
+    ar = AXLE_D / 2 + 0.2
     d = math.dist(O, A)
     # 犬の腕は、組んだ時に O→A に直角（右上）へ向ける。揺れが真ん中から左右に振り分けになる見込み。
     ux, uy = (A[0] - O[0]) / d, (A[1] - O[1]) / d
@@ -509,7 +547,7 @@ def _karakuri(p):
     monkey = unary_union([_disc((40, 104), 4), _ellipse((40, 116), 7, 9)])
     frame = _figure(1, "frame", "門の枠と箱", frame_shape, WOOD,
                     [(box(6, 16, 14, 100), GREEN), (box(66, 16, 74, 100), GREEN), (monkey, MONKEY), (_ellipse((56, 112), 8, 3), STONE),
-                     (box(6, 126, 110, 130), WOOD_DARK)], holes=[(O[0], O[1], r), (A[0], A[1], r)],
+                     (box(6, 126, 110, 130), WOOD_DARK)], holes=[(O[0], O[1], r), (A[0], A[1], ar)],
                     keepouts=[GATE])  # 門の口は外形の穴になるので、切り抜く矩形として刷る（部品の外形は穴を持てない）
     dog = unary_union([_ellipse((O[0], -12), 14, 7), _disc((O[0] + 14, -16), 5.5), box(O[0] - 12, -10, O[0] - 8, -2), box(O[0] + 6, -10, O[0] + 10, -2),
                        box(O[0] - 5, -8, O[0] + 5, O[1] + 6), _limb([O, R0], 10), _disc(R0, 6)])
@@ -518,14 +556,15 @@ def _karakuri(p):
     wr = p["crank"] + r + PIN_MARGIN + 3
     paddles = [Polygon([rot((A[0] + 2, A[1] - 1.2), A, k * 45), rot((A[0] + wr - 1, A[1] - 1.2), A, k * 45),
                         rot((A[0] + wr - 1, A[1] + 1.2), A, k * 45), rot((A[0] + 2, A[1] + 1.2), A, k * 45)]) for k in range(8)]
-    wheel = _figure(3, "wheel", "水車と手", _disc(A, wr), WOOD, [(g, WOOD_DARK) for g in paddles], holes=[(A[0], A[1], r), (C0[0], C0[1], r)])
+    wheel = _figure(3, "wheel", "水車と手", _disc(A, wr), WOOD, [(g, WOOD_DARK) for g in paddles], holes=[(A[0], A[1], ar), (C0[0], C0[1], r)])
     ext = r + PIN_MARGIN + 1.5
     rod = _bar(4, "rod", "斜めの棒", C0, R0, p["bar_w"], [(0, r), (b, r)], ext0=ext, ext1=ext)
     # 前の面に出る割ピンの頭は、犬のピン O だけ。軸 A は竹串を水車に糊で留め、前を水車の面で切りそろえて頭を出さない。
     # A に頭を出すと、連桿から見て A は手のピン C のまわりを半径 crank で 1 周するので、C から R へ伸びる連桿はどの寸法でも
     # 1 周のどこかで必ず A の頭に当たる（with_axle_head で数えられる）。
     mech = {"type": "crank", "out": "犬", "slot": False, "O": O, "A": A, "R0": R0, "a": p["crank"], "b": b, "c": c, "d": d,
-            "mover": dogp, "obstacles": [], "heads": [_disc(O, HEAD_R)], "axle_head": _disc(A, HEAD_R), "ext": ext, "w": p["bar_w"]}
+            "mover": dogp, "obstacles": [], "heads": [_disc(O, HEAD_R)], "axle_head": _disc(A, HEAD_R), "ext": ext, "w": p["bar_w"],
+            "wheel_r": wr, "table": box(-500, FLOOR_Y["karakuri"], 500, FLOOR_Y["karakuri"] + 500)}
     return [frame, dogp, wheel, rod], mech
 
 
@@ -543,7 +582,8 @@ def _hashigo(p):
     low = 40.0  # 下の端は、傾けると机に当たる長さにする（図の板は机まで届く）。机が止める所になり、既定の押す量の 0.8 倍以上は押せる
     p0 = (P[0] - up * u[0], P[1] - up * u[1])
     slat = _bar(2, "slat", "梯子の板", p0, P, p["bar_w"], [(up - p["drive_arm"], r), (up, r)], ext0=5, ext1=low, fill=WOOD, marks="rung")
-    # つまみを押し上げる量の物差し。台のピンの先（下の短い側）に、travel だけ離した 2 本（下の側は 44mm あり、上限 40 が入る）。
+    # つまみを押し上げる量の物差し。台のピンの先（下の短い側・40mm）に、届く量（reach）だけ離した 2 本。届く量は机に当たる所で
+    # 止まり、既定の腕で 17mm 前後なので、ピンから 2.5mm の所から置いて下の端に収まる（試験が travel の範囲の全部で確かめる）。
     slat["travel_x0"] = 5 + up + 2.5
     peg = (P[0] - p["drive_arm"] * u[0], P[1] - p["drive_arm"] * u[1])
     floor = box(-500, floor_y, 500, floor_y + 500)
@@ -599,6 +639,28 @@ def pin_margins(pieces):
     return out
 
 
+def _rider_sweep(m, upto, step=0.5):
+    """入力と一緒に動く部品（rider・入力のピンと平行に動く）が割ピンの頭に当たる角と、動く部品（足と rider）が持つ所の印に重なる角。
+    Returns (rider が当たる角か None, 持つ所に重なる角か None)。止まった角 upto までを見る。"""
+    riders, holds = m.get("riders", []), m.get("holds", [])
+    if not riders and not holds:
+        return None, None
+    mover = asm_poly(m["mover"])
+    base = [(asm_poly(pc), heads) for pc, heads in riders]
+    rider_hit = hold_hit = None
+    for th in _angles(upto, step):
+        if rider_hit is not None and hold_hit is not None:
+            break
+        a = m["sign"] * th
+        k = rot(m["input"], m["pivot"], a)
+        moved = [(affinity.translate(g, k[0] - m["input"][0], k[1] - m["input"][1]), heads) for g, heads in base]
+        if rider_hit is None and any(g.intersects(h) for g, heads in moved for h in heads):
+            rider_hit = th
+        if hold_hit is None and any(g.intersects(h) for h in holds for g in [affinity.rotate(mover, a, origin=m["pivot"])] + [g for g, _ in moved]):
+            hold_hit = th
+    return rider_hit, hold_hit
+
+
 def motion(p):
     """仕掛けの動く量を数える。Returns dict（形ごとの量）。前提は module の docstring。"""
     pieces, m = assembly(p)
@@ -626,15 +688,18 @@ def motion(p):
         else:
             got = math.dist(m["input"], m["guide"]) - math.dist(k, m["guide"])
         res["reach"] = p["travel"] if not res["dead"] and got >= p["travel"] - 0.05 else max(0.0, got)
+        res["rider_hit"], res["hold_hit"] = _rider_sweep(m, res["usable"])
     elif t == "crank":
         res["grashof"] = grashof(m["a"], m["b"], m["c"], m["d"])
         res["b"], res["d"] = m["b"], m["d"]
+        res["wheel_below"] = m["A"][1] + m["wheel_r"] - FLOOR_Y["karakuri"]  # 正なら水車が机より下へ出る（回すと机をこする）
         fb = fourbar(m["A"], m["O"], m["a"], m["b"], m["c"], m["R0"])
         if fb is None:
-            res.update(swing=None, transmission=None, hit_angle=None, link_hit=None)
+            res.update(swing=None, transmission=None, hit_angle=None, link_hit=None, link_table=None)
         else:
             angles, mu, poses = fb
             res["link_hit"] = link_sweep(poses, m["b"], m["w"], m["ext"], m["heads"])
+            res["link_table"] = link_sweep(poses, m["b"], m["w"], m["ext"], [m["table"]])
             psi0 = math.degrees(math.atan2(m["R0"][1] - m["O"][1], m["R0"][0] - m["O"][0]))
             rel = [((a - psi0 + 180) % 360) - 180 for a in angles]
             res["swing"], res["transmission"] = max(rel) - min(rel), mu
@@ -642,8 +707,12 @@ def motion(p):
             hits = [swing_hit(poly, m["O"], s, abs(lim), m["obstacles"]) for s, lim in ((1, max(rel)), (-1, min(rel)))]
             res["hit_angle"] = min((h for h in hits if h is not None), default=None)
     elif t == "clamp":
-        res["lock"] = lock_angle(p["hole_d"], p["pole_d"], p["paper_thickness"])
+        res["lock"] = lock_angle(p["hole_d"], p["pole_d"], p["plate_t"])
+        lo, hi = hole_window(p["pole_d"], p["plate_t"])
+        res["hole_margin"] = min(p["hole_d"] - lo, hi - p["hole_d"])
+        res["hole_window"] = (lo, hi)
         res["step"] = p["travel"]
+        res["load_arm"] = m["load_arm"]
     elif t == "slide":
         fw, fh = m["frame"]
         wx, wy, ww, wh = m["window"]
@@ -684,11 +753,19 @@ def check_physics(p):
             why = "止まる物に当たる" if res["hit_angle"] is not None and res["hit_angle"] < (res["input_angle"] or 0) else \
                 ("糸が張り切る" if res["string_limited"] else "入力が小さい")
             out.append(Failure("F5.link", who, f"{who}の振れが {res['usable']:.1f}° で小さい（{why}・{MIN_ANGLE}° 以上）"))
+        if res["rider_hit"] is not None:
+            out.append(Failure("F5.link", "細い棒", f"足が {res['rider_hit']:.1f}° 振れた所で、細い棒が割ピンの頭に乗り上げる"))
+        if res["hold_hit"] is not None:
+            out.append(Failure("F5.link", "持つ所", f"足が {res['hold_hit']:.1f}° 振れた所で、動く部品が持つ所の印に重なる（持つ手が動きを止める）"))
         if not res["dead"] and res["reach"] < REACH_MIN * p["travel"]:
             why = "糸が張り切る" if res["string_limited"] else "止まる物に当たる"
             out.append(Failure("F5.link", who, f"動かす量 {p['travel']:g}mm に {res['reach']:.1f}mm しか届かない（{why}・{REACH_MIN:g} 倍の"
                                f" {REACH_MIN * p['travel']:.1f}mm 以上）"))
     elif t == "crank":
+        if res["wheel_below"] > 0:
+            out.append(Failure("F5.link", "水車と手", f"水車が箱の下の縁より {res['wheel_below']:.1f}mm 下へ出て、回すと机をこする"))
+        if res.get("link_table") is not None:
+            out.append(Failure("F5.link", "斜めの棒", f"水車を {res['link_table']}° 回した所で、斜めの棒が机に当たる"))
         if not res["grashof"] or res["swing"] is None:
             out.append(Failure("F5.link", "四節", f"水車の腕 {p['crank']:g}mm・連桿 {res['b']:.1f}mm・犬の腕 {p['drive_arm']:g}mm・軸の間 {res['d']:.1f}mm"
                                "で Grashof の条件を満たさず、手を 1 周回せない（最短が水車の腕で、最短 + 最長 ≦ 残りの和）"))
@@ -706,6 +783,10 @@ def check_physics(p):
             out.append(Failure("F5.link", "板の穴", f"穴 {p['hole_d']:g}mm が竹串 {p['pole_d']:g}mm にきつく、水平でも滑らない（噛む角 {res['lock']:.1f}°・{MIN_LOCK}° 以上）"))
         elif res["lock"] > MAX_LOCK:
             out.append(Failure("F5.link", "板の穴", f"穴 {p['hole_d']:g}mm が竹串 {p['pole_d']:g}mm に緩く、{res['lock']:.1f}° 傾くまで噛まない（{MAX_LOCK}° まで）"))
+        if MIN_LOCK <= res["lock"] <= MAX_LOCK and res["hole_margin"] < HOLE_TOL:
+            lo, hi = res["hole_window"]
+            out.append(Failure("F5.link", "板の穴", f"噛む角の窓の穴の大きさは {lo:.2f}〜{hi:.2f}mm で、穴 {p['hole_d']:g}mm の余りが {res['hole_margin']:.2f}mm。"
+                               f"目打ちの狂いの許し {HOLE_TOL}mm より狭い（板を厚くすると窓が広がる）"))
         if res["step"] < MIN_DIST:
             out.append(Failure("F5.link", who, f"1 回に押し上げる量 {res['step']:g}mm が小さい（{MIN_DIST}mm 以上）"))
     elif t == "slide":
@@ -779,7 +860,9 @@ def bom(p):
     origin = {"sumo": "木か紙（図の平たい人形と棒）", "saru_take": "紙か薄い木（図の平たい猿）", "saru_sao": "紙か薄い木（推定）",
               "ebako": "木の箱と紙の絵（推定）", "karakuri": "木（推定・図の柱と箱）", "hashigo": "木か竹（推定）", "yakko": "紙か木（推定）"}[kind]
     for q in parts(p):
-        rows.append({"number": q.number, "key": q.key, "name": q.name, "qty": 1, "material": paper, "substituted": True,
+        # 登る板は厚紙に貼って厚くする（噛む角の窓を広げるため・床が plate_t で見る）
+        mat = f"{paper}を厚紙（厚さ {p['plate_t']:g}mm 前後）に貼った物" if q.key.endswith("bar") and kind in ("saru_take", "saru_sao") else paper
+        rows.append({"number": q.number, "key": q.key, "name": q.name, "qty": 1, "material": mat, "substituted": True,
                      "original_guess": f"不明（{origin}）", "reason": PAPER_WHY})
     n = 10
     rows.append({"number": n, "key": "pin", "name": "ピン", "qty": _pin_count(kind), "material": PIN_ROW.format(d=p["pin_d"]), "substituted": True,
@@ -791,7 +874,7 @@ def bom(p):
         rows.append({"number": n + 1, "key": "peg", "name": "つまみ", "qty": 1, "material": "竹串を 20mm に切った物", "substituted": True,
                      "original_guess": "木の棒（図の手・つまみ）", "reason": "家にあり、穴に差して糊で留めやすいため"})
     if kind == "karakuri":
-        rows.append({"number": n + 4, "key": "axle", "name": "水車の軸", "qty": 1, "material": f"竹串（太さ {p['pin_d']:g}mm 前後）を 30mm に切った物",
+        rows.append({"number": n + 4, "key": "axle", "name": "水車の軸", "qty": 1, "material": f"竹串（太さ {AXLE_D}mm）を 30mm に切った物",
                      "substituted": True, "original_guess": "木の軸（図の水車の真ん中）", "reason": "前に頭を出さず、斜めの棒が軸の上を通れるようにするため"})
     if kind in ("ebako", "yakko"):
         rows.append({"number": n + 2, "key": "cord", "name": "糸", "qty": 2 if kind == "ebako" else 1, "material": "木綿の糸（1 本 150mm に切る）",
@@ -824,25 +907,25 @@ def steps(p):
                  "蹴る間は B の体を止める）",
                  f"右手で細い棒を、棒の 2 本の朱の印の間（{go:.0f}mm）だけ横に押して、B の足が蹴り上がるか見る",
                  f"A と B の足の朱の印を両手で持って近づけ・離し、B の肩のピンが棒の溝の中を {p['travel']:g}mm 動くか見る"],
-        "saru_take": ["2 腕の板と 3 足の板の耳を破線で谷折りし、竹串を板の小さい穴に通す",
+        "saru_take": [f"板は刷った面を上にして厚紙に貼ってから切る。竹串の穴（朱の三角の横）は目打ちで小さくあけ、竹串を通して、板を水平にすると滑り、傾けると止まるまで少しずつ広げる（穴の大きさの許しは ±{HOLE_TOL}mm ほど）", "2 腕の板と 3 足の板の耳を破線で谷折りし、竹串を板の朱の三角の横の穴に通す",
                       "耳を猿の胴の穴に合わせ、割ピンで留める。猿の背の朱の丸い印に油粘土を付ける",
                       f"竹串を立て、猿を下から {p['travel']:g}mm ほど押しては離し、登るか見る"],
-        "saru_sao": ["2 手の板の耳を破線で谷折りし、竹串を板の小さい穴に通す",
-                     "耳を人形の胴の穴に合わせ、割ピンで留める。人形の背の朱の丸い印に油粘土を付ける",
+        "saru_sao": [f"板は刷った面を上にして厚紙に貼ってから切る。竹串の穴（朱の三角の横）は目打ちで小さくあけ、竹串を通して、板を水平にすると滑り、傾けると止まるまで少しずつ広げる（穴の大きさの許しは ±{HOLE_TOL}mm ほど）", "2 手の板の耳を破線で谷折りし、竹串を板の朱の三角の横の穴に通す",
+                     "耳を人形の胴の穴に合わせ、割ピンで留める。ピンの真下の朱の丸い印に油粘土を付ける（人形がまっすぐ垂れる）",
                      f"竹串を立て、人形を下から {p['travel']:g}mm ほど押しては離し、止まるか登るか見る"],
         "ebako": ["2 絵の札を 1 枠の後ろに置き、枠の溝から札の左右の穴へ割ピンを通して留める",
-                  "札の上と下の小さい穴に糸を結び、枠の上と下へ出す",
+                  "札の上の端の穴と下の端の穴に糸を結び、枠の上と下へ出す",
                   f"上の糸と下の糸を交互に引き、ピンの頭の真ん中が溝の横の 2 本の朱の印の間（{p['travel']:g}mm）を動くか、窓の中の絵が動くか見る"],
         "karakuri": ["2 犬を梁の穴に割ピンで留める",
                      "3 水車の真ん中の穴に竹串の軸を通して糊で留め、前に出た串は水車の面で切りそろえる（軸に割ピンの頭を出すと、"
                      "斜めの棒が 1 周のどこかで必ず当たる）。軸の後ろを箱の穴に通し、箱の裏に出た串に紙を巻いて抜け止めにする",
-                     "4 斜めの棒の両端を、犬の尾の穴と水車の小さい穴に割ピンで留める",
+                     "4 斜めの棒の両端を、犬の尾の穴と、水車の真ん中から外れた穴（手）に割ピンで留める",
                      "水車の手のピンの頭に竹串のつまみを糊で付ける", "つまみを持って水車を回し、犬が首を振るか見る"],
         "hashigo": ["2 梯子の板の下の方の穴を 1 台の穴に重ね、割ピンで留める", "板の上の方の穴に竹串のつまみを差し、糊で留める",
                     f"つまみを、板の下の 2 本の朱の印の間の長さ（{go:.0f}mm）だけ板に直角に押し上げ、板が傾いて下の端が机に当たるか見る"
                     + ("（下の端が机に当たって、そこで止まる）" if short else "")],
         "yakko": ["2 蹴る足を胴の腰に割ピンで留める", "竹串を胴の下の帯の裏に糊で貼る（先を腰の下まで）",
-                  "膝の小さい穴に糸を結び、座る横木の先の小さい穴に通して下へ垂らし、輪に結ぶ",
+                  "膝の穴に糸を結び、座る横木の先の穴に通して下へ垂らし、輪に結ぶ",
                   f"糸の、横木の穴から出た所にペンで印を付ける。竹串を持ち、印が {go:.0f}mm 下がるまで糸の輪を引いて、足が振れるか見る（糸は刷れないので印は自分で付ける）"
                   + ("（膝が腰と穴を結ぶ線に乗ると、糸はそれ以上縮まない）" if short else "")],
     }[k]
