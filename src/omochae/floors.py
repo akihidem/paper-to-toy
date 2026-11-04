@@ -78,15 +78,17 @@ def check_art(parts):
         for item in p.art:
             pts = [(p.x + x, p.y + y) for x, y in item["pts"]]
             geom = Polygon(pts).buffer(-0.01) if item["kind"] == "poly" else LineString(pts)
-            if not poly.buffer(0.05).contains(geom):
+            # 線は刷られる太さの帯で見る。中心線だけだと、太い線が糊代や折り線にはみ出しても通った。
+            # 端は SVG の既定（butt）と同じく平らに切る。丸く足すと、刷られない分まで見て偽の失敗を出す。
+            ink = geom if item["kind"] == "poly" else geom.buffer(item.get("sw", 0) / 2, cap_style=2)
+            if not poly.buffer(0.05).contains(ink):
                 out.append(Failure("F5.image_box", p.name, "絵が部品の外に出ている"))
             for (x1, y1), (x2, y2) in p.valley + p.mountain:
-                if geom.intersects(LineString([(p.x + x1, p.y + y1), (p.x + x2, p.y + y2)])):
+                if ink.intersects(LineString([(p.x + x1, p.y + y1), (p.x + x2, p.y + y2)])):
                     out.append(Failure("F5.image_box", p.name, "絵が折り線をまたいでいる"))
             for g in p.glue:
-                # 線の絵と面の交わりは線なので面積が 0 になる。線は交わった長さで見る（面積だけだと線が糊代を横切っても通った）。
-                cross = geom.intersection(Polygon([(p.x + x, p.y + y) for x, y in g]))
-                if (cross.length if item["kind"] == "line" else cross.area) > EPS:
+                # 線も太さの帯（ink）にしたので、面積で見られる（中心線の面積は 0 で、線が糊代を横切っても通っていた）。
+                if ink.intersection(Polygon([(p.x + x, p.y + y) for x, y in g])).area > EPS:
                     out.append(Failure("F5.image_box", p.name, "絵が糊代にかかっている"))
     return out
 

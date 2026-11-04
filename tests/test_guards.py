@@ -51,6 +51,11 @@ over = Part(1, "t", "試し", [(0, 0), (40, 0), (40, 20), (0, 20)], glue=glue, a
 clear = Part(1, "t", "試し", [(0, 0), (40, 0), (40, 20), (0, 20)], glue=glue, art=[{"kind": "line", "pts": [(5, 10), (25, 10)], "stroke": "#000", "sw": 0.3}])
 assert [f.floor for f in check_art([over])] == ["F5.image_box"]
 assert check_art([clear]) == []
+# 中心線は糊代の手前でも、刷られる太さで糊代にかかれば落とす
+thick = Part(1, "t", "試し", [(0, 0), (40, 0), (40, 20), (0, 20)], glue=glue, art=[{"kind": "line", "pts": [(29.5, 2), (29.5, 18)], "stroke": "#000", "sw": 2.0}])
+thin = Part(1, "t", "試し", [(0, 0), (40, 0), (40, 20), (0, 20)], glue=glue, art=[{"kind": "line", "pts": [(29.5, 2), (29.5, 18)], "stroke": "#000", "sw": 0.3}])
+assert [f.floor for f in check_art([thick])] == ["F5.image_box"]
+assert check_art([thin]) == []
 
 # 3. 型紙に刷る部品は全部、部品表に載る（首の形の重りの腕）
 from omochae.floors import check_bom
