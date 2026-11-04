@@ -209,4 +209,25 @@ finally:
 _, _, fl = compose(pc.ID, {"mount": "hang"}, tiger)
 assert not any(f.floor == "F1.source" for f in fl)
 
+# 11. 組み立ての位置の印（貼る所・差す深さ）は、切る線（黒の実線）とも折る線（黒の破線）とも違う見た目で刷り、凡例に意味を書く。
+# 雛形ごとに実線や破線で描くと、子どもが切るか折るかしてしまった（族の雛形のレビューの指摘）。印を使わない紙の凡例は今までどおり
+from omochae import render
+orig_parts = pc.parts
+def parts_with_mark(p):
+    qs = orig_parts(p)
+    tail = next(q for q in qs if q.key == "tail")
+    tail.art.append({"kind": "mark", "pts": [(2, 20), (6, 20)]})
+    return qs
+pc.parts = parts_with_mark
+try:
+    _, lay, fl = compose(pc.ID, {"mount": "hang"}, tiger)
+    assert fl == [], [f.line() for f in fl]
+    assert any(t.text and "位置の印" in t.text for t in lay["texts"])
+    svg = render.to_svg(lay)
+    assert render.MARK_COLOR in svg and f'stroke-dasharray="{render.MARK_DASH}"' in svg
+finally:
+    pc.parts = orig_parts
+_, lay, _ = compose(pc.ID, {"mount": "hang"}, tiger)
+assert not any(t.text and "位置の印" in t.text for t in lay["texts"])
+
 print("ok")

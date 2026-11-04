@@ -30,7 +30,8 @@ class Part:
     glue: list = field(default_factory=list)  # 糊代の多角形
     cuts: list = field(default_factory=list)  # 中を切る矩形 (x,y,w,h)
     holes: list = field(default_factory=list)  # 軸の穴 (x,y,r)
-    # 描き直しの絵。{"kind": "poly"|"line", "pts": [...], "fill": 色, "stroke": 色, "sw": 太さ}。折り線や糊代をまたがない
+    # 描き直しの絵。{"kind": "poly"|"line", "pts": [...], "fill": 色, "stroke": 色, "sw": 太さ}。折り線や糊代をまたがない。
+    # {"kind": "mark", "pts": [...], "closed": 真偽} は組み立ての位置の印で、色と線の形は描く所が決める（切る線・折る線と紛れない形）
     art: list = field(default_factory=list)
     # 見える面の折り線を刷らず、絵の色の境で折る部品（v9）。折り線のデータは検査のために持ち続ける。
     hide_folds: bool = False

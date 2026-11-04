@@ -86,6 +86,9 @@ def compose(template_id, params, source, page_name="A4", version=1, title=None, 
     legend_y = y + 1
     # 谷と山の意味を添える（v8）。紙で組んで試した時、線の種類だけでは折る向きが伝わらなかったため。
     legend = [("切る", None), ("谷折り（手前にへこむ）", "2,1"), ("山折り（手前に出る）", "3,1,0.6,1"), ("糊代", "hatch")]
+    # 位置の印を使う型紙だけ、凡例に足す。使わない型紙（御来迎・虎）の配置は今までどおりにする。
+    if any(item["kind"] == "mark" for q in parts for item in q.art):
+        legend.append(("位置の印（切らない・折らない）", "mark"))
     samples, x = [], text_x
     for name, dash in legend:
         step = 9 + text_width(name, BODY_SIZE) + 3

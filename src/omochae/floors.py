@@ -13,6 +13,7 @@ def text_poly(t):
 
 
 # 接するだけの境界を重なりと数えないための許し。計算の丸めで偽の失敗を出さない。
+MARK_SW = 0.35  # render.MARK_SW と同じ。floors は描く所に頼らない（検査だけを速く回すため）ので値を写す
 EPS = 1e-6
 # SVG の stroke-miterlimit の既定。描画（render.py）は結合の形を指定しないので、刷られる角はこの限りまで尖る。
 SVG_MITER = 4
@@ -79,7 +80,8 @@ def check_art(parts):
         poly = part_poly(p)
         for item in p.art:
             pts = [(p.x + x, p.y + y) for x, y in item["pts"]]
-            sw = item.get("sw", 0) if item.get("stroke") else 0
+            # 位置の印は太さを持たず、描く所が決まった太さ（render.MARK_SW）で刷る。太さ 0 で見ると帯が空になり、部品の外と取り違えた。
+            sw = item.get("sw", 0) if item.get("stroke") else (MARK_SW if item["kind"] == "mark" else 0)
             if item["kind"] == "poly":
                 geom = Polygon(pts).buffer(-0.01)
                 # 輪郭線つきの面は、線の太さの半分だけ外へ広がって刷られる。

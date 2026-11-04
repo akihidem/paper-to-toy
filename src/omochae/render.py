@@ -13,6 +13,9 @@ from .textfit import FAMILY
 
 STROKE = {"stroke": "black", "fill": "none"}
 VALLEY, MOUNTAIN = "2,1", "3,1,0.6,1"
+# 組み立ての位置の印（貼る所・差す深さ・粘土の置き場）。切る線は黒の実線、折る線は黒の破線なので、印は赤茶の点の線にして、
+# 切るとも折るとも読まれないようにする（族の雛形で、実線の印が切られ、破線の印が折られうると、レビューで分かった）。凡例にも意味を書く。
+MARK_COLOR, MARK_DASH, MARK_SW = "#b0503c", "0.2,0.8", 0.35
 
 
 def _hatch(d, poly_pts, dx=0, dy=0):
@@ -42,6 +45,9 @@ def to_svg(layout):
             if item["kind"] == "poly":
                 kw = {"stroke": item["stroke"], "stroke_width": item["sw"]} if item.get("stroke") else {}
                 d.append(dw.Lines(*pts, close=True, fill=item["fill"], **kw))
+            elif item["kind"] == "mark":
+                d.append(dw.Lines(*pts, close=item.get("closed", False), fill="none", stroke=MARK_COLOR, stroke_width=MARK_SW,
+                                  stroke_dasharray=MARK_DASH, stroke_linecap="round"))
             else:
                 d.append(dw.Lines(*pts, close=False, fill="none", stroke=item["stroke"], stroke_width=item["sw"]))
     # 呼ぶ側が渡した画像（元の repo では手順の紙の完成のイメージ、v8）。型紙の部品には貼らない（刷った後の検査 F5.image_count が 0 枚を見る）。
@@ -83,6 +89,8 @@ def to_svg(layout):
     for x, y, dash in layout["samples"]:
         if dash == "hatch":
             _hatch(d, [(x, y - 1.5), (x + 7, y - 1.5), (x + 7, y + 1), (x, y + 1)])
+        elif dash == "mark":
+            d.append(dw.Line(x, y, x + 7, y, stroke=MARK_COLOR, stroke_width=MARK_SW, stroke_dasharray=MARK_DASH, stroke_linecap="round"))
         else:
             kw = {"stroke_dasharray": dash} if dash else {}
             d.append(dw.Line(x, y, x + 7, y, stroke="black", stroke_width=0.25, **kw))
