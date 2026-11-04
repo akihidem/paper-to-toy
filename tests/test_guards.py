@@ -131,11 +131,12 @@ import re
 from omochae.compose import compose
 from omochae.render import to_svg
 
-for form in ({"push_part": "tab"}, {"push_part": "stick", "pusher_height": 84}):
+# pivot_above_rim 2 は足の長さが糊代と同じで、足の折り線が x = 0 に来る境目
+for form in ({"push_part": "tab"}, {"push_part": "stick", "pusher_height": 84}, {"push_part": "tab", "pivot_above_rim": 2, "fold_count": 6, "fold_width": 5, "fold_height": 40}):
     _, layout, failures = compose("slider_fan", form, source)
     assert not failures
     fan = next(q for q in layout["parts"] if q.key == "fan")
-    assert len(fan.print_folds) == 1 and fan.print_folds[0][0][0] < 0, fan.print_folds
+    assert len(fan.print_folds) == 1 and fan.print_folds[0][0][0] == fan.print_folds[0][1][0] <= 0, fan.print_folds
     dashed = re.findall(r'<path d="M([-\d.]+),([-\d.]+) L([-\d.]+),([-\d.]+)" [^>]*stroke-dasharray="2,1"', to_svg(layout))
     on_fan = [d for d in dashed if fan.x - 30 < float(d[0]) < fan.x + fan.width and fan.y <= float(d[1]) <= fan.y + fan.height]
     (x1, y1), (x2, y2) = fan.print_folds[0]
