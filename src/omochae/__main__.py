@@ -26,13 +26,16 @@ def generate(template, params, source_id, out, page="A4", version=1, title=None,
     if not src.exists():
         raise ToolMissing(f"出典の記録が無い: {src}（python -m omochae.ingest を先に）")
     source = json.loads(src.read_text(encoding="utf-8"))
+    stem = pathlib.Path(out)
+    # 前の回の紙を先に消す。描く前の検査で落ちた時に、前に通った PDF が正しい名前で残ると、今回の物と取り違える。
+    for old in (stem.with_suffix(x) for x in (".svg", ".pdf", ".png")):
+        old.unlink(missing_ok=True)
     _, layout, failures = compose(template, params, source, page, version, title, inject or {})
     if failures:
         for f in failures:
             print(f.line(), file=sys.stderr)
         return 3
     from .render import to_png, write_all  # 描く前の検査だけの時に重い読み込みをしない
-    stem = pathlib.Path(out)
     pdf = write_all(layout, stem)
     failures = check_pdf(pdf, source) + check_image_count(pdf)
     if failures:
