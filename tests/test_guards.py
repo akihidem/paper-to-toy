@@ -33,6 +33,13 @@ with tempfile.TemporaryDirectory() as d:
     assert r.returncode == 3 and "F5.fan_height" in r.stderr, r.stderr
     left = sorted(p.name for p in pathlib.Path(d).glob("x.*"))
     assert left == [], f"落ちた後に前の紙が残った: {left}"
+    # 検査できない（exit 4）だけの時は、前の回の紙を消さない
+    assert gen(scenario(d, "ok", {"push_part": "tab"}), out).returncode == 0
+    broken = pathlib.Path(d) / "broken.json"
+    broken.write_text(json.dumps({"template": "no_such", "source_id": SRC_ID, "params": {}, "inject": {}}), encoding="utf-8")
+    assert gen(broken, out).returncode == 4
+    left = sorted(p.name for p in pathlib.Path(d).glob("x.*"))
+    assert left == ["x.pdf", "x.png", "x.svg"], f"検査できない時に前の紙が消えた: {left}"
 
 # 2. 線の絵が糊代を横切ったら落とす（面積でなく長さで見る）
 sys.path.insert(0, str(ROOT / "src"))

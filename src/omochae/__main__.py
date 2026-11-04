@@ -20,18 +20,24 @@ class Parser(argparse.ArgumentParser):
         sys.exit(4)
 
 
+def _drop(stem):
+    for old in (stem.with_suffix(x) for x in (".svg", ".pdf", ".png")):
+        old.unlink(missing_ok=True)
+
+
 def generate(template, params, source_id, out, page="A4", version=1, title=None, inject=None):
     """型紙を 1 枚作る共通の流れ。検査に落ちれば 3 を返す。"""
     src = ROOT / "data/sources" / f"{source_id}.json"
     if not src.exists():
-        raise ToolMissing(f"出典の記録が無い: {src}（python -m omochae.ingest を先に）")
+        # 出典の記録を作る道具（元の repo の omochae.ingest）はこの repo に無いので、置き場だけを言う。
+        raise ToolMissing(f"出典の記録が無い: {src}（data/sources に出典の記録の JSON を置く）")
     source = json.loads(src.read_text(encoding="utf-8"))
     stem = pathlib.Path(out)
-    # 前の回の紙を先に消す。描く前の検査で落ちた時に、前に通った PDF が正しい名前で残ると、今回の物と取り違える。
-    for old in (stem.with_suffix(x) for x in (".svg", ".pdf", ".png")):
-        old.unlink(missing_ok=True)
     _, layout, failures = compose(template, params, source, page, version, title, inject or {})
     if failures:
+        # 検査に落ちた時だけ前の回の紙を消す。前に通った紙が正しい名前で残ると、今回の物と取り違える。
+        # 検査できない（例外・exit 4）時は消さない。今回は何も分かっていないので、前の結果を壊す理由が無い。
+        _drop(stem)
         for f in failures:
             print(f.line(), file=sys.stderr)
         return 3
@@ -41,6 +47,7 @@ def generate(template, params, source_id, out, page="A4", version=1, title=None,
     if failures:
         rejected = stem.with_suffix(".rejected.pdf")
         pdf.replace(rejected)  # 印の無い紙を正しい名前で残さない。
+        _drop(stem)  # 今回の SVG と、前の回の PNG も正しい名前で残さない。
         for f in failures:
             print(f.line(), file=sys.stderr)
         print(f"退けた: {rejected}", file=sys.stderr)
