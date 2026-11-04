@@ -109,8 +109,14 @@ fs = t.check_physics({**P, "figure": "hagoita", "tab_length": 90, "tab_glue": 10
 assert any("横へ倒れる" in f.message for f in fs), fs
 
 # 溝: 隙間 = 溝の幅 − 紙の厚み × 重ねた枚数。狭いと差せない、広いと傾きが MAX_WOBBLE を越える
-B = t.filled({**P, "stand": "base"})
+# 犬張子を台に差す形。既定の溝（30mm）だと舌が前の 2 本の脚にまたがるので、1 つの足（幅 13mm ほど）に収まる溝にする
+B = t.filled({**P, "stand": "base", "slot_length": 12})
 assert t.check_physics(B) == []
+# 舌が 2 つの足にまたがると、足の間が舌と胴で囲まれて紙で埋まる。黙って埋めず「またぐ」で落とす。部品は落ちた寸法でも返る（check_bom が呼ぶ）
+fs = t.check_physics({**B, "slot_length": 30})
+assert [f.where for f in fs] == ["舌"] and "またがり" in fs[0].message, fs
+front_web = next(q for q in t.parts({**B, "slot_length": 30}) if q.key == "front")
+assert Polygon(front_web.outline).is_valid and not Polygon(front_web.outline).interiors
 th, tp = 2 * B["paper_thickness"], B["paper_thickness"]
 assert t.wobble_deg({**B, "slot_width": th + t.MIN_CLEAR - 0.01}) is None
 # 溝は手で帯を切り取れる幅（1mm 以上）で、隙間の下限は切るずれを含む。組み方は「帯を切り取る」と言う
@@ -166,10 +172,22 @@ assert any(f.where == "台" for f in t.check_physics({**B, "base_depth": 15, "ba
 # 脚の横の位置（重心の真後ろ）を組み方で言う（裏の印が無い時）
 assert any(f"左の端から {t.geometry(P)['cx']:.0f}mm" in s for s in t.steps({**P, "back": 0}))
 
-# 範囲: back は 0 か 1、姿と立て方は一覧の値だけ
+# 範囲: back は整数の 0 か 1（true/false・1.0 はほかの寸法と同じく型で落とす）、姿と立て方は一覧の値だけ
 assert [f.floor for f in t.check_range({**P, "back": 0.5})] == ["F5.range"]
-assert [f.floor for f in t.check_range({**P, "figure": "no_such"})] == ["F5.range"]
+assert all([f.where for f in t.check_range({**P, "back": b})] == ["back"] for b in (True, False, 1.0, 0.0, 2))
+assert t.check_range({**P, "back": 0}) == [] and t.check_range({**P, "back": 1}) == []
 assert [f.floor for f in t.check_range({**P, "stand": "hang"})] == ["F5.range"]
+# 知らない姿は、埋まらなかった既定（stand の None）を重ねて落とさず、姿の名の誤り 1 つだけで落とす（埋める前の DEFAULTS で見る）
+assert [f.where for f in t.check_range({**t.DEFAULTS, "figure": "no_such"})] == ["figure"]
+# 台の糊代は壁の高さ − 1mm まで（高いと展開図で隣の糊代と重なる）。溝の傾きが通る高さ 9 で、糊代だけを変えて見る
+assert any(f.where == "台" and "収まらない" in f.message for f in t.check_physics({**B, "base_height": 9, "base_glue": 10}))
+assert t.check_physics({**B, "base_height": 9, "base_glue": 8}) == []
+# 狭い脚（RANGES の下限 6mm）では札を番号だけにし、札が脚からはみ出して別の検査で落ちない
+narrow_src = json.loads((ROOT / "data/sources" / f"{t.SOURCE}.json").read_text(encoding="utf-8"))
+_, _, fs = compose("stand_figure", {"figure": "inu", "tab_width": t.RANGES["tab_width"][0]}, narrow_src)
+assert fs == [], [x.line() for x in fs]
+assert next(q.label for q in t.parts({**P, "tab_width": 6}) if q.key == "tab") == "3"
+assert next(q.label for q in t.parts(P) if q.key == "tab") == "3 脚"
 # 形から出典を選ぶ表（SOURCES）は FIGURES の組と同じ。合わない出典は compose が F1.source で落とす
 assert t.SOURCES == {k: f["source"] for k, f in t.FIGURES.items()}
 _, _, fs = compose("stand_figure", {"figure": "uma", "stand": "easel"}, json.loads((ROOT / "data/sources" / f"{t.SOURCE}.json").read_text(encoding="utf-8")))

@@ -4,6 +4,7 @@
   "params": {
     "figure": "inu",
     "stand": "base",
+    "slot_length": 12,
     "paper_thickness": 0.3
   },
   "inject": {},
