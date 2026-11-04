@@ -5,7 +5,8 @@
 1 つの仮説で、昔の作り方の復元ではない（脇の板が押す棒か、梃子か、ただの添え物かは分からない。梃子の読みは試していない）。
 
 しくみ（この雛形の決め事）:
-- 壺は面の数の違う角筒（FORM の jar: square は 4 面、hex は 6 面）。どちらも内の向かい合う面の間 jar_width を同じ値にする。
+- 壺は面の数の違う角筒（FORM の jar: square は 4 面、hex は 6 面）。jar_width は型紙の折り線の間で測った向かい合う面の間で、
+  どちらの形も同じ値にする（展開図の 1 面の幅はこの値から出す）。内の幅は紙 2 枚分狭く（inner_half）、外の差し渡しは 2 枚分広い（footprint）
   下の端の糊代を内へ折って箱の上に貼る（外へ折ると足が箱からはみ出すため）
 - 押す帯は紙を縦に半分に折って貼った 2 枚重ね。箱の上の面と底の面の同じ位置の四角い穴に通す。2 つの穴が離れているので
   帯が傾きにくい（箱の高さが案内の長さ）
@@ -15,8 +16,9 @@
 動きの見込みの式（check_physics）の前提:
 - 高さは箱の底から測る。口の高さ R = 箱の高さ + 壺の高さ。人形の体の下の端は静かな時 z0 = 箱の高さ + 足の高さ
 - 隠れる: z0 + 人形の高さ ≦ R − HIDE_MARGIN。口から出る: z0 + 押す量 ≧ R（体の下の端が口の高さに届く）
-- 傾き: 帯は 2 つの穴の遊び（幅の向き SLIDE_GAP、厚みの向き HOLE_DEPTH − 2×紙の厚さ）の分だけ、案内の長さ（箱の高さ）に
-  対して傾く。高さ h での横ずれ = h × 遊び ÷ 案内の長さ。壺の中にいる間（h ≦ 壺の高さ）に、袖の先が内の壁に当たらない事を見る
+- 傾き: 帯は 2 つの穴の遊び（幅の向き SLIDE_GAP、厚みの向き HOLE_DEPTH − 2×紙の厚さ）の分だけ、上の穴の中で丸ごと寄り（遊びの半分）、
+  案内の長さ（箱の高さ）に対して傾く。高さ h での横ずれ = 遊び ÷ 2 ＋ h × 遊び ÷ 案内の長さ。壺の中にいる間（h ≦ 壺の高さ）に、
+  袖の先と足の端が内の壁に当たらない事を見る（足は人形より広くなりうるので別に見る）。厚みの向きの遊びは MIN_DEPTH_GAP 以上を要る
 - 引っかかり: 引き出しの決まり（ずれた所を押すと、案内の 2 点に生じる摩擦で止まる）。帯の端を押す（ずれ = 帯の幅の半分）時に
   ずれ ≦ 案内の長さ ÷ (2 × 摩擦の係数) なら滑る。摩擦の係数 MU は紙と紙の見込みで、実物では測っていない
 - 紙の厚さ・摩擦・遊びの値はどれも実物では未確認。帯の座屈（長い帯が押す力で曲がる）は式にしていない
@@ -74,6 +76,8 @@ FIT_MARGIN = 1.0
 MU = 0.5
 # 壺の足が箱の上の面に乗る時の余り（全体で）。
 SEAT_MARGIN = 1.0
+# 厚みの向きの最小の遊び。0 だと紙の毛羽と糊の膨らみで帯が穴に詰まる（見込み。実物では測っていない）。
+MIN_DEPTH_GAP = 0.5
 
 
 def spec():
@@ -94,13 +98,19 @@ def check_range(p):
 
 
 def face_width(p):
-    """1 面の幅。jar_width は向かい合う面の間なので、6 面なら 1 面は W/√3。"""
+    """展開図の 1 面の幅（折り線の間）。jar_width は折り線の間で測った向かい合う面の間なので、6 面なら 1 面は W/√3。"""
     return p["jar_width"] if p["jar"] == "square" else p["jar_width"] / math.sqrt(3)
 
 
+def inner_half(p):
+    """壺の中心から内の壁までの距離。折り線の間の半分から、壁の紙 1 枚の厚さを引く（紙は折り線の外へは出ないと見る安全側）。"""
+    return p["jar_width"] / 2 - p["paper_thickness"]
+
+
 def footprint(p):
-    """壺の足の一番広い差し渡し。6 面は角から角（2 × 1 面の幅）。向きを決めずに安全側で見る。"""
-    return p["jar_width"] if p["jar"] == "square" else 2 * face_width(p)
+    """壺の足の一番広い差し渡し（外の寸法）。6 面は角から角（2 × 1 面の幅）。向きを決めずに安全側で見る。両側に紙 1 枚ずつを足す。"""
+    span = p["jar_width"] if p["jar"] == "square" else 2 * face_width(p)
+    return span + 2 * p["paper_thickness"]
 
 
 # 人形の体の中心の、輪郭の幅に対する位置（絵から取った）。棒が左へ長く出るので、体は輪郭の中ほどより右にある。
@@ -129,17 +139,25 @@ def strip_length(p):
 
 
 def sway(p, h):
-    """高さ h（箱の上の面から）での帯の横ずれ（幅の向き, 厚みの向き）。案内は箱の上と底の穴で、その間が箱の高さ。"""
+    """高さ h（箱の上の面から）での帯の横ずれ（幅の向き, 厚みの向き）。案内は箱の上と底の穴で、その間が箱の高さ。
+
+    上の穴の中で帯が丸ごと寄る分（遊びの半分）に、2 つの穴の遊びで傾く分を足す。寄る分を落とすと、h が小さい所のずれを少なく見た。
+    """
     lg = p["box_height"]
-    depth_gap = HOLE_DEPTH - 2 * p["paper_thickness"]
-    return h * SLIDE_GAP / lg, h * depth_gap / lg
+    depth_gap = max(0.0, depth_gap_mm(p))
+    return SLIDE_GAP / 2 + h * SLIDE_GAP / lg, depth_gap / 2 + h * depth_gap / lg
+
+
+def depth_gap_mm(p):
+    """厚みの向きの遊び。穴の大きさから、2 枚重ねの帯の厚さを引く。"""
+    return HOLE_DEPTH - 2 * p["paper_thickness"]
 
 
 def check_physics(p):
     out = []
     H, Hb, s = p["jar_height"], p["box_height"], p["push_amount"]
     R, z0, fh, fw = Hb + H, rest_bottom(p), p["figure_h"], p["figure_w"]
-    W, t = p["jar_width"], p["paper_thickness"]
+    room = inner_half(p)
     # 1. 隠れる。人形の上の端（棒の先）が口より HIDE_MARGIN 下。
     if z0 + fh > R - HIDE_MARGIN:
         out.append(Failure("F5.popup", "人形", f"静かな時の人形の上の端 {z0 + fh:.1f} が口の高さ {R}−{HIDE_MARGIN} を超え、隠れない"))
@@ -148,23 +166,26 @@ def check_physics(p):
         out.append(Failure("F5.popup", "押し帯", f"押し切った時の体の下の端 {z0 + s:.1f} が口の高さ {R} に届かず、人形が出きらない"))
     # 3. 壺の中で袖の先が壁に当たらない。輪郭は壺の真ん中に置くので、片側は幅の半分。傾きは壺の口の高さで一番大きい。
     dx, dy = sway(p, H)
-    room = W / 2 - t
     if fw / 2 + dx + FIT_MARGIN > room:
         out.append(Failure("F5.popup", "人形", f"袖の先（半分の幅 {fw / 2:.1f}＋傾き {dx:.1f}＋余り {FIT_MARGIN}）が壺の内の半分 {room:.1f} を超え、壁に擦れる"))
     if dy + FIT_MARGIN > room:
         out.append(Failure("F5.popup", "押し帯", f"厚みの向きの傾き {dy:.1f} が壺の内の半分 {room:.1f} を超え、前後の壁に当たる"))
     # 4. 静かな時、足が壺の中に収まる（内へ折った糊代の上には乗らない）。
     reach = abs(strip_offset(p)) + foot_width(p) / 2
-    free = W / 2 - p["jar_tab"] - FIT_MARGIN
+    free = room - p["jar_tab"] - FIT_MARGIN
     if reach > free:
         out.append(Failure("F5.popup", "人形の足", f"足の端が壺の中心から {reach:.1f} で、内へ折った糊代の内側 {free:.1f} を超える"))
+    # 4b. 押し上げる途中も、足の端が内の壁に当たらない。足は帯に合わせて広くなり人形より広くなりうるので、袖とは別に、
+    #     足が壺の中にいる一番高い所（足の上の端が口の高さ＝箱の上から壺の高さ）の傾きで見る。
+    if reach + dx + FIT_MARGIN > room:
+        out.append(Failure("F5.popup", "人形の足", f"押し上げる途中の足の端（{reach:.1f}＋傾き {dx:.1f}＋余り {FIT_MARGIN}）が壺の内の半分 {room:.1f} を超え、壁に擦れる"))
+    # 4c. 厚みの向きの遊び。0 以下だと帯が穴に詰まって滑らない。
+    if depth_gap_mm(p) < MIN_DEPTH_GAP:
+        out.append(Failure("F5.popup", "押し帯", f"厚みの向きの遊び {depth_gap_mm(p):.2f}（穴 {HOLE_DEPTH}−帯 2 枚）が {MIN_DEPTH_GAP} に足りず、帯が穴に詰まる"))
     # 5. 引っかからない。帯の端を押した時のずれ（帯の幅の半分）が、案内の長さ ÷ (2μ) 以下。
     e, limit = p["strip_width"] / 2, Hb / (2 * MU)
     if e > limit:
         out.append(Failure("F5.popup", "押し帯", f"帯の端を押すずれ {e:.1f} が 案内の長さ {Hb}÷(2×摩擦 {MU})={limit:.1f} を超え、穴で引っかかる"))
-    # 6. 人形の足に貼る帯の幅（足の糊代）が足に入る。
-    if p["strip_width"] > foot_width(p):
-        out.append(Failure("F5.popup", "人形の足", "帯が足より広い"))
     # 壺が箱に乗る（F5.jar_seat）。足の差し渡しが箱の一辺に収まり、穴が内へ折った糊代に隠れない。
     B = p["box_side"]
     if footprint(p) > B - SEAT_MARGIN:
