@@ -47,7 +47,9 @@ def scenario_from_args(args):
     params = json.loads(pathlib.Path(args.params).read_text(encoding="utf-8")) if args.params else {}
     if tpl.FORM not in params:
         raise ToolMissing(f"寸法の JSON に {tpl.FORM} が要る（雛形 {args.template} の刷る形。{tpl.FORM} の値は README の「雛形」の表）")
-    return {"template": args.template, "source_id": args.source or tpl.SOURCE, "params": params, "inject": {}}
+    # 刷る形ごとに出典が違う雛形（SOURCES）は、形から既定の出典を選ぶ。1 つの SOURCE に決め打ちすると、別の形の絵に別の玩具の出典を刷った。
+    default = getattr(tpl, "SOURCES", {}).get(params[tpl.FORM], tpl.SOURCE)
+    return {"template": args.template, "source_id": args.source or default, "params": params, "inject": {}}
 
 
 def generate(template, params, source_id, out, page="A4", version=1, title=None, inject=None):
