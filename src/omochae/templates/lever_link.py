@@ -282,6 +282,18 @@ def _label_spot(poly, holes, rects):
     return 1.0, 1.0
 
 
+def _tick(x, y, w, h, mark):
+    """床が見る量を作る人に渡す印（細い朱の矩形）。at は印の真ん中（試験が印の間の長さを測る）。
+    床が押す量や粘土の置き場で通る・落ちるを決めても、紙に印が無いと作る人はその量で動かせないため。"""
+    return {"kind": "poly", "pts": [(x, y), (x + w, y), (x + w, y + h), (x, y + h)], "fill": RED, "mark": mark, "at": (x + w / 2, y + h / 2)}
+
+
+def _travel_ticks(part, x0, travel):
+    """棒の上に、押す量 travel だけ離した 2 本の横切る印。棒の長さの向き（印字の x）に x0 から置く。"""
+    w = part.outline[2][1]
+    part.art += [_tick(x0 + d - 0.4, 0.8, 0.8, w - 1.6, "travel") for d in (0.0, travel)]
+
+
 def _bar(number, key, name, p0, p1, w, holes_t, slots_t=(), ext0=None, ext1=None, fold_t=None, fill=WOOD, marks=None, label=None):
     """平たい棒。p0 から p1 の向きに寝かせて刷る。holes_t は (p0 からの長さ, 半径)、slots_t は (中心の長さ, 溝の長さ, 溝の半幅)。
     ext0・ext1 は p0 の手前・p1 の先に残す紙の長さ。fold_t は谷折りの線の長さ（登る板の耳）。marks は絵の模様（stripe・rung）。"""
@@ -358,6 +370,8 @@ def _sumo(p):
     leg = _figure(3, "leg", "B の蹴る足", leg_shape, SKIN, [(_disc(H, 7.5), CLOTH)], holes=[(H[0], H[1], r), (K[0], K[1], r)])
     ext = r + PIN_MARGIN + 1.5
     rod = _bar(4, "rod", "細い棒", K, (K[0] + 60, K[1]), p["bar_w"], [(0, r)], ext0=ext, ext1=4, fill=WOOD)
+    # 押す量の物差し。膝の穴から 18mm の所から travel（範囲の上限 40）だけ離す。棒は膝から 60mm あるので入る。
+    _travel_ticks(rod["part"], ext + 18, p["travel"])
     span = math.dist(SA, SB)
     bar = _bar(5, "bar", "長い棒", SA, SB, p["bar_w"], [(0, r)], [(span, p["slot_len"], r)], ext0=ext, ext1=p["slot_len"] / 2 + ext - r,
                fill=WOOD, marks="stripe")
@@ -387,6 +401,7 @@ def _saru(p, two):
         limbs = [_limb([(22 + off, 42), (4, 38)], 6), _limb([(30 + off, 72), (12, 80), (4, 78)], 7), _limb([(38 + off, 70), (50 + off, 76), (54 + off, 66)], 3.5)]
         shape = unary_union([body, head, cap] + limbs)
         fig = _figure(1, "monkey", "猿", shape, MONKEY, [(cap, CLOTH), (_disc((12 + off, 31), 4), SKIN)], holes=[(P1[0], P1[1], r), (P2[0], P2[1], r)])
+        clay = (36 + off, 58)
         bars = [_climber_bar(2, "armbar", "腕の板", p, P1[1] - EAR / 2), _climber_bar(3, "legbar", "足の板", p, P2[1] - EAR / 2)]
         name = "猿"
     else:
@@ -398,8 +413,14 @@ def _saru(p, two):
         shape = unary_union([body, head, hat] + limbs)
         fig = _figure(1, "figure", "人形", shape, STONE, [(hat, WOOD), (_disc((22 + off, 35), 4), SKIN), (box(10 + off, 58, 50 + off, 76), WOOD_DARK)],
                       holes=[(P1[0], P1[1], r)])
+        clay = (36 + off, 62)
         bars = [_climber_bar(2, "handbar", "手の板", p, P1[1] - EAR / 2)]
         name = "人形"
+    # 粘土の置き場の印。竹串から遠い背の側に置くと、重みの腕が長くなり、板を傾けて噛ませる見込み（実物で未確認）。
+    q = fig["part"]
+    cx, cy = clay[0] - fig["T"][0], clay[1] - fig["T"][1]
+    q.art.append({"kind": "poly", "pts": [(cx + 2.5 * math.cos(i * math.pi / 8), cy + 2.5 * math.sin(i * math.pi / 8)) for i in range(16)],
+                  "fill": RED, "mark": "clay", "at": (cx, cy)})
     mech = {"type": "clamp", "out": name, "slot": False}
     return [fig] + bars, mech
 
@@ -416,6 +437,9 @@ def _ebako(p):
             box(0.6, wy - 0.6, wx - 0.6, wy + wh + 0.6), box(wx + ww + 0.6, wy - 0.6, FW - 0.6, wy + wh + 0.6)]
     frame = _figure(1, "frame", "枠", box(0, 0, FW, FH), WOOD, [(g, WOOD) for g in band] + [(box(wx - 3, wy - 3, wx + ww + 3, wy - 0.8), WOOD_DARK),
                     (box(wx - 3, wy + wh + 0.8, wx + ww + 3, wy + wh + 3), WOOD_DARK)], slots=slots, keepouts=[WIN])
+    # ピンの頭の真ん中が動く上と下の印。左の溝の左に、静かな位置から ±travel/2。溝の長さが足りなくても印は刷る（床が溝を落とす）。
+    tx = pins[0][0] - r - 5.5
+    frame["part"].art += [_tick(tx - frame["T"][0], pins[0][1] + d - 0.4 - frame["T"][1], 4, 0.8, "travel") for d in (-p["travel"] / 2, p["travel"] / 2)]
     # 札の上の絵は、窓の真ん中（静かな時）に女の立ち姿。コマ 6 の比（窓の高さの 3/4）を手で取った。
     cx, cy, cw, ch = CARD
     mx, my = wx + ww / 2, wy + wh / 2
@@ -477,6 +501,8 @@ def _hashigo(p):
     low = 44.0  # 下の端は、傾けると机に当たる長さにする（図の板は机まで届く）。机が止める所になる
     p0 = (P[0] - up * u[0], P[1] - up * u[1])
     slat = _bar(2, "slat", "梯子の板", p0, P, p["bar_w"], [(up - p["drive_arm"], r), (up, r)], ext0=5, ext1=low, fill=WOOD, marks="rung")
+    # つまみを押し上げる量の物差し。台のピンの先（下の短い側）に、travel だけ離した 2 本（下の側は 44mm あり、上限 40 が入る）。
+    _travel_ticks(slat["part"], 5 + up + 2.5, p["travel"])
     peg = (P[0] - p["drive_arm"] * u[0], P[1] - p["drive_arm"] * u[1])
     floor = box(-500, floor_y, 500, floor_y + 500)
     mech = {"type": "push", "mover": slat, "pivot": P, "input": peg, "u": (math.sin(ang), -math.cos(ang)), "sign": 1, "obstacles": [floor],
@@ -712,23 +738,23 @@ def steps(p):
     out += {
         "sumo": ["5 長い棒の丸い穴を 1 力士 A の肩に、溝を 2 力士 B の肩に重ね、割ピンで留める",
                  "3 B の足を B の腰に割ピンで留める", "4 細い棒の穴を足の膝に割ピンで留める",
-                 f"A を持ち、細い棒を横に {p['travel']:g}mm ほど押して、B の足が蹴り上がるか見る"],
+                 f"A を持ち、細い棒を、棒の 2 本の朱の印の間（{p['travel']:g}mm）だけ横に押して、B の足が蹴り上がるか見る"],
         "saru_take": ["2 腕の板と 3 足の板の耳を破線で谷折りし、竹串を板の小さい穴に通す",
-                      "耳を猿の胴の穴に合わせ、割ピンで留める。猿の背に油粘土を付ける",
+                      "耳を猿の胴の穴に合わせ、割ピンで留める。猿の背の朱の丸い印に油粘土を付ける",
                       f"竹串を立て、猿を下から {p['travel']:g}mm ほど押しては離し、登るか見る"],
         "saru_sao": ["2 手の板の耳を破線で谷折りし、竹串を板の小さい穴に通す",
-                     "耳を人形の胴の穴に合わせ、割ピンで留める。人形の腰に油粘土を付ける",
+                     "耳を人形の胴の穴に合わせ、割ピンで留める。人形の背の朱の丸い印に油粘土を付ける",
                      f"竹串を立て、人形を下から {p['travel']:g}mm ほど押しては離し、止まるか登るか見る"],
         "ebako": ["2 絵の札を 1 枠の後ろに置き、枠の溝から札の左右の穴へ割ピンを通して留める",
                   "札の上と下の小さい穴に糸を結び、枠の上と下へ出す",
-                  f"上の糸と下の糸を交互に {p['travel']:g}mm ほど引き、窓の中の絵が動くか見る"],
+                  f"上の糸と下の糸を交互に引き、ピンの頭の真ん中が溝の横の 2 本の朱の印の間（{p['travel']:g}mm）を動くか、窓の中の絵が動くか見る"],
         "karakuri": ["2 犬を梁の穴に、3 水車を箱の穴に割ピンで留める", "4 斜めの棒の両端を、犬の尾の穴と水車の小さい穴に割ピンで留める",
                      "水車の手のピンの頭に竹串のつまみを糊で付ける", "つまみを持って水車を回し、犬が首を振るか見る"],
         "hashigo": ["2 梯子の板の下の方の穴を 1 台の穴に重ね、割ピンで留める", "板の上の方の穴に竹串のつまみを差し、糊で留める",
-                    f"つまみを {p['travel']:g}mm ほど押し上げ、板が傾くか見る"],
+                    f"つまみを、板の下の 2 本の朱の印の間の長さ（{p['travel']:g}mm）だけ板に直角に押し上げ、板が傾いて下の端が机に当たるか見る"],
         "yakko": ["2 蹴る足を胴の腰に割ピンで留める", "竹串を胴の下の帯の裏に糊で貼る（先を腰の下まで）",
                   "膝の小さい穴に糸を結び、胴の下の小さい穴に通して下へ垂らし、輪に結ぶ",
-                  f"竹串を持ち、糸の輪を {p['travel']:g}mm ほど引いて、足が振れるか見る"],
+                  f"糸の、胴の下の穴から出た所にペンで印を付ける。竹串を持ち、印が {p['travel']:g}mm 下がるまで糸の輪を引いて、足が振れるか見る（糸は刷れないので印は自分で付ける）"],
     }[k]
     return out
 
