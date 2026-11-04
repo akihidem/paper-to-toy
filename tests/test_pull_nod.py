@@ -43,7 +43,7 @@ assert abs(pn.swing_deg(bow) - math.degrees(math.asin((50 - 11 - 18) / 50))) < 1
 assert pn.swing_deg({**bow, "stop_height": 36}) < pn.MIN_SWING and floors({**bow, "stop_height": 36})
 assert pn.swing_deg({**bow, "stop_height": 45}) == 0.0  # 臼が軸より高いと振れない
 # jaw はこぶまでの隙間と舌の長さ。隙間が狭いと口が少ししか開かない
-assert abs(pn.swing_deg(jaw) - math.degrees(math.atan2(6, 14))) < 1e-9
+# 角度の式そのものは 5a で確かめる
 assert [f.where for f in floors({**jaw, "stop_gap": 2})] == ["こぶ"]
 
 # 3. 穴の縁の余白: 柱の幅の半分 − 穴の半径 が HOLE_MARGIN を割ると落ちる。境目の両側
@@ -70,6 +70,26 @@ assert [f.where for f in floors({**peck, "straw_h": 14, "axle_depth": 8})] == ["
 # 溝は傾く分だけ前へ長い。2 羽の溝は重ならない
 (a0, al), (b0, bl) = pn._slots(peck)
 assert al > pn.TAB_W + 2 and a0 + al < b0
+
+# 5. レビューの指摘（2026-11-04）を押さえる
+# 5a. 顎の止め: 舌の端の上の角は軸のまわりを回るので、上がる高さは sin で頭打ちになる。こぶが舌の届く高さより上なら、止めに当たらない
+assert floors({**jaw, "stop_gap": 20}), "舌が届かない高さのこぶを通した"
+assert [f.where for f in floors({**jaw, "stop_gap": 20})] == ["こぶ"] and "届かない" in floors({**jaw, "stop_gap": 20})[0].message
+h2 = jaw["jaw_h"] / 2
+rho, phi = math.hypot(jaw["tab_len"], h2), math.atan2(h2, jaw["tab_len"])
+assert abs(pn.swing_deg(jaw) - math.degrees(math.asin((h2 + jaw["stop_gap"]) / rho) - phi)) < 1e-9
+# 5b. こぶは 3 面と、三角の柱を閉じる糊代の 4 つ。最後の面を頭に貼る面にすると、柱が閉じない
+bump = next(q for q in pn.parts(jaw) if q.key == "bump")
+assert len(bump.valley) == 3 and len(bump.glue) == 1 and bump.glue[0][0][0] >= 3 * 8, (bump.valley, bump.glue)
+# 5c. 串の抜け止めの粘土は、重り（式の weight_g）と別の行。同じ粘土から取ると、顎に付く量が式より減る
+for p in (jaw, peck):
+    keys = [r["key"] for r in pn.bom(p)]
+    assert "stopclay" in keys, (p["kind"], keys)
+    weight = next(r for r in pn.bom(p) if r["key"] == "weight")
+    assert f"{p['weight_g']:g}g" in weight["material"]
+    assert any("抜け止め" in m for m in pn.materials(p))
+# 5d. 形ごとの出典
+assert pn.SOURCES == {"bow": pn.SOURCE, "jaw": "NDL-1187053-R0000030-L-pull_nod", "peck": "NDL-1187053-R0000016-R-pull_nod"}
 
 # 形ごとの部品の key は英小文字だけ、部品表の番号と合う
 for p in (bow, jaw, peck):
