@@ -9,7 +9,7 @@ exit code: 0 = 通る / 3 = 落ちる（検査の名前を出す）/ 4 = 検査�
 | ID | 見る事 | 負の対照（場面） | 期待 |
 |---|---|---|---|
 | F1.marks | 型紙の PDF から pdftotext で、所蔵（国立国会図書館デジタルコレクションと永続 ID）・改変・出典 ID・「仮説」が取り出せる | `neg_marks_all`・`neg_marks_source_id` | 3・F1.marks |
-| F1.source | 刷る形ごとに出典が違う雛形（SOURCES を持つ雛形）で、形と合わない出典を渡すと落とす。既定の出典も形から選ぶ | `tests/test_guards.py` の 10・`spinner_neg_source`・`whistle_neg_source` | 3・F1.source |
+| F1.source | 刷る形ごとに出典が違う雛形（SOURCES を持つ雛形）で、形と合わない出典を渡すと落とす。既定の出典も形から選ぶ | `tests/test_guards.py` の 10・`spinner_neg_source`・`whistle_neg_source`・`popup_jar_neg_source`・`slide_box_neg_source`・`wheel_cart_neg_source` | 3・F1.source |
 | F2.bom | 部品表の素材が空でない。置き換えには元の素材（推定）と理由がある | `neg_bom_material`・`neg_bom_original` | 3・F2.bom |
 | F5.range | 寸法が雛形の範囲の中で、知らない名前が無い | `neg_range` | 3・F5.range |
 | F5.print_area | 全部品と全文字が印字域に収まる | `neg_print_area` | 3・F5.print_area |
@@ -60,6 +60,10 @@ F5.fan_height は、軸の形では「中心の高さ＋折りの高さ ≦ 押�
 | F5.figure_base | 像の足の糊代（像の幅の 0.3〜0.7）が扇の台の一辺より広くない。広いと台に貼れない。全体のレビューで見つかった | `neg_figure_base` | 3・F5.figure_base |
 | F5.spin | 回る玩具（spinner）。風車は、羽と柄の間・穴の隙間・穴の余白・柄の長さ・刷る菱形どうしの距離 2mm 以上・腕の長さを見る。独楽（平ら・円錐）は、眠る独楽の下限の回る速さが、指で回す見込みの半分以下。円盤の重心が穴の中心から 0.5mm まで。下の軸が 8° 傾くまで縁が床に付かない。車屏風は、車と前の面の間・車の大きさ・屏風が車の重さで前へ倒れない事 | `spinner_neg`〜`spinner_neg9` | 3・F5.spin |
 | F5.sound | 鳴る玩具（whistle）。紙の舌は片持ちの梁の式で 150〜3000Hz・自由長が幅の 1.5 倍以上・根元を 2mm 以上挟む。ラッパの半頂角は 8〜45°。閉じた管は c/4(L+0.3d) で 200〜4000Hz・長さが径の 4 倍以上・歌口の切り欠きの比。鈴は、玉が中で転がる大きさか | `whistle_neg`〜`whistle_neg5` | 3・F5.sound |
+| F5.popup | 押し上げの壺（popup_jar）。静かな時に人形が口の高さ − 2 の下に隠れ、押し切った時に体の下の端が口に届く。穴の遊びの傾きで、袖の先が壺の内の壁に当たらない。足が糊代に乗らない。帯が穴で引っかからない（引き出しの決まり） | `popup_jar_neg`・`neg2`・`neg4` | 3・F5.popup |
+| F5.jar_seat | 壺の足の差し渡しが箱の一辺 − 1 に収まり、帯の穴が糊代に塞がれない | `popup_jar_neg3` | 3・F5.jar_seat |
+| F5.slide | 滑る箱（slide_box）。滑る道の隙間が 0.4〜2.0mm。行程が鼠を出しきり、箱の長さの半分まで。止めが仕切りに 1.5mm 以上掛かる。止めが角の糊代に擦れない。外箱の継ぎ目の糊代が底に収まる | `slide_box_neg`〜`neg4` | 3・F5.slide |
+| F5.wheel | 車の玩具（wheel_cart）。車輪の半径が軸の高さ＋2mm 以上、車輪と胴・蓋・二股のすき間 1.5mm、軸の穴の余白 4mm、鼠車の重心が前後の接地点の間 | `wheel_cart_neg`・`neg_tip`・`neg_stick`・`neg_mallet` | 3・F5.wheel |
 
 `neg_fan_leg` の期待に F5.image_box を足した（2026-11-04・元の repo の v9 を写した時）。v9 で扇の板に色を塗るようになり、足の糊代が扇の本体に食い込む寸法では、糊代と糊代の折り線が本当に扇の絵にかかる。偽の失敗ではないので、2 つとも期待にした（F5.fan_leg が落ちる事は変わらない）。
 
