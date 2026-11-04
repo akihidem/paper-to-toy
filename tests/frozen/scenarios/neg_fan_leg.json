@@ -5,7 +5,7 @@
     "pivot_above_rim": 0,
     "fold_count": 6,
     "fold_width": 5,
-    "fold_height": 30
+    "fold_height": 40
   },
   "inject": {},
   "expect": {

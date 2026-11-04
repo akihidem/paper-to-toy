@@ -1,5 +1,5 @@
 """雛形の族によらない描く前の検査（印字域・重なり・文字）。"""
-from shapely.geometry import LineString, Polygon, box
+from shapely.geometry import LineString, Point, Polygon, box
 
 from .model import Failure
 
@@ -80,4 +80,15 @@ def check_art(parts):
                 cross = geom.intersection(Polygon([(p.x + x, p.y + y) for x, y in g]))
                 if (cross.length if item["kind"] == "line" else cross.area) > EPS:
                     out.append(Failure("F5.image_box", p.name, "絵が糊代にかかっている"))
+    return out
+
+
+def check_holes(parts):
+    """穴が部品の輪郭の中にある事を見る。雛形の式が穴を寸法から置くので、寸法によっては穴が紙の外に出る。"""
+    out = []
+    for p in parts:
+        poly = Polygon(p.outline)
+        for x, y, r in p.holes:
+            if not poly.buffer(EPS).contains(Point(x, y).buffer(r)):
+                out.append(Failure("F5.hole", p.name, f"穴 ({x:.1f}, {y:.1f}) が部品の外に出ている"))
     return out
