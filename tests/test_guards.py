@@ -58,4 +58,16 @@ short = [r for r in pc.bom(neck) if r["number"] != 5]
 assert [f.floor for f in check_bom(short, pc.parts(neck))] == ["F2.bom"]
 assert any("竹串" in m for m in pc.materials(neck)) and any("油粘土" in m for m in pc.materials(neck))
 
+# 4. 刷った後の印の検査は、所蔵・改変の注記・仮説の文をそのまま探す
+from omochae.marks import check_pdf
+
+source = json.loads((ROOT / "data/sources" / f"{SRC_ID}.json").read_text(encoding="utf-8"))
+with tempfile.TemporaryDirectory() as d:
+    out = pathlib.Path(d) / "m"
+    assert gen(scenario(d, "ok", {"push_part": "tab"}), out).returncode == 0
+    pdf = out.with_suffix(".pdf")
+    assert check_pdf(pdf, source) == []
+    other = {**source, "holding": source["holding"] + "（別の文）", "modification_note": "改変: 別の注記"}
+    assert sorted(f.where for f in check_pdf(pdf, other)) == ["所蔵の文", "改変"]
+
 print("ok")
