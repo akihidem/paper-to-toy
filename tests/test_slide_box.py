@@ -51,4 +51,16 @@ for q in (P, S):
     assert keys <= {r["key"] for r in t.bom(q)}, keys
 assert "stop" in {x.key for x in t.parts(P)} and "stop" not in {x.key for x in t.parts(S)}
 assert "sleeve" in {x.key for x in t.parts(S)} and "lid" not in {x.key for x in t.parts(S)}
+# 床の式が頼る貼る位置（止め・仕切り・鼠）は、型紙に印を刷り、組み方の文でも言う。印が無いと、式の行程どおりに貼れない
+box = next(x for x in t.parts(P) if x.key == "box")
+xs = {round(a["pts"][0][0], 6) for a in box.art if a["kind"] == "line"}
+assert {P["box_h"] + P["partition_at"], P["box_h"] + P["mouse_at"]} <= xs, xs
+k, B = P["skirt"], t.board_width(P)
+ticks = [a for a in lid.art if a["kind"] == "line" and all(abs(x - t.STOP_AT) < 1e-9 for x, _ in a["pts"])]
+# 蓋の表（板）と左右の袴の 3 か所。袴の印は、蓋を裏返して止めを貼る時に見える
+assert {(min(y for _, y in a["pts"]) < k) + 2 * (min(y for _, y in a["pts"]) > k + B) for a in ticks} == {0, 1, 2}, ticks
+text = " ".join(t.steps(P))
+assert f"{P['partition_at']:g}mm" in text and f"{P['mouse_at']:g}mm" in text and f"{t.STOP_AT}mm" in text and "袴の印" in text
+# 出典: 2 つの形は同じ玩具なので、どちらもコマ 25 右
+assert t.SOURCES == {"lid": t.SOURCE, "sleeve": t.SOURCE}
 print("ok")

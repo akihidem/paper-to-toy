@@ -56,6 +56,8 @@ FORMS = ("lid", "sleeve")
 FORM = "form"
 # 既定の出典（data/sources/ の名前）。--source を書かない時に、雛形と合わない出典の印を刷らないため。
 SOURCE = "NDL-1187053-R0000025-R-slide_box"
+# 2 つの形は同じ玩具（コマ 25 右）の読みの違いなので、どちらも同じ出典にする。形と合わない出典は compose が F1.source で落とす。
+SOURCES = {"lid": SOURCE, "sleeve": SOURCE}
 MIN_CLEAR, MAX_CLEAR = 0.4, 2.0  # 滑る隙間の下限と上限の見込み（mm・実物では未確認）
 SHOW_MARGIN = 2  # 鼠の像の後ろの端から板の縁までに残す余り。ぎりぎりだと像の端が板に隠れて見える
 CATCH = 1.5  # 止めが仕切りに掛かる深さの下限。浅いと紙がたわんで乗り越える
@@ -219,8 +221,10 @@ def _lid(p):
     part = Part(2, "lid", "蓋", pts, label_xy=(L - 12, k + 2), label="2 蓋")
     part.mountain = [((0, k), (L, k)), ((0, k + B), (L, k + B))]
     part.art = [_panel(0, k, L, k + B, WOOD), _panel(0, 0, L, k, WOOD_DARK), _panel(0, k + B, L, 2 * k + B, WOOD_DARK)]
-    # 止めと猫を貼る所の印。止めは裏なので、表に印だけを刷る（前から STOP_AT）。
-    part.art.append({"kind": "line", "pts": [(STOP_AT, k + 1.5), (STOP_AT, k + B - 1.5)], "stroke": INK, "sw": 0.25})
+    # 止めを貼る所の印（前から STOP_AT）。行程の式（travel）がこの位置に頼るので、印が無いと式どおりに貼れない。
+    # 止めは裏に貼るので、表の板の印に加え、左右の袴にも刷る。蓋を裏返すと袴の印が止めの横に見え、足の前の端を合わせられる。
+    part.art += [{"kind": "line", "pts": [(STOP_AT, y0), (STOP_AT, y1)], "stroke": INK, "sw": 0.25}
+                 for y0, y1 in ((k + 1.5, k + B - 1.5), (0.8, k - 0.8), (k + B + 0.8, 2 * k + B - 0.8))]
     return part
 
 
@@ -386,7 +390,7 @@ def steps(p):
             f"4 仕切りの糊代を後ろへ折り、床の印（前の壁から {p['partition_at']:g}mm）に立てて側の壁の内に貼る",
             f"6 鼠の足を折り、床の印（前の壁から {p['mouse_at']:g}mm）に貼る"]
     if p["form"] == "lid":
-        out += ["3 止めの足を、2 蓋の裏の前の縁から 2mm の所（表の印の裏）に貼り、舌を下へ折る",
+        out += [f"3 止めの足を 2 蓋の裏に貼る。足の前の端を、左右の袴の印（前の縁から {STOP_AT}mm）に合わせ、舌を下へ折る",
                 "2 蓋の左右の袴を山折りし、箱の上に載せて袴で側の壁を挟む。止めは前の壁と仕切りの間に入れる",
                 "5 猫の足を折り、蓋の表の前の縁に貼る", "蓋を後ろへ引くと鼠が出て、前へ戻すと隠れるか見る"]
     else:
