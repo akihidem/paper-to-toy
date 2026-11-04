@@ -8,10 +8,12 @@
 動きの見込み（F5.drum）の前提:
 - 鼓の軸は横、柄（竹串）は胴を縦に貫く。糸は胴の帯の左右（柄から 90° の所）の帯の幅の真ん中に結ぶ。
 - 柄を速く回すと、玉は結び目を中心に、結び目の高さの水平面をほぼ回ると見る（重力と糸のたるみは入れない）。
-  その面で、面（鼓の軸の向きに結び目から半分の奥行きの所）を打つ点が、面の中心から半径の半分の内に入る糸の長さを求める。
+  その面で、玉が面（鼓の軸の向きに結び目から半分の奥行きの所）を打つ点が、面の中心から半径の半分の内に入る糸の長さを求める。
+  玉は点でない。糸は玉の中心までの長さなので、玉の表が面に触れる時、中心は面より玉の半径だけ外にある
+  （軸の向きの距離は 奥行きの半分＋玉の半径）。
   縁に近いと胴の帯が硬く、鳴りが鈍いと見込む（実物で確かめていない）。
 - 玉が垂れた時に、胴の下に出た柄に届くと糸が柄に絡む。結び目から柄の一番近い点（胴の下の縁の柄）までは √2 × 半径。
-  糸の長さ＋玉の半径がこれより短ければ絡まない（たるみ・玉の跳ね返りは入れない）。
+  糸の長さ＋玉の半径がこれより短ければ（等しいと届くので落とす）絡まない（たるみ・玉の跳ね返りは入れない）。
 """
 import math
 
@@ -53,9 +55,17 @@ FORM = "face"
 FORMS = FACES
 # 既定の出典（data/sources/ の名前）。--source を書かない時に、雛形と合わない出典の印を刷らないため。
 SOURCE = "NDL-1187053-R0000007-R-twist_drum"
+# 刷る形ごとの出典。面の絵はコマごとに違うので、形と合わない出典の印を刷らない（compose が F1.source で落とす）。
+SOURCES = {"kiku": SOURCE, "tori": "NDL-1187053-R0000029-L-twist_drum", "kanko": "NDL-1187053-R0000010-R-twist_drum"}
 HOLE_MARGIN = 3  # 穴から紙の端（帯の縁・継ぎ目の糊代）までの見込み。これより狭いと串を回した時に裂けやすい
 SKEWER_LEN = 180  # 家にある竹串の長さの見込み（実物を測ったら置き換える）
-TOP_OUT = 5  # 柄の先を胴の上へ出す長さ。抜け止めに糸を巻くため
+TOP_OUT = 5  # 柄の先を胴の上へ出す長さ。抜け止めに糸を巻くため（幣の房の無い形）
+
+
+def top_out(p):
+    """竹串を胴の上へ出す長さ。鳥の面は幣の房の上の帯（STREAMER_TOP）をこの出た所に巻いて貼るので、帯の幅＋2mm 出す。
+    5mm のままだと 8mm の帯を巻く所が無く、組めなかった。"""
+    return STREAMER_TOP + 2 if p["face"] == "tori" else TOP_OUT
 TAB_PITCH = 8  # 糊代の歯の目安の幅。細かいほど丸く貼れるが、切るのが手間になる
 STRIKE_ZONE = 0.5  # 打つ点が面の中心から半径のこの割合の内に入れば、鳴ると見込む（縁は鳴りが鈍い）
 FACE, INK, BAND, BAND_DARK, BAMBOO, CORD_MARK, PAPER = "#ddd0aa", "#3b3a34", "#9a5a35", "#6e4128", "#cdb98a", "#e8dfc6", "#ece6d6"
@@ -124,18 +134,35 @@ def hole_positions(p):
 def cord_window(p):
     """糸の長さ（結び目から玉の中心まで）の下限と上限。前提は module の docstring。
 
-    下限: 打つ点 x = R − √(L² − (D/2)²) が面の中心から STRIKE_ZONE·R の内 → L ≧ √(((1 − k)R)² + (D/2)²)。
-    上限: 反対側へ行き過ぎない L ≦ √(((1 + k)R)² + (D/2)²) と、柄に絡まない L + 玉の半径 < √2·R の小さい方。
+    a = D/2 + 玉の半径（結び目から、面に触れた玉の中心までの軸の向きの距離）とする。
+    下限: 打つ点 x = R − √(L² − a²) が面の中心から STRIKE_ZONE·R の内 → L ≧ √(((1 − k)R)² + a²)。
+    上限: 反対側へ行き過ぎない L ≦ √(((1 + k)R)² + a²) と、柄に絡まない L + 玉の半径 < √2·R の小さい方。
+    返す上限は 2 つの小さい方の値。柄の側は等号も落とす（check の側で厳密に見る）。
     """
-    R, h, k = p["radius"], p["depth"] / 2, STRIKE_ZONE
-    low = math.hypot((1 - k) * R, h)
-    high = min(math.hypot((1 + k) * R, h), math.sqrt(2) * R - p["bead_d"] / 2)
+    R, a, k = p["radius"], axial(p), STRIKE_ZONE
+    low = math.hypot((1 - k) * R, a)
+    high = min(far_limit(p), tangle_limit(p))
     return low, high
 
 
+def axial(p):
+    """結び目から、面に触れた玉の中心までの軸の向きの距離。玉の中心は面の外へ玉の半径だけ出る。"""
+    return p["depth"] / 2 + p["bead_d"] / 2
+
+
+def far_limit(p):
+    """面の中心を越えて、反対の縁の近くを打つ手前の糸の長さ（この長さまでは通す）。"""
+    return math.hypot((1 + STRIKE_ZONE) * p["radius"], axial(p))
+
+
+def tangle_limit(p):
+    """垂れた玉が柄に届く糸の長さ（この長さちょうどでも届くので、これより短い糸だけ通す）。"""
+    return math.sqrt(2) * p["radius"] - p["bead_d"] / 2
+
+
 def strike_offset(p):
-    """玉が面を打つ点の、面の中心からの距離（正は結び目の側）。糸が奥行きの半分に届かなければ None（面に届かない）。"""
-    h = p["depth"] / 2
+    """玉が面を打つ点の、面の中心からの距離（正は結び目の側）。糸が axial に届かなければ None（面に届かない）。"""
+    h = axial(p)
     if p["cord_length"] <= h:
         return None
     return p["radius"] - math.sqrt(p["cord_length"] ** 2 - h * h)
@@ -156,8 +183,10 @@ def _check_hand(p):
         x = strike_offset(p)
         where = "面に届かない" if x is None else f"面の中心から {x:.1f}mm の縁の近くを打つ"
         out.append(Failure("F5.drum", "糸", f"糸 {L:g}mm は短く、{where}（{low:.1f}mm 以上）"))
-    if L > high:
-        out.append(Failure("F5.drum", "糸", f"糸 {L:g}mm は長く、玉が柄に絡むか面を越える（{high:.1f}mm まで）"))
+    if L >= tangle_limit(p):
+        out.append(Failure("F5.drum", "糸", f"糸 {L:g}mm は長く、垂れた玉が柄に届いて絡む（{tangle_limit(p):.1f}mm より短く）"))
+    elif L > far_limit(p):
+        out.append(Failure("F5.drum", "糸", f"糸 {L:g}mm は長く、玉が面の中心を越えて反対の縁の近くを打つ（{far_limit(p):.1f}mm まで）"))
     r = stick_hole_r(p)
     edge = p["depth"] / 2 - r
     if edge < HOLE_MARGIN:
@@ -168,7 +197,7 @@ def _check_hand(p):
     _, pitch, inset = tab_teeth(p)
     if pitch - 2 * inset < 1:
         out.append(Failure("F5.drum", "糊代の歯", f"歯の先が {pitch - 2 * inset:.1f}mm で、面を貼る所が無い（歯が深すぎる）"))
-    need = p["handle_length"] + 2 * p["radius"] + TOP_OUT
+    need = p["handle_length"] + 2 * p["radius"] + top_out(p)
     if need > SKEWER_LEN:
         out.append(Failure("F5.drum", "柄", f"柄に竹串が {need:.0f}mm 要り、{SKEWER_LEN}mm の竹串で足りない"))
     return out
@@ -369,7 +398,7 @@ def steps(p):
     out = ["刷った物差しに定規を当て、10cm か確かめる", "部品を実線で切る。3 胴の帯の歯の間も切り込む。帯の穴は竹串の先であける",
            "3 胴の帯を丸め、終わりの糊代を頭の下に入れて貼る（絵が外）", "上下の歯を破線で内へ谷折りする",
            "1 表の面と 2 裏の面を、歯に外から貼る",
-           f"竹串を太い 2 つの穴（帯の頭から {pos['stick'][0]:.0f}mm と {pos['stick'][1]:.0f}mm）に通し、上へ {TOP_OUT}mm 出す。穴の所を糊で留める",
+           f"竹串を太い 2 つの穴（帯の頭から {pos['stick'][0]:.0f}mm と {pos['stick'][1]:.0f}mm）に通し、上へ {top_out(p):g}mm 出す。穴の所を糊で留める",
            f"糸の端に玉を付け、玉の中心から {p['cord_length']:g}mm の所で、菱形の小さい穴に結ぶ（左右 2 本）",
            "4 柄の巻き紙を胴の下の竹串に巻いて貼る"]
     if p["face"] == "tori":
@@ -393,10 +422,11 @@ def diagram(x, y, w, h, p):
     if p["face"] == "kanko":
         return _diagram_kanko(x, y, w, h, p)
     R, L = p["radius"], p["cord_length"]
-    s = min(w / (2 * R + 2 * L + p["bead_d"]), h / (2 * R + p["handle_length"] + TOP_OUT))
-    cx, cy = x + w / 2, y + (TOP_OUT + R) * s
+    up = top_out(p)
+    s = min(w / (2 * R + 2 * L + p["bead_d"]), h / (2 * R + p["handle_length"] + up))
+    cx, cy = x + w / 2, y + (up + R) * s
     shapes = [{"kind": "poly", "pts": _circle(cx, cy, R * s, 48), "fill": "none", "sw": 0.25}]
-    shapes.append({"kind": "line", "x1": cx, "y1": cy - (R + TOP_OUT) * s, "x2": cx, "y2": cy - R * s})
+    shapes.append({"kind": "line", "x1": cx, "y1": cy - (R + up) * s, "x2": cx, "y2": cy - R * s})
     shapes.append({"kind": "line", "x1": cx, "y1": cy + R * s, "x2": cx, "y2": cy + (R + p["handle_length"]) * s})
     br = p["bead_d"] / 2 * s
     for side in (-1, 1):
