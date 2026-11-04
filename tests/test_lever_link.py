@@ -236,12 +236,7 @@ assert [f.floor for f in t.check_range({**q, "plate_t": 1.6})] == ["F5.range"]  
 # 5 回目の見直し 7: 床が使わない load_arm は持たない（粘土の置き場は、どちらの形でも板の傾きを変えない）
 assert "load_arm" not in t.motion({**P, "kind": "saru_take"}) and "load_arm" not in t.motion({**P, "kind": "saru_sao"})
 
-# 6 回目の見直し 1: 中を切り抜く部品（溝・窓・門の口）か穴のある部品がある形は、カッターと下敷きを載せ、大人が切ると言う
-for k in t.KINDS:
-    q = {**P, "kind": k}
-    if any(x.cuts or x.holes for x in t.parts(q)):
-        assert any("カッター" in m and "下敷き" in m and "大人" in m for m in t.materials(q)), (k, t.materials(q))
-        assert any("大人" in x and "カッター" in x for x in t.steps(q)), k
+# 6 回目の見直し 1: 7 回目の見直しで、切り抜きと穴を分けた（下の 7 回目の見直し 3）
 
 # 6 回目の見直し 2: からくり台の枠は厚紙に貼る（紙 1 枚だと回すうちに曲がり、O と A の間が保てない）
 kq = {**P, "kind": "karakuri"}
@@ -257,4 +252,33 @@ assert any("台の前" in x and "前へだけ" in x for x in t.steps(hq)), t.ste
 # 6 回目の見直し 4: plate_t は厚紙の厚さ（0.5mm 以上）しか受けない
 assert [f.floor for f in t.check_range({**P, "kind": "saru_take", "plate_t": 0.4})] == ["F5.range"]
 assert t.check_range({**P, "kind": "saru_take", "plate_t": 0.5}) == []
+
+# 7 回目の見直し 1: 厚紙に貼る形は、厚紙に貼る手順がはさみで切る手順より前にあり、手順に番号が順に振られる
+for k in ("karakuri", "saru_take", "saru_sao"):
+    st = t.steps({**P, "kind": k})
+    glue = next(i for i, x in enumerate(st) if "厚紙に貼" in x)
+    cut = next(i for i, x in enumerate(st) if "はさみで切る" in x)
+    assert glue < cut, (k, st)
+    assert all(x.startswith(f"{i + 1}. ") for i, x in enumerate(st)), st
+
+# 7 回目の見直し 2: からくり台の厚紙の枠は、大人がカッターを下敷きの上で定規に当てて切る
+st = t.steps({**P, "kind": "karakuri"})
+assert any("枠" in x and "大人" in x and "カッター" in x and "下敷き" in x and "定規" in x for x in st), st
+
+# 7 回目の見直し 3: カッターは中を切り抜く所か厚紙がある形だけ。穴だけの形は目打ちと下敷きの行だけ
+for k in t.KINDS:
+    q = {**P, "kind": k}
+    ps = t.parts(q)
+    cutter = any(x.cuts for x in ps) or k in ("karakuri", "saru_take", "saru_sao")
+    m = t.materials(q)
+    assert any("カッター" in x for x in m) == cutter, (k, m)
+    assert any("カッター" in x for x in t.steps(q)) == cutter, k
+    if any(x.holes for x in ps):
+        assert any("目打ち" in x and "下敷き" in x and "大人" in x for x in m), (k, m)
+        assert any("目打ち" in x and "大人" in x for x in t.steps(q)), k
+assert not any("カッター" in x for x in t.materials({**P, "kind": "hashigo"}))  # 切り抜きの無い形
+
+# 7 回目の見直し 4: plate_t の範囲は、使う形（登る板）だけで見る
+assert t.check_range({**P, "kind": "sumo", "plate_t": 0.1}) == []
+assert [f.floor for f in t.check_range({**P, "kind": "saru_take", "plate_t": 0.1})] == ["F5.range"]
 print("ok")
