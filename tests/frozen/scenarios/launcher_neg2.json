@@ -3,7 +3,7 @@
   "source_id": "NDL-1187053-R0000029-L-launcher",
   "params": {
     "form": "bow",
-    "fringe_len": 6
+    "ball_d": 14
   },
   "inject": {},
   "expect": {

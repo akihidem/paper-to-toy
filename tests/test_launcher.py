@@ -28,17 +28,19 @@ assert any("確かめられない" in f.message for f in t.check_physics({**P, "
 # 玉の重さ ＝ 紙の面積 × 面密度。64mm 四方・150g/m² は 0.6144g
 assert abs(t.projectile_mass(P) - 64 * 64 * 150e-6) < 1e-12
 assert any(f.where == "玉" and "重さ" in f.message for f in t.check_physics({**P, "ball_paper": 100, "paper_gsm": 120, "ball_d": 18}))
-assert any(f.where == "玉" and "重さ" in f.message for f in t.check_physics({**B, "paper_gsm": 40, "fringe_len": 8}))
+# 毛玉は芯の玉の紙と房の帯を足した重さ。厚い紙では 1g を越える
+assert abs(t.projectile_mass(B) - (64 * 64 + t.POM_LEN * t.POM_BASE + t.POM_TEETH * t.TOOTH * B["fringe_len"]) * 150e-6) < 1e-12
+assert any(f.where == "玉" and "重さ" in f.message for f in t.check_physics({**B, "paper_gsm": 200}))
 
-# 先の太さ: 毛玉は房の長さの 2 倍。15mm より細いと落ちる
-assert t.nose_d(B) == 2 * B["fringe_len"]
-assert any("先の太さ" in f.message for f in t.check_physics({**B, "fringe_len": 7}))
-assert not any("先の太さ" in f.message for f in t.check_physics({**B, "fringe_len": 7.5}))
+# 先の太さ: どちらの形も丸めた玉の直径。毛玉の房の長さは数えない（当たるとつぶれる）。15mm より細いと落ちる
+assert t.nose_d(B) == B["ball_d"] and t.nose_d({**B, "fringe_len": 25}) == B["ball_d"]
+assert any("先の太さ" in f.message for f in t.check_physics({**B, "ball_d": 14.9}))
+assert not any("先の太さ" in f.message for f in t.check_physics({**B, "ball_d": 15}))
 
 # 弩の玉は、筒より 1〜4mm 細く、紙の辺の 0.3 倍まで。物差しの穴は通らない側が 15mm 以上
 small, big = t.gauge_holes(P)
 assert small >= t.MIN_NOSE and big == P["stock_w"] - 1 and small < P["ball_d"] < big
-assert any("筒" in f.message for f in t.check_physics({**P, "ball_d": 15}))
+assert any("物差しの穴" in f.message for f in t.check_physics({**P, "ball_d": 15}))  # 筒（太さ 20mm）に対して細すぎる
 assert any("まとまらない" in f.message for f in t.check_physics({**P, "ball_paper": 50}))
 
 # 穴と縁: 腕の幅の半分から穴の半径を引いた残りが 3mm 未満で落ちる
@@ -86,8 +88,8 @@ CHECKS = {
      and abs(t.spring_k(B) - 2 * 3 * t.E_HIGH * (P["arm_w"] * (t.LAYERS * P["paper_t"]) ** 3 / 12) / (B["bow_span"] / 2) ** 3 * 1000) < 1e-9
      and t.energy_mj({**B, "paper_t": 0.3}) > t.energy_mj(B)),
  "H2 弩の引きは 1 つで、測って止める": lambda: (not any("引く長さを減らす" in s for s in t.steps(P))
-     and any("使わない" in s and f"{t.tip_sag_min(P):.0f}mm" in s for s in t.steps(P))
-     and any("使わない" in s and f"{t.tip_sag_min(B):.0f}mm" in s for s in t.steps(B))),
+     and any("使わない" in s and f"{t.sag_print(P)}mm" in s for s in t.steps(P))
+     and any("使わない" in s and f"{t.sag_print(B)}mm" in s for s in t.steps(B))),
  "M 物差しの穴と閉じた範囲": lambda: (lambda s, b: any(f.where == "玉" for f in t.check_physics({**P, "ball_d": s}))
      and any(f.where == "玉" for f in t.check_physics({**P, "ball_d": b})) and t.check_physics({**P, "ball_d": s + t.GAUGE_TOL}) == [])(*t.gauge_holes(P)),
  "M 弓の真ん中の穴": lambda: any("真ん中の穴" in s and "あけ" in s for s in t.steps(B)),
@@ -97,5 +99,34 @@ CHECKS = {
  "L 弩で引く長さを変えさせない": lambda: not any("引く長さを変えて" in s for s in t.steps(P)) and "変える" not in t.measures(P)["predict"],
 }
 for name, check in CHECKS.items():
+    assert check(), name
+# 3 回目の指摘の行: 毛玉の先は芯の玉で見る、止めの下がりは切り上げて刷る（どの寸法でも刷った値 ≧ 式の値）、
+# 弓の毛玉の穴は引き止めの帯の糊代から外す、弩の腕の穴をあける文、弓は両端を測る、穴あけの竹串を用意する物に、房の長さが合う
+import itertools, re
+from shapely.geometry import Point
+def printed_sags(p):
+    return [float(x) for s in t.steps(p) if "止めの条件" in s for x in re.findall(r"([\d.]+)mm 以上下がらなければ", s)]
+def sag_ok():
+    for f, al, aw, pt in itertools.product(("crossbow", "bow"), (30, 50, 70), (8, 9, 12), (0.1, 0.12, 0.2, 0.3)):
+        p = {**P, "form": f, "arm_len": al, "arm_w": aw, "paper_t": pt}
+        got = printed_sags(p)
+        if not got or min(got) < t.tip_sag_min(p):
+            return False
+    return True
+def hole_clear():
+    sv = next(q for q in t.parts(B) if q.key == "stave")
+    L = B["bow_span"]
+    glue = Polygon([(L / 2 - t.STOP_W / 2, 0), (L / 2 + t.STOP_W / 2, 0), (L / 2 + t.STOP_W / 2, sv.height), (L / 2 - t.STOP_W / 2, sv.height)])
+    return all(not glue.intersects(Point(x, y).buffer(r)) for x, y, r in sv.holes)
+CHECKS3 = {
+ "H 毛玉の先は芯で見る": lambda: t.nose_d(B) == B["ball_d"] and any(f.where == "玉" for f in t.check_physics({**B, "ball_d": 12})) and t.check_physics({**B, "fringe_len": 6}) == [],
+ "H 止めの下がりは切り上げて刷る": sag_ok,
+ "M 弓の真ん中の穴と引き止めの糊代": hole_clear,
+ "M 弩の腕の穴をあける文": lambda: any("腕の先の穴" in s and "あけ" in s for s in t.steps(P)),
+ "M 弓は両側を測る": lambda: any("止めの条件" in s and "両端" in s and "どちらか" in s for s in t.steps(B)),
+ "L 穴あけの竹串が用意する物に": lambda: all(any("竹串" in m and "飛ばさない" in m for m in t.materials(p)) for p in (P, B)),
+ "L 房の長さが合う": lambda: (lambda q: abs(q.width - t.POM_LEN) < 1e-9 and abs(t.projectile_mass({**B, "ball_paper": 1e-9}) - Polygon(q.outline).area * B["paper_gsm"] * 1e-6) < 1e-6)(next(q for q in t.parts(B) if q.key == "pompom")),
+}
+for name, check in CHECKS3.items():
     assert check(), name
 print("ok")
