@@ -3,7 +3,10 @@ import math
 
 from shapely.geometry import Polygon, box
 
-from omochae.compose import TEMPLATES
+import json
+import pathlib
+
+from omochae.compose import TEMPLATES, check_params
 from omochae.templates import float as t  # module の名が float なので、組み込みの float を隠さないよう別名で読む
 
 P = dict(t.DEFAULTS)
@@ -15,7 +18,8 @@ for v in t.VANES:
 by = {q.key: q for q in t.parts(P)}
 L, W, h = P["tray_length"], P["tray_width"], P["wall_height"]
 paper = sum(Polygon(q.outline).area for q in by.values()) * P["paper_gsm"] / 1e6
-tape = (L * W + 2 * (L + W) * h) * P["tape_gsm"] / 1e6
+# テープは底・壁の外側・ふちから内へ折り返す帯（TAPE_FOLD）
+tape = (L * W + 2 * (L + W) * (h + t.TAPE_FOLD)) * P["tape_gsm"] / 1e6
 hy = t.hydro(P)
 assert abs(hy["m"] - (paper + tape + P["ballast_g"])) < 1e-9, hy
 # 喫水 ＝ 体積 ÷ 底の面積、1g は 1000mm³
@@ -136,4 +140,40 @@ assert t.foot_width(small) <= 2 * 8 * 0.9 and [f.where for f in t.check_physics(
 # 指摘 4: 水の注意は守れる形で言う（こぼしたら拭く・使った水は捨てる・中の刷った色がにじむ・出したら乾かす）
 st = " ".join(t.steps(P))
 assert all(k in st for k in ("拭く", "水を捨てる", "にじむ", "乾かす")) and "触らない" not in st
+
+# 四度目の検品（/code-review・main との差分）の指摘。配置と外形は check_params（描く前の検査の全部）で見る
+SRC = json.load(open(pathlib.Path(__file__).resolve().parents[1] / "data/sources/NDL-1187053-R0000028-R-float.json", encoding="utf-8"))
+
+
+def floors(q):
+    return sorted({e.split()[1] for e in check_params("float", q, SRC)["errors"]})
+
+
+# 指摘 1: 顔の点が帽子と胴の間で外形の外に出て、高い人形（70 から）が F5.image_box で落ちていた。顔も外形に入れる
+assert floors({**P, "figure_height": 70}) == [] and floors({**P, "figure_height": 90}) == ["F5.float"]
+# 指摘 2: 高い風受けを葉の下に積むと説明の文に重なった。人形の段は 1 段目に置いた物の一番下から始める
+assert floors({**P, "vane": "cups", "wall_height": 8, "glue": 5, "cup_width": 12, "cup_height": 60}) == []
+# 指摘 3: 広い舟で葉が舟の右に入らず印字域を出た。入らない物は舟の下へ送る
+wide = {**P, "tray_length": 110, "leaf_radius": 25}
+assert floors(wide) == []
+by_w = {q.key: q for q in t.parts(wide)}
+t.place(by_w, __import__("omochae.page", fromlist=["PAGES"]).PAGES["A4"], 36, 4)
+assert by_w["leaf"].y > by_w["tray"].y and by_w["leaf"].x == by_w["tray"].x and by_w["figure"].y >= by_w["leaf"].y + by_w["leaf"].height
+# 指摘 4: 足の糊代の幅の全部に、折り線のすぐ上の紙がある（袴の裾を足の線まで平らに取る）
+from shapely.geometry import Point
+poly = Polygon(by["figure"].outline)
+s_ = t._fig_scale(P)
+x0, x1 = (t._FOOT[0] - t._LEFT) * s_ + t._OFF, (t._FOOT[1] - t._LEFT) * s_ + t._OFF
+assert all(poly.contains(Point(x0 + (x1 - x0) * i / 40, t._feet(P) - 0.3)) for i in range(41))
+# 指摘 5: 短い舟で「1 舟」のラベルが葉の印に重なった。重なる時は上の壁の左端に置き、雷文はその右から始める
+short = {**P, "tray_length": 40, "clay_side": 6, "leaf_radius": 10, "figure_height": 30, "ballast_g": 1}  # 人形の足が葉に入り、粘土が薄く載る、物理の通る短い舟
+tr = t.parts(short)[0]
+assert tr.label_xy[1] < short["wall_height"] and tray.label_xy[1] > h  # 既定は底の印の右のまま
+assert min(a["pts"][0][0] for a in tr.art if a["kind"] == "line" and a.get("stroke") == t.INK and a["pts"][0][1] < short["wall_height"]) >= tr.label_xy[0] + t.LABEL_W
+assert floors(short) == []
+# 指摘 6: 組み方の文で言う「ふちから内へ折り返す」テープの帯を、質量と重心に入れる（壁の上端にあるので G を上げる）
+assert (2 * (L + W) * t.TAPE_FOLD * P["tape_gsm"] / 1e6, h - t.TAPE_FOLD / 2) in t.mass_points(P)
+assert any(f"{t.TAPE_FOLD}mm" in s for s in t.steps(P))
+# 葉より広い足の印は葉の内に留め、底に収まらない印は刷らない（F5.float が落とす寸法で、絵の検査を重ねて鳴らさない）
+assert floors({**P, "tray_length": 110, "leaf_radius": 30}) == ["F5.float"]
 print("ok")
