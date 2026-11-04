@@ -6,7 +6,7 @@ A papercraft template engine: generates printable PDF patterns from dimensions a
 
 ## 提出物との関係
 
-このエンジンは utsushi（ハッカソンの提出物）の一部を、開発期間中（2026-11-02 12:00 JST 以降）に切り出した物です。コードはすべて期間中に utsushi の repo で新しく作りました。提出物は utsushi で、このエンジンは単独の提出物ではありません。元の commit: utsushi `1d17988`。
+このエンジンは [utsushi](https://github.com/akihidem/utsushi)（ハッカソンの提出物）の一部を、開発期間中（2026-11-02 12:00 JST 以降）に切り出した物です。コードはすべて期間中に utsushi の repo で新しく作りました。提出物は utsushi で、このエンジンは単独の提出物ではありません。元の commit: utsushi `1d17988`。
 
 ## 何をするか
 
