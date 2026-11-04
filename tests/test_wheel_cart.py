@@ -69,4 +69,30 @@ assert any("軸が回らない" in m for m in msgs({**MALLET, "handle_in": 6}))
 assert any("頭の面" in m for m in msgs({**MALLET, "stick_t": 5}))  # 面の幅 6.9 に 5 + 2 が入らない
 # 範囲（head_r 6 以上）では内接円が 5.5mm 以上で穴の余裕は足りる。式の向きは範囲の外の値で確かめる（check_physics は範囲を見ない）
 assert any("蓋の縁" in m for m in msgs({**MALLET, "head_r": 4, "wheel_r": 8, "stick_t": 3, "handle_in": 0}))
+
+# 6. 床の式が頼る組み立ての位置は、型紙か組み方の文に出す（式だけが知る位置にしない）
+# 6a. 春駒: 割り箸を差し込む深さ stick_in を、二股の腕に印として刷り、組み方の文にも書く
+stick_p = {**STICK, "stick_in": 6}
+fork = next(q for q in w.parts(stick_p) if q.key == "fork")
+A, fi = stick_p["fork_arm"], stick_p["fork_inner"]
+marks = [it for it in fork.art if it["kind"] == "line"]
+ys = sorted(round(y, 6) for it in marks for _, y in it["pts"])
+assert ys == [A - 6, A - 6, A + fi + 6, A + fi + 6], ys
+assert any("6mm" in s and "割り箸" in s for s in w.steps(stick_p)), w.steps(stick_p)
+# 6b. 鼠車: 人形を貼る位置 rider_at を、胴の上の面に印として刷り、組み方の文にも書く
+rat_p = {**RAT, "rider_at": 0.4}
+body = next(q for q in w.parts(rat_p) if q.key == "body")
+H, L, g, W = rat_p["body_height"], rat_p["body_length"], rat_p["glue"], rat_p["body_width"]
+mark = [it for it in body.art if it.get("mark") == "rider"]
+assert len(mark) == 1, "人形の位置の印が無い"
+xs = [x for x, _ in mark[0]["pts"]]
+assert abs((min(xs) + max(xs)) / 2 - (H + 0.4 * L)) < 1e-6 and all(g <= y <= g + W for _, y in mark[0]["pts"])
+assert any(f"{0.4 * L:g}mm" in s and "人形" in s for s in w.steps(rat_p)), w.steps(rat_p)
+# 6c. ぶりぶり: 柄を差し込む深さ handle_in を組み方の文で、印の付け方まで言う（柄は刷る部品でないので鉛筆の印）
+assert any(f"{MALLET['handle_in']}mm" in s and "印" in s for s in w.steps(MALLET)), w.steps(MALLET)
+# 6d. 春駒の見取り図: 二股の腕は軸から上へ A - a、下へ a。床の線を越えない
+shapes = w.diagram(0, 0, 60, 80, STICK)
+floor = [s for s in shapes if s["kind"] == "line" and s["y1"] == s["y2"]][-1]["y1"]
+arm = shapes[1]
+assert arm["y"] + arm["h"] <= floor + 1e-9, (arm, floor)
 print("ok")

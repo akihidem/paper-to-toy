@@ -51,6 +51,8 @@ FORM = "ride"
 FORMS = RIDES  # 刷る形の値の一覧（作りうる部品を数える時に使う）
 # 既定の出典（data/sources/ の名前）。--source を書かない時に、雛形と合わない出典の印を刷らないため。
 SOURCE = "NDL-1187053-R0000019-L-wheel_cart"
+# 形ごとの出典。3 つの形は別々のコマの別の玩具なので、形と出典を組にする（合わない組は compose が F1.source で落とす）。
+SOURCES = {"rat": SOURCE, "stick": "NDL-1187053-R0000031-R-wheel_cart", "mallet": "NDL-1187053-R0000009-L-wheel_cart"}
 TITLES = {"rat": "鼠に車を付けて転がす", "stick": "棒の先の車で転がす", "mallet": "槌の頭の車で転がす"}
 
 HOLE_MARGIN = 4  # 穴の中心から紙の端・折り目までの見込み（虎と同じ値）。これより狭いと裂けやすい
@@ -320,7 +322,12 @@ def _rat_body(p):
     body.glue = [[(H + 2, 0), (H + L - 2, 0), (H + L, g), (H, g)], [(2, b0 - g), (H, b0 - g), (H, b0), (0, b0)], [(0, b1), (H, b1), (H, b1 + g), (2, b1 + g)],
                  [(H + L, b0 - g), (H + L + H - 2, b0 - g), (H + L + H, b0), (H + L, b0)], [(H + L, b1), (H + L + H, b1), (H + L + H - 2, b1 + g), (H + L, b1 + g)]]
     e = 0.25  # 絵を折り線から離す幅。check_art は線の太さまで見るので、面の縁を少し内へ
+    # 人形の耳を貼る位置の印。重心の式（cart_com_x）は人形が rider_at * L にあるとして数えるので、その位置を紙に刷る。
+    # 耳は人形の幅の 0.2〜0.8（幅 0.6 倍）、奥行き 7mm。上の面の幅の真ん中に置く。
+    rx, half, my = H + p["rider_at"] * L, p["figure_w"] * 0.3, (top0 + top1) / 2
+    rider_mark = [(rx - half, my - 3.5), (rx + half, my - 3.5), (rx + half, my + 3.5), (rx - half, my + 3.5), (rx - half, my - 3.5)]
     art = [_poly(_rect(H + e, top0 + e, H + L - e, top1 - e), PAPER),  # 上の面（人形を貼る）
+           dict(_line(rider_mark, DARK, 0.3), mark="rider"),
            _poly(_rect(H + e, b0 + e, H + L - e, b1 - e), BOARD),  # 底は板の色
            _poly(_rect(H + L + e, b0 + e, H + L + H - e, b1 - e), PAPER)]  # 後ろの壁（尾を貼る）
     # 前の壁は鼠の顔を正面から。壁は x = H の折り目で底から立つので、x の小さい方が上。
@@ -400,6 +407,11 @@ def _fork(p):
     a = p["axle_height"]
     e = 0.25
     art = [_poly(_rect(e, e, fw - e, A - e), WOOD), _poly(_rect(e, A + fi + e, fw - e, total - e), WOOD)]
+    # 割り箸の先を止める印。車輪と割り箸の先のすき間の式は差し込む深さ stick_in で数えるので、両方の腕の、頭の折り目から
+    # stick_in の所に線を刷る。0 に近いと折り目と重なるので刷らない（折り目そのものが印になる）。
+    d = p["stick_in"]
+    if d > 0.5:
+        art += [_line([(0.3, A - d), (fw - 0.3, A - d)], DARK, 0.4), _line([(0.3, A + fi + d), (fw - 0.3, A + fi + d)], DARK, 0.4)]
     return Part(4, "fork", "二股", _rect(0, 0, fw, total), label_xy=(1, A * 0.4), label="4",
                 valley=[((0, A), (fw, A)), ((0, A + fi), (fw, A + fi))],
                 holes=[(fw / 2, a, AXLE_HOLE_R), (fw / 2, total - a, AXLE_HOLE_R)],
@@ -584,18 +596,18 @@ def steps(p):
         out += ["1 胴を破線で谷折りし、糊代で貼って箱にする",
                 "竹串を 1 胴の前の 2 つの穴に通し、後ろの 2 つの穴にもう 1 本通す",
                 f"車輪を竹串の両端に差し、胴との間を {p['wheel_gap']}mm あけて貼る（厚紙を挟んで測る）。軸ごと回る事を確かめる",
-                "2 人形の耳を谷折りし、1 胴の上の面に貼る", "3 尾を丸くして、後ろの壁に貼る",
+                f"2 人形の耳を谷折りし、1 胴の上の面の四角い印に貼る（印の真ん中は前の端から {p['rider_at'] * p['body_length']:g}mm）", "3 尾を丸くして、後ろの壁に貼る",
                 "机の上で押して、まっすぐ転がるか見る"]
     elif p["ride"] == "mallet":
         out += ["1 頭を破線で谷折りして八角の筒にし、糊代で貼る",
                 "2・3 頭の蓋の糊代を谷折りし、頭の両端の内側に貼って蓋をする",
-                f"割り箸を 1 頭の四角い穴に {p['handle_in']}mm 差し込んで貼る（奥の軸に当てない）",
+                f"割り箸の先から {p['handle_in']:g}mm に鉛筆で印を付け、1 頭の四角い穴に印まで差し込んで貼る（深く入れると奥の軸に当たる）",
                 "竹串を 2 つの蓋の穴に通し、両端に 4・5 車輪を差す",
                 f"車輪と蓋の間を {p['wheel_gap']}mm あけて貼る（厚紙を挟んで測る）。軸ごと回る事を確かめる",
                 "柄を持って、車輪を床に付けて引くか押す"]
     else:
         out += ["1 頭と 2 頭の裏で割り箸の上の端を挟んで貼る", "3 布の胴を割り箸に巻き、頭の下に貼る",
-                "4 二股を破線で谷折りして コ の字にし、真ん中の四角い穴に割り箸の下の端を通して貼る",
+                f"4 二股を破線で谷折りして コ の字にし、真ん中の四角い穴に割り箸の下の端を通す。割り箸の先は腕の線（頭の折り目から {p['stick_in']:g}mm）で止めて貼る（深く入れると車輪に当たる）",
                 "竹串を二股の穴と車輪の穴に通し、車輪を二股の真ん中に貼る。軸ごと回る事を確かめる",
                 "割り箸を持ち、車輪を床に付けて押す"]
     return out
@@ -637,6 +649,7 @@ def diagram(x, y, w, h, p):
     cx, floor = x + w / 2, y + h
     cy = floor - R * s
     return [{"kind": "rect", "x": cx - R * s, "y": cy - R * s, "w": 2 * R * s, "h": 2 * R * s, "dash": "1,0.6"},
-            {"kind": "rect", "x": cx - 1, "y": cy - a * s, "w": 2, "h": A * s},
+            # 二股の腕は軸から上へ A - a、下へ a（腕の先は軸の下 a で、床より上に止まる）
+            {"kind": "rect", "x": cx - 1, "y": cy - (A - a) * s, "w": 2, "h": A * s},
             {"kind": "line", "x1": cx, "y1": cy - (A - a) * s, "x2": cx + 30 * s, "y2": y},
             {"kind": "line", "x1": x, "y1": floor, "x2": x + w, "y2": floor}]
