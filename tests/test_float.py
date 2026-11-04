@@ -1,7 +1,7 @@
 """浮き人形の床（F5.float）の式の要所を数点で確かめる。浮心・重心・BM は言葉で決めると間違えやすいので、ここで数える。"""
 import math
 
-from shapely.geometry import Polygon, box
+from shapely.geometry import LineString, Polygon, box
 
 import json
 import pathlib
@@ -183,7 +183,7 @@ assert any(f"{t.TAPE_FOLD}mm" in s for s in t.steps(P))
 assert floors({**P, "tray_length": 110, "leaf_radius": 30}) == ["F5.float"]
 
 # 五度目の検品の指摘 1: 人形の向きを決め、向きに沿って、壁の上端より下の人形の外形が底の内に入るか、風受けの高さより下の外形が
-# 風受けの足跡に当たらないかを見る。向きは葉の矢印（舟の長い向き）と舟の底の刻みで刷り、組み方の文で言う
+# 風受けの足跡に当たらないかを見る。向きは葉の矢印と舟の底の刻みで刷り、組み方の文で言う
 (arrow,) = marks(leaf, "arrow")
 ax = [x for x, _ in arrow["pts"]]
 assert max(ax) > P["leaf_radius"] and len({round(y, 6) for _, y in arrow["pts"][:2]}) == 1  # 矢の軸は葉の +x（右）へ
@@ -193,9 +193,20 @@ st = " ".join(t.steps(C))
 assert "矢印" in st and "刻み" in st and "2 の数字の側" not in st
 # 人形の外形の半幅（足の真ん中から、左右の遠い方）。高さで切るので、低い所ほど狭い
 assert t.figure_half_width(P, 1) < t.figure_half_width(P, P["wall_height"]) <= t.figure_half_width(P, P["figure_height"])  # 一番広いのは低い所の刃
-# 既定の風受けつきで、人形は風受けにも壁にも当たらない（舟の長い向きに立てると、槍の下の刃が左の風受けに 1.4mm 入っていた）
-fp = t.figure_plan(C, C["cup_height"])
-assert not any(fp.intersects(c) for c in t.floor_marks(C)["cups"])
+# 人形は葉の真ん中に、矢印と直角（y）に立ち、糊代は葉の上にある。風受けは葉に重ならない所に置くので、人形の紙の面（x ＝ 底の真ん中）
+# には届かない。それで人形と風受けの当たりは床にせず、その前提（風受けの足跡の x が葉の手前で終わる）をここで見る（六度目の検品の指摘）
+for q in ({**C}, {**C, "tray_length": 110, "leaf_radius": 30}, {**C, "cup_width": 12}):
+    if not t.check_physics(q):
+        fm = t.floor_marks(q)
+        cxq, rq = q["tray_length"] / 2, q["leaf_radius"]
+        assert all(c.bounds[2] < cxq - rq or c.bounds[0] > cxq + rq for c in fm["cups"]), q
+assert not hasattr(t, "figure_plan")
+# 六度目の検品の指摘 2: 組み方の文は刷った矢印と刻みで言う（幅が長さより長い舟では「長い向き」が刷った矢印と食い違った）
+assert all("長い向き" not in s for s in t.steps(C)) and all("長い向き" not in s for s in t.steps({**P, "tray_width": 80, "tray_length": 70}))
+# 指摘 3: 刻みは右の風受けの足跡（外へ折る歯を含む）に入らない
+(tick_c,) = marks(t.parts(C)[0], "leafdir")
+tk = LineString([(x - h, y - h) for x, y in tick_c["pts"]])
+assert not any(tk.intersects(c) for c in t.floor_marks(C)["cups"])
 # 幅の狭い舟では、壁の上端より下の袴と刃が壁に当たる
 narrowfig = {**P, "tray_width": 44}
 assert t.figure_half_width(narrowfig, narrowfig["wall_height"]) > narrowfig["tray_width"] / 2 - t.WALL_GAP
