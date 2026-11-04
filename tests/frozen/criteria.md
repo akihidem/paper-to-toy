@@ -9,7 +9,7 @@ exit code: 0 = 通る / 3 = 落ちる（検査の名前を出す）/ 4 = 検査�
 | ID | 見る事 | 負の対照（場面） | 期待 |
 |---|---|---|---|
 | F1.marks | 型紙の PDF から pdftotext で、所蔵（国立国会図書館デジタルコレクションと永続 ID）・改変・出典 ID・「仮説」が取り出せる | `neg_marks_all`・`neg_marks_source_id` | 3・F1.marks |
-| F1.source | 刷る形ごとに出典が違う雛形（SOURCES を持つ雛形）で、形と合わない出典を渡すと落とす。既定の出典も形から選ぶ | `tests/test_guards.py` の 10・`spinner_neg_source`・`whistle_neg_source`・`popup_jar_neg_source`・`slide_box_neg_source`・`wheel_cart_neg_source`・`balance_neg_source`・`twist_drum_neg_source`・`float_neg_source`・`pull_nod_neg_source`・`float_neg_source`・`pull_nod_neg_source` | 3・F1.source |
+| F1.source | 刷る形ごとに出典が違う雛形（SOURCES を持つ雛形）で、形と合わない出典を渡すと落とす。既定の出典も形から選ぶ | `tests/test_guards.py` の 10・`spinner_neg_source`・`whistle_neg_source`・`popup_jar_neg_source`・`slide_box_neg_source`・`wheel_cart_neg_source`・`balance_neg_source`・`twist_drum_neg_source`・`pull_nod_neg_source`・`float_neg_source`・`pull_nod_neg_source` | 3・F1.source |
 | F2.bom | 部品表の素材が空でない。置き換えには元の素材（推定）と理由がある | `neg_bom_material`・`neg_bom_original` | 3・F2.bom |
 | F5.range | 寸法が雛形の範囲の中で、知らない名前が無い | `neg_range` | 3・F5.range |
 | F5.print_area | 全部品と全文字が印字域に収まる | `neg_print_area` | 3・F5.print_area |

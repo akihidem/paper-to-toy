@@ -229,5 +229,15 @@ finally:
     pc.parts = orig_parts
 _, lay, _ = compose(pc.ID, {"mount": "hang"}, tiger)
 assert not any(t.text and "位置の印" in t.text for t in lay["texts"])
+# 閉じた印は戻る辺も刷るので、検査も戻る辺まで見る。印は描く所が決めた太さと丸い端で見る。穴や中の切り込みにかかる印は、切ると消えるので落とす
+from omochae.floors import check_art
+def art_fail(art, key="body", mount="hang"):
+    qs = pc.parts({**pc.DEFAULTS, "mount": mount}); q = next(x for x in qs if x.key == key); q.art = [art]
+    return [f.message for f in check_art([q])]
+assert art_fail({"kind": "mark", "pts": [(44, 42), (56, 42), (56, 84)], "closed": True}), "閉じた印の戻る辺を見ていない"
+assert art_fail({"kind": "mark", "pts": [(2, 9), (6, 9)], "stroke": "#000"}, key="strip") == [], "印に書いた stroke で太さが 0 になった"
+body = next(x for x in pc.parts({**pc.DEFAULTS, "mount": "neck"}) if x.key == "body")
+cx, cy, cw, ch = body.cuts[0]
+assert art_fail({"kind": "mark", "pts": [(cx + 1, cy + ch / 2), (cx + cw - 1, cy + ch / 2)]}, mount="neck"), "切り込みにかかる印を通した"
 
 print("ok")
