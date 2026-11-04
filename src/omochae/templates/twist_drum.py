@@ -35,6 +35,8 @@ DEFAULTS = {
     # 比はコマ 10 の図の目測: 胴の長さは面の直径の 1.2 倍ほど、柱は面の半径ほど、花車は面の半径の半分ほど。
     "k_radius": 18, "k_length": 44, "k_cord": 9.5,
     "post_side": 8, "post_height": 20, "post_pos": 18,
+    # 台の幅と壁の高さは図の比（34・15）より広く高い。7mm の旗が棒の上に立ち、棒が穴の中で浮いても天井の下に収まる（壁 17.8mm 以上）、
+    # 旗が東の壁の側へ倒れても当たらない（幅 35.6mm 以上）最小の値を切り上げた（壁は 1mm 余らせて 19。check_kanko の留め具の 2 つの検査が決める）。
     "base_length": 80, "base_width": 36, "base_height": 19,
     "wheel_r": 9, "peg_height": 38, "face_gap": 20,
 }
@@ -473,7 +475,8 @@ ROD_GRIP = 40  # 引く棒の、南の壁から出して手で持つ長さ
 # 3.5mm の旗では穴から先と折り目まで 1.25mm しか無く、結んだ糸で裂ける。
 TAB_HOLE_R = 0.5
 TAB_W = TAB_FLAG = 2 * (HOLE_MARGIN + TAB_HOLE_R)
-ROD_GAP = 1  # 旗が軸の側へ倒れた時に、旗の先から軸の表まで空ける長さ
+ROD_GAP = 1  # 旗が軸の側へ倒れた時に、旗の先から軸に巻いた糸の表まで空ける長さ
+WIND_D = 0.5  # 軸に巻く木綿の糸の太さの見込み。巻いた分だけ軸の表が太る（糸は軸に沿って並んで巻かれると見て 1 本分。重ねて巻くと越える）
 
 
 def wheel_anchor(p):
@@ -528,9 +531,10 @@ def peg_pos(p):
 
 def rod_off(p):
     """棒の通り道（中心）を軸の線から横へずらす量。留め具が軸に一番近づくのは、旗が軸の側へ倒れた時
-    （旗は棒の真上の付け根から、横へ旗の高さ＋紙の厚みだけ出る）。その時も旗の先が軸の表から ROD_GAP 離れるように決める。
-    前は棒の幅だけを見て 1.5·d ＋ 1（d = 3 で 5.5mm）にしていて、倒れた旗が軸に当たりえた。"""
-    return p["stick_d"] / 2 + ROD_GAP + TAB_FLAG + p["paper_thickness"]
+    （旗は棒の真上の付け根から、横へ旗の高さ＋紙の厚みだけ出る。巻く糸は旗を軸の側へ引くので、倒れるならこちら側）。
+    その時も旗の先が、軸に巻いた糸の表（軸の半径＋糸の太さ WIND_D）から ROD_GAP 離れるように決める。
+    前は棒の幅だけを見て 1.5·d ＋ 1（d = 3 で 5.5mm）にしていて、倒れた旗が軸に当たりえた。軸に巻いた糸の分は 6 回目の直しで落ちていたので戻した。"""
+    return p["stick_d"] / 2 + WIND_D + ROD_GAP + TAB_FLAG + p["paper_thickness"]
 
 
 def rod_cut_top(p):
@@ -600,9 +604,12 @@ def check_kanko(p):
         out.append(Failure("F5.drum", "柱", "柱の足が台の上に収まらない"))
     if peg_pos(p) > p["base_length"] - HOLE_MARGIN:
         out.append(Failure("F5.drum", "軸", f"花車の軸が台の端から {peg_pos(p):.0f}mm で、台（{p['base_length']:g}mm）の上に立たない"))
+    # 棒の穴の余白。穴の下の余白は HOLE_MARGIN で開ける（_base）ので、見るのは上の余白（壁の高さ − 穴の上の縁）と、穴から東の壁の端まで。
+    # どちらも下の留め具の 2 つの検査（天井・東の壁）がどの寸法でも一緒に落とす（旗 7mm ＋ 0.5mm は HOLE_MARGIN より大きく、
+    # 旗 7mm ＋ 紙 ＋ 0.5mm は穴の幅の半分 ＋ HOLE_MARGIN より大きい）ので単独では落ちないが、壁が低すぎる時の素直な理由として残す（試験で範囲の端を見る）。
     cw, ch = rod_cut(p)
     if p["base_height"] - rod_cut_top(p) < HOLE_MARGIN:
-        out.append(Failure("F5.drum", "棒の穴", f"台の壁 {p['base_height']:g}mm に棒の穴（高さ {ch:g}mm）の上下の余白が {HOLE_MARGIN}mm 取れない"))
+        out.append(Failure("F5.drum", "棒の穴", f"台の壁 {p['base_height']:g}mm に棒の穴（高さ {ch:g}mm・床から {HOLE_MARGIN}mm）の上の余白が {HOLE_MARGIN}mm 取れない"))
     if p["base_width"] / 2 + rod_off(p) + cw / 2 > p["base_width"] - HOLE_MARGIN:
         out.append(Failure("F5.drum", "棒の穴", "棒の穴が台の壁の端に近すぎる"))
     _, pitch, inset = tab_teeth(p)
@@ -700,8 +707,9 @@ def _base(p):
     part.holes = [(cx, H + peg_pos(p), p["stick_d"] / 2 + 0.4)]  # 軸が回るよう、穴は串より 0.8mm 太い
     cw, ch = rod_cut(p)
     rx = cx + rod_off(p) - cw / 2
-    # 北の壁は y=0 が床の縁、南の壁は y=2H+L が床の縁。棒は床から HOLE_MARGIN の所に低く通し、上に旗の立つ所を空ける（rod_cut_top）。
-    part.cuts = [(rx, HOLE_MARGIN, cw, ch), (rx, 2 * H + L - HOLE_MARGIN - ch, cw, ch)]
+    # 北の壁は y=0 が床の縁、南の壁は y=2H+L が床の縁。棒は床から HOLE_MARGIN の所に低く通し、上に旗の立つ所を空ける。
+    # 穴の上の縁は検査（flag_tip_z）と同じ rod_cut_top から出す。ここで別に数えると、片方を変えた時に刷る穴と検査が黙って食い違う。
+    part.cuts = [(rx, rod_cut_top(p) - ch, cw, ch), (rx, 2 * H + L - rod_cut_top(p), cw, ch)]
     return part
 
 
@@ -725,14 +733,20 @@ def _wheel(p):
 
 def _rodtab(p):
     """棒の留め具。帯（長さ＝棒の周り＋旗 2 枚分、幅 TAB_W は棒の向き）を棒に巻き、両端を棒の上で貼り合わせて旗にする。
-    刷った面を外にして巻き、両端を谷折り（破線）で立てると、2 枚の旗は刷った面どうしが向き合うので、端の旗の糊の印が相手の旗に当たる。
+    刷った面を内にして（真ん中の糊の印を棒に当てて）巻き、両端を谷折り（破線）で立てると、2 枚の旗は刷った面どうしが向き合うので、
+    端の旗の糊の印が相手の旗に当たる。谷折りは刷った面がへこむ側（凡例）なので、谷折りで立てた旗が向き合う面は、棒に当てた面と同じ側。
+    前は「刷った面を外にして」と書いていたが、それだと谷折りで立てた 2 枚の旗の刷った面は外を向き、真ん中の印も棒の反対を向いて、どの印にも糊を付けられない。
     旗の 2 枚の穴は重なる所（旗の真ん中）に置き、巻く糸を通して結ぶ。穴は糊の印の中にあるので、組み方は糸を通して結んでから貼る順にする。"""
     F = TAB_FLAG
     W = rod_perimeter(p) + 2 * F
-    part = Part(16, "rodtab", "棒の留め具", [(0, 0), (W, 0), (W, TAB_W), (0, TAB_W)], label_xy=(F + 1, 0.8), label="16")
+    part = Part(16, "rodtab", "棒の留め具", [(0, 0), (W, 0), (W, TAB_W), (0, TAB_W)], label_xy=(F + 0.4, 0.4), label="16")
     # 帯の真ん中（棒に当たる所）にも糊の印を置き、棒に貼る。旗どうしだけを貼ると、旗が壁に当たった時と糸に引かれた時に
     # 輪が棒の上を滑って棒だけが進み、棒の北の端が穴から抜けた。
-    part.glue = [[(F, 0), (W - F, 0), (W - F, TAB_W), (F, TAB_W)], [(W - F, 0), (W, 0), (W, TAB_W), (W - F, TAB_W)]]
+    # 番号（箱 2.9 × 3.5mm）の分だけ、真ん中の印の左上を空ける（印の線の上に刷ると読めない。旗は 7mm 四方の真ん中に穴があり、番号の入る所が無い）。
+    # 糊は空けた分（1 割ほど）だけ減る。
+    px, py = F + 3.5, 4.1
+    part.glue = [[(px, 0), (W - F, 0), (W - F, TAB_W), (px, TAB_W)], [(F, py), (px, py), (px, TAB_W), (F, TAB_W)],
+                 [(W - F, 0), (W, 0), (W, TAB_W), (W - F, TAB_W)]]
     part.valley = [((F, 0), (F, TAB_W)), ((W - F, 0), (W - F, TAB_W))]
     part.holes = [(F / 2, TAB_W / 2, TAB_HOLE_R), (W - F / 2, TAB_W / 2, TAB_HOLE_R)]
     return part
@@ -801,7 +815,7 @@ def steps_kanko(p):
             f"花車の小さい穴に糸を結び、玉の中心まで {p['k_cord']:g}mm にする",
             f"竹串 2 本を {rod_length(p):g}mm に切り、縦に重ねてセロハンテープで 3 か所巻いて束ね、14 引く棒にする（真ん中のテープは、次に留め具を巻く所を避ける）",
             f"【解釈】14 引く棒を南の壁の穴から北の壁の穴へ通し、北の壁から {rod_north_out(p):g}mm 出す（引き切っても北の穴から抜けない長さ）",
-            f"【解釈】台の下から、棒の北の端から {rodtab_pos(p):g}mm の所に、16 棒の留め具の北の縁を合わせ、刷った面を外にして棒に巻き、帯の真ん中の糊の印で棒に糊で貼る。両端を破線で棒の真上に立て、2 枚の穴を合わせる（穴が軸の真横に来る）",
+            f"【解釈】台の下から、棒の北の端から {rodtab_pos(p):g}mm の所に、16 棒の留め具の北の縁を合わせ、刷った面を内にして（真ん中の糊の印を棒に当てて）棒に巻いて貼る。両端を破線で棒の真上に立て、2 枚の穴を合わせる（穴が軸の真横に来る）",
             "【解釈】巻く糸の端を、合わせた 2 枚の穴に通して結ぶ。穴は糊の印の中にあるので、結んでから 2 枚を貼り合わせて旗にする",
             f"【解釈】巻く糸を台の下から軸に {math.ceil(pull_turns(p))} 回巻く（旗が南の壁に当たるまで {pull_travel(p):g}mm 引くと、約 {pull_turns(p):.1f} 回まわる）",
             "棒を引いて軸を回し、玉が面に当たるか見る"]

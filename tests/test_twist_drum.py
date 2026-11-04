@@ -168,16 +168,19 @@ st = " ".join(t.steps(K))
 x = nums(st, r"棒の北の端から (\d+(?:\.\d+)?)mm の所に、16 棒の留め具の北の縁")[0]
 north = nums(st, r"北の壁から (\d+(?:\.\d+)?)mm 出す")[0]
 assert abs((x - north + t.TAB_W / 2) - t.peg_pos(K)) < 1e-9, "旗の穴（留め具の真ん中）が軸の真横に来ない"
-assert t.flag_tip_z(K) - K["paper_thickness"] - t.TAB_FLAG >= t.rod_cut_top(K) - 1e-9 and t.TAB_FLAG > 0, "旗が穴の上の縁より上に出ない"
+#     旗の先は、棒が穴の底に乗った時（引く時の普通の状態）でも、穴の上の縁より HOLE_MARGIN 以上高く出て壁に掛かる（flag_tip_z は浮いた時なので使わない）
+rest_tip = t.HOLE_MARGIN + 2 * K["stick_d"] + K["paper_thickness"] + t.TAB_FLAG
+assert rest_tip - t.rod_cut_top(K) >= t.HOLE_MARGIN, "旗が穴の上の縁より十分に出ない"
+assert abs(t.pull_travel(K) - (K["base_length"] - (x - north + t.TAB_W))) < 1e-9, "刷った位置から数えた引ける長さが pull_travel と違う"
 assert north - t.pull_travel(K) >= t.HOLE_MARGIN
 # 16. 棒が穴の上の縁まで浮いても、旗の先（帯の厚み込み）が天井の下の面（天井の紙の厚みを引く）から 0.5mm 空く
 assert t.ceiling_z(K) - t.flag_tip_z(K) >= 0.5
 for bh in (13, 14):
     assert [f.where for f in t.check_physics({**K, "base_height": bh})] == ["留め具"], bh
 assert any(f.where == "留め具" for f in t.check_physics({**K, "base_height": 14, "paper_thickness": 0.5}))
-#     旗が軸の側へ倒れても、寸法の範囲のどの端でも旗の先が軸の表から 1mm 離れる。東の壁の側へ倒れて当たる狭い台は落とす
-assert min(t.rod_off({**K, "stick_d": sd, "paper_thickness": pt}) - sd / 2 - (t.TAB_FLAG + pt)
-           for sd in t.RANGES["stick_d"] for pt in t.RANGES["paper_thickness"]) >= 1 - 1e-9
+#     旗が軸の側へ倒れても、寸法の範囲のどの端でも旗の先が、軸に巻いた糸の表（軸の半径＋糸の太さ）から ROD_GAP 離れる。東の壁の側へ倒れて当たる狭い台は落とす
+assert min(t.rod_off({**K, "stick_d": sd, "paper_thickness": pt}) - sd / 2 - t.WIND_D - (t.TAB_FLAG + pt)
+           for sd in t.RANGES["stick_d"] for pt in t.RANGES["paper_thickness"]) >= t.ROD_GAP - 1e-9
 assert [f.where for f in t.check_physics({**K, "base_width": 34})] == ["留め具"]
 # 17. 竹串のとがった先を切り落とす手順（道具・大人がする）が、どの形にもある。切り落とした分、使える長さは短い
 for p in (P, {**P, "face": "tori"}, K):
@@ -192,13 +195,13 @@ assert len(marks) == 4 and all(a["stroke"] == t.BAND and len(a["pts"]) == 3 for 
 m = " ".join(t.materials(K))
 assert "カッター" in m and "テープ" in m
 assert nums(" ".join(t.steps(K)), r"竹串 2 本を (\d+(?:\.\d+)?)mm に切り") == [t.rod_length(K)]
-# ---- 最終差分の独立レビュー（2026-11-05・/code-review）の指摘を押さえる行 ----
-# 20. 留め具は刷った面を外にして巻く（谷折りで立てた 2 枚の刷った面が向き合い、糊の印が相手に当たる）。
+# ---- 最終差分の独立レビュー（2026-11-05）の指摘を押さえる行 ----
+# 20. 留め具は刷った面を内にして（真ん中の糊の印を棒に当てて）巻く。谷折りは刷った面がへこむ側なので、立てた 2 枚の旗は刷った面どうしが向き合い、端の糊の印が相手に当たる。
 #     旗の穴は糊の印の中にあるので、巻く糸を 2 枚の穴に通して結んでから貼り合わせる（貼ってからでは穴が糊でふさがる）
 sk = t.steps(K)
 wrap = next(i for i, s in enumerate(sk) if "16 棒の留め具の北の縁" in s)
 tie = next(i for i, s in enumerate(sk) if "穴に通して結ぶ" in s)
-assert "刷った面を外にして" in sk[wrap] and wrap < tie and "結んでから" in sk[tie] and "貼り合わせて旗" in sk[tie]
+assert "刷った面を内にして" in sk[wrap] and "糊の印を棒に当てて" in sk[wrap] and wrap < tie and "結んでから" in sk[tie] and "貼り合わせて旗" in sk[tie]
 assert not any("貼り合わせて旗" in s for s in sk[:tie])
 # 21. 先を落とす手順は、諫鼓では 3 本まとめて 1 回（同じ文を 2 度刷らない）。でんでん太鼓では、帯の穴を先であけてから落とす
 assert sum("とがった先" in s for s in sk) == 1 and "3 本" in next(s for s in sk if "とがった先" in s)
@@ -212,8 +215,9 @@ assert sum("カッター" in m for m in t.materials(K)) == 1
 from shapely.geometry import Polygon, box
 q = {p.key: p for p in t.parts(K)}["rodtab"]
 ring = box(t.TAB_FLAG, 0, q.width - t.TAB_FLAG, t.TAB_W)
-assert any(Polygon(g).intersection(ring).area > ring.area * 0.9 for g in q.glue)
-assert "棒に糊で貼る" in sk[wrap] or "棒に糊で貼る" in " ".join(t.steps(K))
+#     （番号の箱の分だけ印を空けるので、1 枚で 9 割でなく、合わせて 8.5 割以上）
+assert sum(Polygon(g).intersection(ring).area for g in q.glue) > ring.area * 0.85
+assert "棒に巻いて貼る" in sk[wrap]
 # 24. 旗の穴から旗の先・折り目・帯の縁まで HOLE_MARGIN 以上
 for hx, hy, r in q.holes:
     fold = min(abs(hx - t.TAB_FLAG), abs(hx - (q.width - t.TAB_FLAG)))
@@ -223,4 +227,26 @@ for p in (P, K):
     poke = [s for s in t.steps(p) if "あける" in s and "穴" in s]
     assert poke and all("大人" in s for s in poke), poke
 assert any("旗の穴" in s and "花車の穴" in s and "まち針" in s for s in t.steps(K))
+# ---- 7 回目のレビューの指摘（2026-11-05）を押さえる行 ----
+# 26. 留め具の番号は糊の印の上に刷らず（印に番号の箱の分の空きがある）、部品の中で、穴にもかからない
+from omochae.compose import LABEL_SIZE, LINE, text_width
+lx, ly = q.label_xy
+lab = box(lx, ly, lx + text_width(q.label, LABEL_SIZE), ly + LABEL_SIZE * LINE)
+assert all(Polygon(g).intersection(lab).area < 1e-9 for g in q.glue) and lab.within(box(0, 0, q.width, t.TAB_W))
+from shapely.geometry import Point
+assert all(not lab.intersects(Point(hx, hy).buffer(r)) for hx, hy, r in q.holes)
+# 27. 刷る棒の穴の上の縁は、北の壁も南の壁も検査と同じ rod_cut_top（床から）
+base = {p.key: p for p in t.parts(K)}["base"]
+(nx, ny, nw, nh), (sx, sy, sw, sh) = base.cuts
+H, L = K["base_height"], K["base_length"]
+assert abs(ny + nh - t.rod_cut_top(K)) < 1e-9 and abs((2 * H + L - sy) - t.rod_cut_top(K)) < 1e-9 and nh == sh == t.rod_cut(K)[1]
+# 28. 棒の穴の検査（上の余白・東の壁の端）が落ちる時は、留め具の 2 つの検査（天井・東の壁）も範囲のどの端でも一緒に落ちる（棒の穴は単独では落ちない）
+for sd in t.RANGES["stick_d"]:
+    for pt in t.RANGES["paper_thickness"]:
+        for bh in t.RANGES["base_height"]:
+            for bw in t.RANGES["base_width"]:
+                c = {**K, "stick_d": sd, "paper_thickness": pt, "base_height": bh, "base_width": bw}
+                cw, ch = t.rod_cut(c)
+                old = bh - t.rod_cut_top(c) < t.HOLE_MARGIN or bw / 2 + t.rod_off(c) + cw / 2 > bw - t.HOLE_MARGIN
+                assert not old or any(f.where == "留め具" for f in t.check_physics(c)), c
 print("ok")
