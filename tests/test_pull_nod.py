@@ -33,7 +33,7 @@ assert pn.return_moment({**bow, "torso_len": 70})[0] < m1
 # 顎は前（口が開く向き）が戻る向き。粘土を顎の先に付けるので正
 assert pn.return_moment(jaw)[0] > 0
 # 摩擦の境目: 戻るモーメントが摩擦の SAFETY 倍をちょうど超えない粘土の量で落ちる
-card, x_card = pn.lever(bow)[0][0]
+card, x_card, _ = pn.lever(bow)[0][0]
 arm = bow["tail_len"] - pn.CLAY_IN
 w_edge = (-card * x_card + pn.SAFETY * pn.MU * card * pn.AXLE_R) / (arm - pn.SAFETY * pn.MU * pn.AXLE_R)
 assert floors({**bow, "weight_g": round(w_edge - 0.01, 3)}) and not floors({**bow, "weight_g": round(w_edge + 0.05, 3)})
@@ -58,7 +58,7 @@ assert pn.pull_gf({**bow, "string_arm": 30}) < pn.pull_gf(bow)
 # 4. peck（藁苞の鶏）: 傾く角度は、輪郭の頂点が苞の上の面に届く角度の最小。腹が低い（leg_h が小さい）ほど浅い
 sw = [pn.bird_swing({**peck, "leg_h": h}, "cock") for h in (1, 2, 4, 10)]
 assert sw == sorted(sw) and sw[0] < pn.MIN_SWING <= sw[1], sw
-assert [f.where for f in floors({**peck, "leg_h": 1})] == ["奥の鶏"]  # 手前の鶏は縮めた分だけ深く傾ける（16.3°）
+assert [f.where for f in floors({**peck, "leg_h": 1})] == ["奥の鶏", "手前の鶏"]  # 手前の鶏は腹の高さも縮めた相似の形なので、同じく浅い
 # 尾の先が苞の上の面にあり（静かな時の後ろの止め）、粘土は軸より後ろ＝戻る向き
 b = pn.bird(peck, "cock")
 assert abs(max(y for x, y in b["body"].exterior.coords) - b["H"]) < 1e-9 and b["clay"][0] > b["pivot"][0]
@@ -82,7 +82,7 @@ assert abs(pn.swing_deg(jaw) - math.degrees(math.asin((h2 + jaw["stop_gap"]) / r
 bump = next(q for q in pn.parts(jaw) if q.key == "bump")
 assert len(bump.valley) == 3 and len(bump.glue) == 1 and bump.glue[0][0][0] >= 3 * 8, (bump.valley, bump.glue)
 # 5c. 串の抜け止めの粘土は、重り（式の weight_g）と別の行。同じ粘土から取ると、顎に付く量が式より減る
-for p in (jaw, peck):
+for p in (bow, jaw, peck):
     keys = [r["key"] for r in pn.bom(p)]
     assert "stopclay" in keys, (p["kind"], keys)
     weight = next(r for r in pn.bom(p) if r["key"] == "weight")
@@ -90,6 +90,35 @@ for p in (jaw, peck):
     assert any("抜け止め" in m for m in pn.materials(p))
 # 5d. 形ごとの出典
 assert pn.SOURCES == {"bow": pn.SOURCE, "jaw": "NDL-1187053-R0000030-L-pull_nod", "peck": "NDL-1187053-R0000016-R-pull_nod"}
+
+# 6. 2 回目のレビューの指摘（2026-11-04）を押さえる
+# 6a. 傾いた後の戻るモーメントは、質量の点ごとに軸のまわりで 2 次元に回して測る（x cosθ − z sinθ）。軸より上の粘土は、前へ傾くと腕が縮み、
+#     負になりうる。鶏の粘土と紙の重心は軸より上にあるので、cos だけの近似では倒れる寸法を通した
+for which in ("cock", "hen"):
+    pts = pn.bird_points(peck, which)
+    sw_w = pn.bird_swing(peck, which)
+    full = sum(m * (x * math.cos(math.radians(sw_w)) - z * math.sin(math.radians(sw_w))) for m, x, z in pts)
+    assert abs(full - pn.moment_at(pts, sw_w)) < 1e-9
+    assert pn.min_moment(pts, sw_w) <= full + 1e-9
+    assert full > pn.SAFETY * pn.bird_moment(peck, which)[1], (which, full)  # 既定は振り切っても戻る
+# 粘土を軸の高い所（尾の付け根の上）に付ける形は、振り切った所で前へ倒れて落ちる
+high = [(peck["weight_g"], 18, 27)]
+assert pn.moment_at(high, 43) < 0
+# bow と jaw は質量の点が軸の高さ（z = 0）にあるので、2 次元に回しても cos 倍と同じ（近似でなく厳密）
+for p in (bow, jaw):
+    pts, _ = pn.lever(p)
+    assert all(z == 0 for _, _, z in pts)
+# 6b. 手前の鶏は奥の鶏をそのまま HEN 倍にした形（腹の高さも縮める）。脚の帯は苞と穴の余白で決まるので縮めない
+cb, hb = pn.bird(peck, "cock")["body"], pn.bird(peck, "hen")["body"]
+from shapely import affinity
+assert affinity.scale(cb, pn.HEN, pn.HEN, origin=(0, 0)).symmetric_difference(hb).area < 1e-6
+# 6c. bow の竹串は、U の字の柱の間（POST_GAP ＋ 柱の紙 2 枚）と、両端の抜け止めの分。柱の幅は串の向きに関わらない
+import re
+axle = next(r for r in pn.bom(bow) if r["key"] == "axle")
+n_mm = int(re.search(r"約 (\d+)mm", axle["material"]).group(1))
+assert n_mm == round(pn.POST_GAP + 2 * pn.PAPER_T + 2 * pn.STOP_END), axle["material"]
+assert n_mm == next(int(re.search(r"約 (\d+)mm", r["material"]).group(1)) for r in pn.bom({**bow, "post_width": 20}) if r["key"] == "axle")
+assert "stopclay" in [r["key"] for r in pn.bom(bow)] and any("抜け止め" in s for s in pn.steps(bow))
 
 # 形ごとの部品の key は英小文字だけ、部品表の番号と合う
 for p in (bow, jaw, peck):
