@@ -124,8 +124,18 @@ def travel(p):
     return p["partition_at"] - t
 
 
+# sleeve: 縁の切る端の角を落とす幅。縁の本当の深さ（切る端から折り線まで）は stop_depth からこれだけ浅い。
+LIP_INSET = 0.5
+
+
+def lip_depth(p):
+    """sleeve の外箱の縁の本当の深さ。刷る外形（_sleeve）と掛かりの式（check_physics）が同じこの値を使う。
+    名目の stop_depth で掛かりを見ていた時は、0.5mm 深く見込み、掛からない縁を通していた。"""
+    return p["stop_depth"] - LIP_INSET
+
+
 def sleeve_inner_h(p):
-    """外箱の内の高さ（底の継ぎ目の糊代の上から上の面の内まで）。縁の下の端はここから stop_depth 下がる。"""
+    """外箱の内の高さ（底の継ぎ目の糊代の上から上の面の内まで）。縁の下の端はここから lip_depth 下がる。"""
     t = p["paper_thickness"]
     return sleeve_height(p) - 2 * t
 
@@ -166,7 +176,7 @@ def check_physics(p):
             out.append(Failure("F5.slide", "糊代", f"止めの左右の隙間 {room:.2f}mm が、箱の前の角の糊代で {MIN_CLEAR}mm を割り、止めが糊代に擦れる"))
     else:
         inner = sleeve_inner_h(p)
-        lip = inner - p["stop_depth"]
+        lip = inner - lip_depth(p)
         if (H + t) - lip < CATCH:
             out.append(Failure("F5.slide", "止め", f"外箱の縁が仕切りに {(H + t) - lip:.1f}mm しか掛からず（{CATCH}mm 以上）、中箱が抜ける"))
         if p["front_h"] > H:
@@ -189,7 +199,9 @@ def _box(p):
     """箱（中箱）の展開図。x は箱の長さ（左が前）、y は幅。床の四方に壁、端の壁の両脇に角の糊代（側の壁の内に貼る）。"""
     L, W, H, g = p["box_l"], p["box_w"], p["box_h"], p["glue"]
     hf = H if p["form"] == "lid" else p["front_h"]
-    ox = H  # 前の壁の置き場。sleeve の低い前の壁も、展開図の幅は同じにして並べ方を変えない
+    # 前の壁の置き場。外形の左上を原点にする（ほかの部品と同じ）ので、前の壁の高さだけ右へずらす。
+    # 箱の高さで固定していた時は、sleeve の低い前の壁で外形の左の端が 0 でなかった。
+    ox = hf
     gf, gr = min(g, H - 0.5), min(g, H - 0.5)  # 糊代は角の正方形からはみ出さない
     pts = [(ox, 0), (ox + L, 0), (ox + L, H),
            (ox + L + 1, H - gr), (ox + L + H - 1.5, H - gr), (ox + L + H, H), (ox + L + H, H + W),
@@ -240,10 +252,12 @@ def _stop(p):
 def _sleeve(p):
     """外箱（sleeve）。y の順に 底・側・上・側・継ぎ目の糊代。上の面の前（左）の端に、内へ折る縁（止め）。表が外。
     糊代を底の内に貼るのは、上の面の縁の折りに糊代を重ねないため（底の内に重ねた分は clearances の層に数える）。"""
-    L, B, Hs, g, s = p["box_l"], board_width(p), sleeve_height(p), p["glue"], p["stop_depth"]
+    L, B, Hs, g, s = p["box_l"], board_width(p), sleeve_height(p), p["glue"], lip_depth(p)
     y1, y2, y3, y4 = B, B + Hs, 2 * B + Hs, 2 * B + 2 * Hs
+    # 縁の切る端を x = 0 に置き（ほかの部品と同じく外形の左上が原点）、折り線を x = lip_depth に置く。
+    # 切る端の角は LIP_INSET の幅で y に 0.5 ずつ落とす（折り線の端より縁を細くし、上の面の角の折りに掛けない）。
     pts = [(s, 0), (s + L, 0), (s + L, y4), (s + L - 1.5, y4 + g), (s + 1.5, y4 + g), (s, y4), (s, y3 - 1),
-           (0.5, y3 - 1.5), (0.5, y2 + 1.5), (s, y2 + 1)]
+           (0, y3 - 1 - LIP_INSET), (0, y2 + 1 + LIP_INSET), (s, y2 + 1)]
     part = Part(2, "sleeve", "外箱", pts, label_xy=(s + L - 14, y2 + 2), label="2 外箱")
     part.mountain = [((s, y), (s + L, y)) for y in (y1, y2, y3, y4)] + [((s, y2 + 1), (s, y3 - 1))]
     part.glue = [[(s, y4), (s + L, y4), (s + L - 1.5, y4 + g), (s + 1.5, y4 + g)]]
@@ -413,7 +427,9 @@ def diagram(x, y, w, h, p):
     L, H = p["box_l"], p["box_h"]
     s = travel(p)
     sc = min(w / (L + s), h / (H + p["cat_h"] + 4))
-    bx, by = x, y + (p["cat_h"] + 2) * sc
+    # 枠の幅は L + s で取る。lid は蓋が後ろ（右）へ s 動くので箱を枠の左に、sleeve は中箱が前（左）へ s 出るので
+    # 箱（閉じた位置）を s だけ右に置く。sleeve でも箱を枠の左に置いていた時は、引き出した中箱が枠の左の外に出た。
+    bx, by = (x if p["form"] == "lid" else x + s * sc), y + (p["cat_h"] + 2) * sc
     shapes = [{"kind": "rect", "x": bx, "y": by, "w": L * sc, "h": H * sc}]
     shapes.append({"kind": "line", "x1": bx + p["partition_at"] * sc, "y1": by, "x2": bx + p["partition_at"] * sc, "y2": by + H * sc})
     shapes.append({"kind": "rect", "x": bx + p["mouse_at"] * sc, "y": by + (H - p["mouse_h"]) * sc, "w": p["mouse_w"] * sc, "h": p["mouse_h"] * sc})

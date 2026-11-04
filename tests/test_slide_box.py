@@ -63,4 +63,21 @@ text = " ".join(t.steps(P))
 assert f"{P['partition_at']:g}mm" in text and f"{P['mouse_at']:g}mm" in text and f"{t.STOP_AT}mm" in text and "袴の印" in text
 # 出典: 2 つの形は同じ玩具なので、どちらもコマ 25 右
 assert t.SOURCES == {"lid": t.SOURCE, "sleeve": t.SOURCE}
+
+# 外箱の縁の本当の深さは、切る端から折り線まで（stop_depth − LIP_INSET）。掛かりの式もその深さで見る
+lip_fold = next(a for a, b in sl.mountain if a[0] == b[0])[0]  # 縁の折り線（縦の 1 本）
+assert abs((lip_fold - min(x for x, _ in sl.outline)) - t.lip_depth(S)) < 1e-9 and abs(t.lip_depth(S) - (S["stop_depth"] - t.LIP_INSET)) < 1e-9
+# 名目の深さなら掛かる（2.3 − 0.55 = 1.75）が、本当の深さでは 1.25 で掛からない寸法
+assert any(f.where == "止め" and "抜ける" in f.message for f in t.check_physics({**S, "stop_depth": 2.3}))
+
+# 組み上がりの絵は、渡した枠の中に収まる（動いた中箱を枠の左の外に描いていた）
+for q in (P, S):
+    for sh in t.diagram(10, 20, 80, 40, q):
+        xs = [sh["x"], sh["x"] + sh["w"]] if sh["kind"] == "rect" else [sh["x1"], sh["x2"]]
+        assert 10 - 1e-9 <= min(xs) and max(xs) <= 90 + 1e-9, (q["form"], sh)
+
+# 部品の外形は左上を原点にする（低い前の壁の中箱で、左の端が 0 でなかった）
+for q in (P, S, {**S, "front_h": 5}):
+    for part in t.parts(q):
+        assert abs(min(x for x, _ in part.outline)) < 1e-9 and abs(min(y for _, y in part.outline)) < 1e-9, (q["form"], part.key)
 print("ok")
