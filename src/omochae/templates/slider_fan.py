@@ -101,8 +101,10 @@ def check_physics(p):
         # 範囲の検査は pivot_above_rim を 0 まで許すので、足の長さが糊代に足りない組はここで落とす。
         if leg_length(p) < LEG_GLUE:
             out.append(Failure("F5.fan_leg", "蛇腹の扇", f"足の長さ {leg_length(p)} が糊代 {LEG_GLUE} に足りず、糊代が扇に食い込む（中心の高さ {d} が 2 未満）"))
-    elif h > H - s:
-        out.append(Failure("F5.fan_height", "蛇腹の扇", f"畳んだ高さ {h} が筒の空き {H - s} を超える"))
+    elif h > s:
+        # 口の台の形も、静かな時の台から口までは押し上げる量 s（軸の形と同じ見方）。H − s は台の下の空きで、
+        # これと比べていたので、扇が口から出る寸法が通っていた（見直しの指摘・本人の決定 2026-11-04）。
+        out.append(Failure("F5.fan_height", "蛇腹の扇", f"畳んだ高さ {h} が押し上げる量 {s} を超え、静かな時に扇が口から出る"))
     bound, limit = opening_bound_deg(p["fold_count"], p["fold_width"], h), clearance_limit_deg(A, d)
     if bound > limit:
         out.append(Failure("F5.fan_clearance", "蛇腹の扇", f"帯の長さでは {bound:.0f}° 開くが、筒の口の角に当たって {limit:.0f}° までしか開けない"))
