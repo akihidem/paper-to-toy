@@ -162,20 +162,23 @@ assert abs(tabp - (north + t.peg_pos(odd) - t.TAB_W / 2)) < 1e-9 and abs(rod - (
 eq = {**K, "k_cord": K["bead_d"] / 2 + (K["wheel_r"] - t.wheel_anchor(K))}
 assert any("花車に重なる" in f.message for f in t.check_physics(eq))
 # ---- 5 回目のレビューの指摘（2026-11-05）を押さえる行 ----
-# 15. 刷る位置は留め具の北の縁。引ける長さは、押し込んだ時の南の縁から旗が南の壁に当たるまで。北に出す分はその先に余白を残す
+# 15. 刷る位置は留め具の北の縁。押し込んだ時に旗の穴（留め具の真ん中）が軸の真横に来る。
+#     旗は南の壁の棒の穴の上の縁より高く出るので、引くと壁に当たって止まる（止め具になる）。引き切っても棒の北の端は北の穴に残る
 st = " ".join(t.steps(K))
 x = nums(st, r"棒の北の端から (\d+(?:\.\d+)?)mm の所に、16 棒の留め具の北の縁")[0]
 north = nums(st, r"北の壁から (\d+(?:\.\d+)?)mm 出す")[0]
-assert abs(t.pull_travel(K) - (K["base_length"] - (x - north + t.TAB_W))) < 1e-9
-assert north - t.pull_travel(K) >= t.HOLE_MARGIN
 assert abs((x - north + t.TAB_W / 2) - t.peg_pos(K)) < 1e-9, "旗の穴（留め具の真ん中）が軸の真横に来ない"
-# 16. 旗は棒の上に立ち、巻いた帯の厚みも入れて台の天井の下に収まる。壁 14mm は厚みの分（0.15mm）で落ちる（厚みを入れないと通る）
-H, d, tp = K["base_height"], K["stick_d"], K["paper_thickness"]
-assert H / 2 + d + tp + t.TAB_FLAG <= H - 0.5
+assert t.flag_tip_z(K) - K["paper_thickness"] - t.TAB_FLAG >= t.rod_cut_top(K) - 1e-9 and t.TAB_FLAG > 0, "旗が穴の上の縁より上に出ない"
+assert north - t.pull_travel(K) >= t.HOLE_MARGIN
+# 16. 棒が穴の上の縁まで浮いても、旗の先（帯の厚み込み）が天井の下の面（天井の紙の厚みを引く）から 0.5mm 空く
+assert t.ceiling_z(K) - t.flag_tip_z(K) >= 0.5
 for bh in (13, 14):
     assert [f.where for f in t.check_physics({**K, "base_height": bh})] == ["留め具"], bh
-#     巻いた留め具と軸の間は検査しない。寸法の範囲のどの端でも、帯 1 枚を引いて 1.5mm 以上空く（検査を置いても落ちる道が無い）
-assert min(t.rod_off({**K, "stick_d": sd}) - sd - pt for sd in t.RANGES["stick_d"] for pt in t.RANGES["paper_thickness"]) >= 1.5
+assert any(f.where == "留め具" for f in t.check_physics({**K, "base_height": 14, "paper_thickness": 0.5}))
+#     旗が軸の側へ倒れても、寸法の範囲のどの端でも旗の先が軸の表から 1mm 離れる。東の壁の側へ倒れて当たる狭い台は落とす
+assert min(t.rod_off({**K, "stick_d": sd, "paper_thickness": pt}) - sd / 2 - (t.TAB_FLAG + pt)
+           for sd in t.RANGES["stick_d"] for pt in t.RANGES["paper_thickness"]) >= 1 - 1e-9
+assert [f.where for f in t.check_physics({**K, "base_width": 34})] == ["留め具"]
 # 17. 竹串のとがった先を切り落とす手順（道具・大人がする）が、どの形にもある。切り落とした分、使える長さは短い
 for p in (P, {**P, "face": "tori"}, K):
     st = " ".join(t.steps(p))
@@ -189,7 +192,6 @@ assert len(marks) == 4 and all(a["stroke"] == t.BAND and len(a["pts"]) == 3 for 
 m = " ".join(t.materials(K))
 assert "カッター" in m and "テープ" in m
 assert nums(" ".join(t.steps(K)), r"竹串 2 本を (\d+(?:\.\d+)?)mm に切り") == [t.rod_length(K)]
-print("ok")
 # ---- 最終差分の独立レビュー（2026-11-05・/code-review）の指摘を押さえる行 ----
 # 20. 留め具は刷った面を外にして巻く（谷折りで立てた 2 枚の刷った面が向き合い、糊の印が相手に当たる）。
 #     旗の穴は糊の印の中にあるので、巻く糸を 2 枚の穴に通して結んでから貼り合わせる（貼ってからでは穴が糊でふさがる）
@@ -205,3 +207,20 @@ for p in (P, {**P, "face": "tori"}):
     assert next(i for i, s in enumerate(sp) if "竹串の先であける" in s) < next(i for i, s in enumerate(sp) if "とがった先" in s)
 # 22. 諫鼓の用意する物で、カッターの行は 1 つ（穴と竹串の両方に使う）
 assert sum("カッター" in m for m in t.materials(K)) == 1
+# ---- 6 回目のレビューの指摘（2026-11-05）を押さえる行 ----
+# 23. 留め具の帯の真ん中（棒に当たる所）に糊の印があり、組み方に「棒に糊で貼る」がある（輪が棒の上を滑らない）
+from shapely.geometry import Polygon, box
+q = {p.key: p for p in t.parts(K)}["rodtab"]
+ring = box(t.TAB_FLAG, 0, q.width - t.TAB_FLAG, t.TAB_W)
+assert any(Polygon(g).intersection(ring).area > ring.area * 0.9 for g in q.glue)
+assert "棒に糊で貼る" in sk[wrap] or "棒に糊で貼る" in " ".join(t.steps(K))
+# 24. 旗の穴から旗の先・折り目・帯の縁まで HOLE_MARGIN 以上
+for hx, hy, r in q.holes:
+    fold = min(abs(hx - t.TAB_FLAG), abs(hx - (q.width - t.TAB_FLAG)))
+    assert min(hx, q.width - hx, hy, t.TAB_W - hy, fold) - r >= t.HOLE_MARGIN - 1e-9, (hx, hy)
+# 25. 穴をあける手順は大人がし、小さい穴（旗・花車の糸の穴、でんでん太鼓の菱形）はまち針で刺す
+for p in (P, K):
+    poke = [s for s in t.steps(p) if "あける" in s and "穴" in s]
+    assert poke and all("大人" in s for s in poke), poke
+assert any("旗の穴" in s and "花車の穴" in s and "まち針" in s for s in t.steps(K))
+print("ok")
