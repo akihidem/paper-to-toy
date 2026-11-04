@@ -59,4 +59,16 @@ for p in (P, B):
     assert not any(w in r["material"] for r in rows for w in ("竹串", "楊枝", "豆"))
     assert any(t.SAFETY in s for s in t.steps(p))
 assert sum("輪ゴム" in r["material"] for r in t.bom(B)) == 1
+# 出典は形ごと（弩はコマ 8 左、弓と毛玉はコマ 29 左）。既定の出典は既定の形の物
+assert getattr(t, "SOURCES", {}) == {"crossbow": "NDL-1187053-R0000008-L-launcher", "bow": "NDL-1187053-R0000029-L-launcher"} and t.SOURCE == t.SOURCES[P["form"]]
+# 引く長さ x がためる力の上限を決めるので、引ける所の限りを紙に刷り、組み方の文で言う
+# 弩: 弦の溝は腕の根元から x + 1mm で終わり（溝の端が止め）、引き金の切れ込みはその x の所
+st = next(q for q in t.parts(P) if q.key == "stock")
+assert all(c[2] == P["draw"] + 1 for c in st.cuts if c[3] == t.SLIT) and any("溝の端" in s and f"{t.trigger_x(P):g}mm" in s for s in t.steps(P))
+# 弓: 引き止めの帯に、弓から x の所の線を刷る。部品表にも載り、組み方の文がその線までと言う
+stop = next((q for q in t.parts(B) if q.key == "drawstop"), None)
+assert stop is not None and any(it["kind"] == "line" and all(abs(y - (t.STOP_BASE + B["draw"])) < 1e-9 for _, y in it["pts"]) for it in stop.art)
+assert "drawstop" in {r["key"] for r in t.bom(B)} and any("引き止めの帯" in s and "線" in s for s in t.steps(B))
+# 0.08J は確かめていない目安として書くだけで、決まり（規格）の値として書かない
+assert "目安" in t.__doc__ and "安全の決まり" not in t.__doc__
 print("ok")
