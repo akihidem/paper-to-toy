@@ -16,8 +16,13 @@
   弦の角度による増え方・紙の腕のへたり・空気の抵抗は入れない。玉に渡る力はこの E より小さいので、E を上限の見込みに使う。
 - 既定の k = 40 N/m は桁の見込み: 厚さ 0.2mm の紙 4 枚を貼り重ねた腕（幅 9mm・長さ 45mm）を、片持ちの梁
   k = 3EI/L³ ・紙の縦弾性係数 E = 3GPa の見込みで数えると 1 本 約 38 N/m。貼り重ねずに 1 枚だと 1/64 で、ほとんど飛ばない。
-- E の上限 ENERGY_CAP_MJ = 30mJ。玩具の安全の決まりで、飛ぶ物の運動の力の目安に 0.08J 前後が言われる（手元で原文を
-  確かめていない）。その半分より下に余裕を取った。玉の速さの上限の見込みは √(2E/m)（既定で 8m/s 前後）。
+- E の上限 ENERGY_CAP_MJ = 30mJ は、この雛形が選んだ余裕の値で、規格の値ではない。選んだ理由: 既定の寸法で 18mJ に
+  なり、k か引く長さのどちらかを 1.3 倍にすると越える所に置いて、強くしすぎた寸法を落とすため。参考に、飛ぶ物の力の
+  目安として 0.08J という数を聞くが、出所も原文も確かめていない目安なので、上限の根拠にはしていない（半分より下ではある）。
+  玉の速さの上限の見込みは √(2E/m)（既定で 8m/s 前後）。
+- 引く長さ x が E を決めるので、引ける所の限りを紙に刷る。弩は弦の溝が根元から x + 1mm で終わり（溝の端が止め）、
+  引き金の切れ込みがその x の所にある。弓は手で引くので、弓の真ん中に貼る引き止めの帯に x の所の線を刷る。
+  線を越えて引けば E は上限を越えうる（紙では引くのを止められない。組み方の文で言う）。
 - 玉の重さは紙の面積 × 面密度。丸めた紙の玉の直径は、紙の辺の 0.3 倍より大きくはまとまらないと見込む（推定。実物で未確認）。
 - 先の太さ: 玉の直径（毛玉は房の長さの 2 倍）が MIN_NOSE より細いと、目のくぼみに入りうるので落とす。
 - 穴と縁: 弦を結ぶ穴から紙の縁まで HOLE_MARGIN、引き金の切れ込みの奥と下に NOTCH_MARGIN を残す。狭いと弦に引かれて裂ける。
@@ -55,6 +60,8 @@ FORM = "form"
 FORMS = FORMS_
 # 既定の出典（data/sources/ の名前）。--source を書かない時に、雛形と合わない出典の印を刷らないため。
 SOURCE = "NDL-1187053-R0000008-L-launcher"
+# 形ごとの出典。弩はコマ 8 左、弓と毛玉はコマ 29 左。形と合わない出典の印を刷らないため（compose が F1.source で落とす）。
+SOURCES = {"crossbow": SOURCE, "bow": "NDL-1187053-R0000029-L-launcher"}
 
 ENERGY_CAP_MJ = 30  # ためる力の上限（mJ）。前提は module の docstring
 MASS_MIN, MASS_MAX = 0.1, 1.0  # 玉の重さの範囲（g）。軽すぎると速くなり、重すぎると当たった時に重い
@@ -72,6 +79,7 @@ SLOT = 1.5  # 引き金を差す切れ込みの幅
 GRIP = 14  # 引き金の台の上に出るつまみの長さ
 BELOW = 4  # 引き金を台の底の切れ込みに差し込む長さ。上と下の 2 点で支え、弦に引かれて倒れないように
 POM_LEN, TOOTH, TOOTH_GAP, POM_BASE = 100, 3, 1, 6  # 毛玉の房の帯
+STOP_W, STOP_BASE, STOP_TAIL = 8, 8, 6  # 引き止めの帯の幅・弓に貼る糊代・線の後ろの余り
 BARREL_PLAY = (1, 4)  # 玉の直径は筒の太さよりこの範囲で細い。きついと詰まり、ゆるいと弦が玉の下を抜ける
 RED, DARK, RING, BOW, PAPER, POM, INK = "#b0533a", "#6b3b2b", "#2f2a26", "#e4dac0", "#efe9da", "#e2cc8f", "#3b3a34"
 TITLES = {"crossbow": "台で飛ばす弩", "bow": "弓と毛玉"}
@@ -274,6 +282,19 @@ def _gauge(p):
     return part
 
 
+def _drawstop(p):
+    """弓の引き止めの帯。糊代を弓の真ん中の裏に貼り、帯を引く向き（後ろ）へ出す。弓の面から draw の所に線を刷り、
+    毛玉と輪ゴムをその線より後ろへ引かない。紙の帯なので引くのを止める力は無く、目で見る印にとどまる。"""
+    L = STOP_BASE + p["draw"] + STOP_TAIL
+    part = Part(3, "drawstop", "引き止めの帯", [(0, 0), (STOP_W, 0), (STOP_W, L), (0, L)], label_xy=(0.8, STOP_BASE + 1), label="3")
+    part.valley = [((0, STOP_BASE), (STOP_W, STOP_BASE))]
+    part.glue = [[(0, 0), (STOP_W, 0), (STOP_W, STOP_BASE), (0, STOP_BASE)]]
+    y = STOP_BASE + p["draw"]
+    part.art = [_rect(0, STOP_BASE, STOP_W, y - 0.5, PAPER), _rect(0, y + 0.5, STOP_W, L, DARK),
+                {"kind": "line", "pts": [(0.3, y), (STOP_W - 0.3, y)], "stroke": INK, "sw": 0.6}]
+    return part
+
+
 def _pompom(p):
     """毛玉の房の帯。上の帯（POM_BASE）を芯に巻き、房を広げる。房は切り込みで分ける。"""
     n, f = _teeth(), p["fringe_len"]
@@ -293,7 +314,7 @@ def _pompom(p):
 def parts(p):
     if p["form"] == "crossbow":
         return [_stock(p), _arm(2, "arma", "右の腕", p), _arm(3, "armb", "左の腕", p), _trigger(p), _ball(p), _gauge(p)]
-    return [_stave(p), _pompom(p)]
+    return [_stave(p), _pompom(p), _drawstop(p)]
 
 
 def place(by_key, page, top, gap):
@@ -317,7 +338,9 @@ def place(by_key, page, top, gap):
         sv, pom = by_key["stave"], by_key["pompom"]
         sv.x, sv.y = x0, top
         pom.x, pom.y = x0, top + sv.height + gap
-        bottom = pom.y + pom.height
+        ds = by_key["drawstop"]
+        ds.x, ds.y = pom.x + pom.width + gap, pom.y
+        bottom = max(pom.y + pom.height, ds.y + ds.height)
     return bottom + gap, page.x1 - x0, x0
 
 
@@ -339,6 +362,7 @@ def bom(p):
     return [
         {"number": 1, "key": "stave", "name": "弓", "qty": 1, "material": paper, "substituted": True, "original_guess": "竹か木の棒（図の曲がった棒）", "reason": "竹を削るのは子どもに危ないので、紙を貼り重ねたばねにするため"},
         {"number": 2, "key": "pompom", "name": "毛玉の房", "qty": 1, "material": paper, "substituted": True, "original_guess": "毛か糸の玉（図のとげのある玉からの推定）", "reason": "柔らかく軽い玉を刷って作るため"},
+        {"number": 3, "key": "drawstop", "name": "引き止めの帯", "qty": 1, "material": paper, "substituted": False, "original_guess": "", "reason": ""},
         {"number": 7, "key": "band", "name": "弦", "qty": 1, "material": "輪ゴム 1 本（ふつうの太さ。切って 1 本のひもにする）", "substituted": True, "original_guess": "糸（図の線による）", "reason": "紙の弓だけでは弦を張る力が足りないため"},
         {"number": 8, "key": "tether", "name": "毛玉の糸", "qty": 1, "material": f"木綿の糸（{tether:g}mm と、房を縛る 100mm）", "substituted": True, "original_guess": "糸（図の毛玉の糸）", "reason": "毛玉が遠くへ飛ばないよう弓に繋いでおくため"},
     ]
@@ -364,7 +388,7 @@ def steps(p):
                 "5 玉の紙を丸め、6 物差しの小さい穴を通らず大きい穴を通る大きさにする",
                 f"弦の硬さを測る: 弦の真ん中に 1 円玉 10 枚（10g）を下げ、下がった長さで 98 を割ると k（N/m）。{p['spring_k']:g} より大きければ腕を短くせず、引く長さを減らす",
                 "玉を台の前の口から入れ、弦の前まで転がす",
-                f"弦を溝に沿って前の端から {tx:g}mm まで引き、4 引き金を上の面と底の切れ込みに差して、前の縁の切れ込みに弦を掛ける",
+                f"弦を溝に沿って前の端から {tx:g}mm（溝の端）まで引く。溝の端より先へは引かない。4 引き金を上の面と底の切れ込みに差して、前の縁の切れ込みに弦を掛ける",
                 "遠くの壁か床に向け、引き金を真上に引き抜くと弦が外れて玉が出る"]
     else:
         out += ["部品を実線で切る。2 房の切り込みは、はさみで上の帯の手前まで",
@@ -372,7 +396,8 @@ def steps(p):
                 "輪ゴム 1 本を切ってひもにし、両端を糸で弓の両端の穴に結んで張る",
                 "2 房の上の帯を固く巻いて貼り、根元を糸で縛る。房を外へ広げて毛玉にする",
                 f"毛玉の糸を {p['tether']:g}mm に切り、毛玉の根元と弓の真ん中の穴に結ぶ",
-                f"毛玉を輪ゴムの真ん中に当て、{p['draw']:g}mm 引いて放す。毛玉は糸の長さまでしか飛ばない"]
+                "3 引き止めの帯の糊代を折り、弓の真ん中の裏に貼って、帯を後ろへ出す",
+                f"毛玉を輪ゴムの真ん中に当て、3 引き止めの帯の黒い線（弓から {p['draw']:g}mm）まで引いて放す。線より後ろへ引かない（強くなりすぎる）。毛玉は糸の長さまでしか飛ばない"]
     out.append("引く長さを変えて、どこまで飛ぶか比べる。引きすぎない（腕が折れ、紙がへたる）")
     return out
 
