@@ -52,8 +52,8 @@ big = t.motion({**P, "kind": "hashigo"})
 assert big["hit_angle"] is not None and big["usable"] == big["hit_angle"] < big["input_angle"], big
 
 # 引く形: 糸は膝が腰と穴を結ぶ線に乗るまでしか縮まない。そこで止まる角は、腰から膝と腰から穴の間の角
-yk = t.motion({**P, "kind": "yakko"})
-H, G = (30.0, 60.0), (52.0, 96.0)
+yk = t.motion({**P, "kind": "yakko", "travel": 25})  # 糸の縮む上限（約 21mm）を越えて引く
+H, G = (30.0, 60.0), (76.0, 90.0)
 assert yk["string_limited"] and abs(yk["input_angle"] - math.degrees(math.atan2(G[0] - H[0], G[1] - H[1]))) < 0.2, yk
 
 # 四節: Grashof の境目。最短 + 最長 ≦ 残りの和で、最短が水車の腕
@@ -98,10 +98,10 @@ for k in ("saru_take", "saru_sao"):
 assert any("印" in s and f"{t.reach({**P, 'kind': 'yakko'}):.0f}mm" in s for s in t.steps({**P, "kind": "yakko"}))
 
 # 2 回目の見直し 1: 止まる物や張り切る糸で入力が travel まで届かない時、届く量だけを印と文に刷る（刷った量を押せない紙にしない）
-yk = {**P, "kind": "yakko"}
+yk = {**P, "kind": "yakko", "travel": 23}
 ry = t.motion(yk)
-assert ry["reach"] < P["travel"] - 1, ry  # 糸は約 10.6mm しか縮まない
-assert not any(f"{P['travel']:g}mm" in s for s in t.steps(yk)) and any(f"{ry['reach']:.0f}mm" in s for s in t.steps(yk)), t.steps(yk)
+assert ry["reach"] < yk["travel"] - 1, ry  # 糸は約 21mm までしか縮まない（3 回目の見直しで穴を横木の先へ移した後）
+assert not any(f"{yk['travel']:g}mm" in s for s in t.steps(yk)) and any(f"{ry['reach']:.0f}mm" in s for s in t.steps(yk)), t.steps(yk)
 hs = {**P, "kind": "hashigo"}
 rh = t.motion(hs)
 assert rh["reach"] < P["travel"] - 1, rh  # 机に当たる所までしか押せない
@@ -122,4 +122,25 @@ assert math.dist(rod_holes[0], wheel_hand) < 1e-6 and math.dist(rod_holes[1], do
 sm = {**P, "kind": "sumo"}
 assert any(it.get("mark") == "hold" for q in t.parts(sm) if q.key == "wrestlerb" for it in q.art)
 assert any("B の立つ足" in s and "持つ" in s for s in t.steps(sm)), t.steps(sm)
+
+# 3 回目の見直し 1: 連桿の幅が、1 周の間に前の面の割ピンの頭（軸 A を含む）に当たらない。既定の寸法で 1 周回る
+kk = {**P, "kind": "karakuri"}
+assert t.motion(kk)["link_hit"] is None and t.check_physics(kk) == []
+# 軸 A に割ピンの頭を出すと、連桿は 1 周のどこかで必ず頭に当たる（連桿から見て A は手のピンのまわりを半径 crank で 1 周するため）
+assert t.link_hit(kk, with_axle_head=True) is not None
+
+# 3 回目の見直し 2: 登る板の胴の側の穴が、組み図で人形の穴に重なる
+for k in ("saru_take", "saru_sao"):
+    pcs, _ = t.assembly({**P, "kind": k})
+    fig_holes = [t.to_asm(pcs[0], h[:2]) for h in pcs[0]["part"].holes]
+    for bar in pcs[1:]:
+        pin = t.to_asm(bar, bar["part"].holes[1][:2])
+        assert min(math.dist(pin, h) for h in fig_holes) < 1e-6, (k, pin, fig_holes)
+
+# 3 回目の見直し 3: 届く量が travel の 0.8 倍より小さければ F5.link（届かない）で落ちる。0.8 倍以上なら縮めた量を文に書いて通す
+fs = t.check_physics({**P, "kind": "hashigo", "travel": 30})
+assert [f.floor for f in fs] == ["F5.link"] and "届かない" in fs[0].message, fs
+for k in ("hashigo", "yakko"):
+    q = {**P, "kind": k}
+    assert t.check_physics(q) == [] and t.reach(q) >= 0.8 * P["travel"], (k, t.reach(q))
 print("ok")
