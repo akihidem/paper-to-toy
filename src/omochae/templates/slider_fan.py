@@ -273,7 +273,8 @@ def parts(p):
     # 板ごとに 2 色を交互に塗り、色の境で折る（v9）。足は真ん中の板と同じ色にし、糊代は塗らない。
     fan.art = [{"kind": "poly", "pts": [(0, i * w), (h, i * w), (h, (i + 1) * w), (0, (i + 1) * w)], "fill": FAN_A if i % 2 == 0 else FAN_B} for i in range(n)]
     if p["hub"] == "axle" and leg_length(p) > LEG_GLUE:
-        # 足が糊代より短い寸法は F5.fan_leg で落とす。その時に足の絵を描くと形が裏返り、別の検査（F5.image_box）まで落ちて狙いが読めない。
+        # 足が糊代より短い寸法は F5.fan_leg で落とす。その時に足の絵を描くと形が裏返る（糊代より左から右へ逆に塗る）ので描かない。
+        # なお、その寸法では糊代が扇の本体に食い込むので、本体の色の板と糊代が重なり F5.image_box も落ちる（neg_fan_leg が期待する）。
         m, leg = n // 2, leg_length(p)
         fan.art.append({"kind": "poly", "pts": [(-leg + LEG_GLUE, m * w), (0, m * w), (0, (m + 1) * w), (-leg + LEG_GLUE, (m + 1) * w)], "fill": FAN_A if m % 2 == 0 else FAN_B})
     fan.hide_folds = True
