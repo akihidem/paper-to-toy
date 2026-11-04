@@ -179,11 +179,49 @@ CHECKS5 = {
      and any(f.where == "ばね" for f in t.check_physics({**B, "bow_span": 81.18, "paper_t": 0.08, "arm_w": 10.47, "draw": 30.24}))),
  "M 弩の腕の根元の折りは確かめていないと書く": lambda: "根元の折り" in t.__doc__ and "蝶番" in t.__doc__,
  "M かさの密度は物差しの小さい穴で見る": lambda: abs(t.bulk_density(P) - P["ball_paper"] ** 2 * P["paper_gsm"] * 1e-6 / (3.141592653589793 / 6 * ((t.gauge_holes(P)[0] + t.GAUGE_TOL) / 10) ** 3)) < 1e-9 and t.check_physics(P) == [],
- "M 弦の長さの印を刷り、張って結ばない": lambda: (t.STRING_SLACK > t.STRING_TOL > 0
+ "M 弦の長さの印を刷り、張って結ばない": lambda: (t.STRING_SLACK > 0 and t.STRING_TOL >= 0  # 6 回目でずれを長い側だけにした（たるみ＞ずれ の決まりはやめた）
+     and t.STRING_SLACK > 0
      and all("strlen" in {q.key for q in t.parts(p)} and any("張らない" in s and "印" in s for s in t.steps(p)) for p in (P, B))),
  "L 紙の玉のほかを筒に入れない": lambda: any("紙の玉のほか" in s and "入れない" in s for s in t.steps(P)) and "おはじき" in t.__doc__,
  "L 引き金に肩": lambda: (lambda tr: tr.width > P["trigger_w"] + 1)(next(q for q in t.parts(P) if q.key == "trigger")),
 }
 for name, check in CHECKS5.items():
+    assert check(), name
+# 6 回目の指摘の行: たるみを取る引きを数えて動く床を持つ（結び目は長い側）、docstring の数が今のコードと合う、
+# 持つ所の帯は巻くごとの太りを数える、玉は引き金の前の縁で止まると言う、糸の印の間と肩のはみ出し
+import math
+def takeup_ok(p):
+    s = t.STRING_SLACK + t.STRING_TOL
+    a = (t.string_len(p) - t.STRING_SLACK) / 2
+    return abs(t.slack_takeup(p) - math.sqrt((a + s / 2) ** 2 - a * a)) < 1e-9
+def grip_ok(p):
+    n, pt, aw = t.GRIP_TURNS, p["paper_t"], p["arm_w"]
+    need = sum(2 * (aw + t.LAYERS * pt) + 4 * (2 * i + 1) * pt for i in range(n))
+    g = next(q for q in t.parts(p) if q.key == "grip")
+    over = g.glue[0][1][0] - g.glue[0][0][0]
+    return abs(g.width - (need + over)) < 1e-9 and over >= 6
+def marks_ok(p):
+    sl = next(q for q in t.parts(p) if q.key == "strlen")
+    xs = sorted(it["pts"][0][0] for it in sl.art if it["kind"] == "line")
+    return len(xs) == 2 and abs(xs[1] - xs[0] - t.string_len(p)) < 1e-9
+def shoulders_ok(p):
+    tr = next(q for q in t.parts(p) if q.key == "trigger")
+    st = next(q for q in t.parts(p) if q.key == "stock")
+    slot = next(c for c in st.cuts if c[3] == t.SLOT)
+    # 引き金の体（肩の下）は台の切れ込みの前の端に前の縁をそろえて差す。肩は切れ込みの前と後ろの両方にはみ出す
+    front = t.SHOULDER  # 体の前の縁から肩の前の端まで
+    rear = (tr.width - t.SHOULDER) - slot[2]  # 体の前の縁から肩の後ろの端まで − 切れ込みの長さ
+    return front > 0 and rear > 0
+CHECKS6 = {
+ "H たるみを取る引きを数え、動く床を持つ": lambda: (t.STRING_SLACK <= 1 and takeup_ok(P) and takeup_ok(B)
+     and any(f.where == "弦" and "動かない" in f.message for f in t.check_physics({**P, "draw": 10}))
+     and t.check_physics(P) == [] and t.check_physics(B) == []
+     and any("長い側" in s for s in t.steps(P)) and any("長い側" in s for s in t.steps(B))),
+ "M docstring の数が今のコードと合う": lambda: all(w in t.__doc__ for w in ("26.9mJ", "22.7mJ", "55mm", "3.7%", "5.6%", "座の奥")) and "E ≒ 20mJ" not in t.__doc__ and "持つ所 30mm" not in t.__doc__,
+ "M 持つ所の帯は巻くごとの太りを数える": lambda: grip_ok(B) and grip_ok({**B, "paper_t": 0.3}),
+ "L 玉は引き金の前の縁で止まると言う": lambda: any("引き金の前の縁で止まる" in s for s in t.steps(P)),
+ "L 糸の印の間と肩のはみ出し": lambda: marks_ok(P) and marks_ok(B) and shoulders_ok(P),
+}
+for name, check in CHECKS6.items():
     assert check(), name
 print("ok")
