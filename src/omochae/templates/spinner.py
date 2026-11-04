@@ -37,7 +37,7 @@
 """
 import math
 
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, Polygon, box
 from shapely.ops import unary_union
 
 from ..model import Failure, Part
@@ -75,6 +75,9 @@ FORM = "kind"
 FORMS = KINDS
 # 既定の出典。紙の風車（既定の形）の元にしたコマ 14 左。四角の羽と独楽は場面の --source で出典を替える。
 SOURCE = "NDL-1187053-R0000014-L-spinner"
+# 刷る形ごとの出典。形ごとに別の玩具の図なので、形と合わない出典の印を刷らない（compose が F1.source で落とす）。
+SOURCES = {"pinwheel": SOURCE, "square": "NDL-1187053-R0000020-R-spinner", "top": "NDL-1187053-R0000026-L-spinner",
+           "cone": "NDL-1187053-R0000029-R-spinner", "screen": "NDL-1187053-R0000025-L-spinner"}
 
 HOLE_MARGIN = 4
 MIN_SLACK = 0.3
@@ -267,9 +270,12 @@ def _wheel_floors(p):
         if p["hub_r"] - p["hole_d"] / 2 < HOLE_MARGIN:
             out.append(Failure("F5.spin", "中心の穴", f"中心の円の縁まで {p['hub_r'] - p['hole_d'] / 2:.1f}mm で、{HOLE_MARGIN}mm 無く裂けやすい"))
         half = p["vane"] / math.sqrt(2)
-        chord = 2 * p["vane_radius"] * SIN_HALF
-        if chord < 2 * half + VANE_GAP:
-            out.append(Failure("F5.spin", "羽", f"隣の羽の中心の間 {chord:.1f}mm に羽の幅 {2 * half:.1f}＋{VANE_GAP} が入らず、羽が重なる"))
+        # 隣の羽との間は、刷る菱形どうしの実際の距離で見る。対角線の幅（2·half）を中心の間と比べると、菱形は隣へ向けて
+        # half·cos22.5° しか張り出さないので、重ならない寸法まで落としていた。
+        _, vanes, _ = _star_outline(p)
+        gap = vanes[0].distance(vanes[1])
+        if gap < VANE_GAP:
+            out.append(Failure("F5.spin", "羽", f"隣の羽との間が {gap:.1f}mm で {VANE_GAP}mm 無く、羽が重なるか、ねじると当たる"))
         free = p["vane_radius"] - half - p["hub_r"]
         if free < TWIST_LEN * p["spoke_w"]:
             out.append(Failure("F5.spin", "腕", f"腕の長さ {free:.1f}mm が幅の {TWIST_LEN} 倍に足りず、羽をねじると折れ目が付く"))
@@ -527,7 +533,43 @@ def _screen_part(p):
     return Part(1, "screen", "屏風", pts, label_xy=(2, 2), label="1 屏風", valley=valley, mountain=mountain, holes=holes, art=art)
 
 
+def _clear_holes(q):
+    """絵の面から穴の円（と縁の 0.5mm）を抜く。穴の線は絵の上に墨で刷るので、穴の上に濃い塗りがあると穴が見えなくなる。
+    絵の面は外の輪郭しか持てないので、抜いて輪になった面は穴の中心を通る縦の線で 2 つに分けて描く。"""
+    if not q.holes:
+        return q
+    cut = unary_union([Point(x, y).buffer(r + 0.5, 32) for x, y, r in q.holes])
+    art = []
+    for item in q.art:
+        if item["kind"] != "poly":
+            art.append(item)
+            continue
+        geom = Polygon(item["pts"]).buffer(0).difference(cut)
+        pieces, todo = [], [g for g in getattr(geom, "geoms", [geom]) if g.geom_type == "Polygon" and not g.is_empty]
+        while todo:
+            g = todo.pop()
+            if not g.interiors:
+                pieces.append(g)
+                continue
+            # 抜いた穴の 1 つの中心を通る縦の線で分ける。1 つの面に穴が 2 つ以上あれば、分けた片をまた見る。
+            x = Polygon(g.interiors[0]).centroid.x
+            x0, y0, x1, y1 = g.bounds
+            for half in (box(x0 - 1, y0 - 1, x, y1 + 1), box(x, y0 - 1, x1 + 1, y1 + 1)):
+                part = g.intersection(half)
+                todo += [h for h in getattr(part, "geoms", [part]) if h.geom_type == "Polygon" and not h.is_empty]
+        for g in pieces:
+            new = {k: v for k, v in item.items() if k != "pts"}
+            new["pts"] = [(round(x, 3), round(y, 3)) for x, y in g.exterior.coords[:-1]]
+            art.append(new)
+    q.art = art
+    return q
+
+
 def parts(p):
+    return [_clear_holes(q) for q in _parts(p)]
+
+
+def _parts(p):
     k = p["kind"]
     if k == "pinwheel":
         return [_pinwheel_part(p)]

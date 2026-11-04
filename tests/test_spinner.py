@@ -38,7 +38,11 @@ assert abs(a * s.SIN_HALF - r - s.HOLE_MARGIN) < 1e-9
 # 羽が手に当たる
 assert "柄" in floors(square=180, stick_length=180)
 # 四角の羽: 隣の羽が重なる・腕が短い
-assert "羽" in floors(kind="square", vane_radius=46) and floors(kind="square", vane_radius=48) == []
+# 隣の羽が重なるかは、刷る菱形どうしの実際の間で見る（対角線の幅で見ると、間が 3.85mm 空く vane_radius 46 まで落とした）。
+# 羽の一辺 24 では、菱形の間が VANE_GAP の 2mm になる境は vane_radius ≒ 43.6
+assert floors(kind="square", vane_radius=46) == [] and floors(kind="square", vane_radius=44) == []
+assert "羽" in floors(kind="square", vane_radius=43)
+assert "羽" in floors(kind="square", vane_radius=38, hub_r=10, spoke_w=3)  # 菱形が重なる（負の場面 neg3）
 assert "腕" in floors(kind="square", hub_r=25, spoke_w=10)
 
 # 独楽: 1 枚では軽く、軸の重さで重心が上がって倒れやすい。重ねると通る
@@ -95,4 +99,16 @@ scr = next(x for x in s.parts(P(kind="screen")) if x.key == "screen")
 (f2, _), _ = scr.valley[0]
 (f3, _), _ = scr.valley[1]
 assert y1 == y2 and abs((f2 - x1) - (x2 - f3)) < 1e-9
+# 穴の上に絵の塗りを置かない（紙の風車の中心の輪が塗りの円になり、穴の線が墨に埋もれて見えなかった）。どの形のどの部品でも、
+# 絵の面が穴の円にかからない
+from shapely.geometry import Point, Polygon
+for k in s.KINDS:
+    for q in s.parts(P(kind=k)):
+        for x, y, r in q.holes:
+            disc = Point(x, y).buffer(r, 32)
+            for item in q.art:
+                if item["kind"] == "poly":
+                    assert Polygon(item["pts"]).intersection(disc).area < 1e-6, (k, q.key, item["fill"])
+# 出典は形ごとに持つ（形と合わない出典の印を刷らない）
+assert set(s.SOURCES) == set(s.KINDS) and s.SOURCES[s.DEFAULTS["kind"]] == s.SOURCE
 print("ok")
