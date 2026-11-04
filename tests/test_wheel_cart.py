@@ -107,4 +107,14 @@ assert w.check_range({**MALLET, "handle_in": w.RANGES["handle_in"][0]}) == [] an
 # 7c. 枚数は整数だけ。2.0 のような小数の形も落とす（「4.0 枚」と刷らないため）
 assert [f.floor for f in w.check_range({**RAT, "wheel_layers": 2.0})] == ["F5.range"]
 assert w.check_range({**RAT, "wheel_layers": 2}) == []
+
+# 8. 中の四角い穴も切る線と同じ実線で刷るので、最初の「部品を切る」行で穴を除き、カッターの行を折る行より前に置く
+for p in (STICK, MALLET):
+    st = w.steps(p)
+    cut = next(i for i, x in enumerate(st) if "実線で切る" in x)
+    assert "中の四角い穴はまだ切らない" in st[cut], st[cut]
+    knife = next(i for i, x in enumerate(st) if "カッターは大人がする" in x)
+    fold = next(i for i, x in enumerate(st) if "谷折り" in x)
+    assert cut < knife < fold, (cut, knife, fold)
+assert "中の四角い穴" not in w.steps(RAT)[1]  # 鼠車に中の穴は無い
 print("ok")
