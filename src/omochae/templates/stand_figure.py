@@ -1027,8 +1027,9 @@ def measures(p):
 
 
 def diagram(x, y, w, h, p):
-    p = filled(p)
     """横から見た組み上がり。寸法の図ではなく、姿・脚・台の並びを見せるだけ。"""
+    # p は最後の引数なので _filling（先頭の引数を埋める）が使えない。ここで埋める。
+    p = filled(p)
     H = figure_height(p)
     shapes = []
     if p["stand"] == "easel":
