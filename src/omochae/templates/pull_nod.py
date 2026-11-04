@@ -54,8 +54,10 @@ KINDS = ("bow", "jaw", "peck")
 # 刷る形を決める寸法（玩具の形）。--params では既定に頼らず必ず書かせる（compose の決まり）。
 FORM = "kind"
 FORMS = KINDS
-# 既定の出典。米搗き人形を既定にする（族の先頭の玩具）。獅子は R0000030-L、鶏は R0000016-R の出典に場面（--source）で替える。
+# 既定の出典（既定の形 bow の物）。米搗き人形を既定にする（族の先頭の玩具）。
 SOURCE = "NDL-1187053-R0000006-L-pull_nod"
+# 形ごとの出典。3 つの形は別の玩具（別の図）なので、形と合わない出典を刷らない（compose が F1.source で落とす・--params の既定もここから選ぶ）。
+SOURCES = {"bow": SOURCE, "jaw": "NDL-1187053-R0000030-L-pull_nod", "peck": "NDL-1187053-R0000016-R-pull_nod"}
 HOLE_MARGIN = 4  # 穴の縁から紙の端・隣の穴の縁までの見込み。虎の雛形と同じ値（これより狭いと裂けやすい）
 AXLE_R, STRING_R = 1.2, 1.0  # 竹串の穴と糸の穴の半径（mm）
 MIN_SWING = 15  # 引いて動いたと目で分かる角度の見込み。虎の 10° より大きくするのは、礼・噛む動きが「振れ」より大きく見えないと遊びにならないため
@@ -63,6 +65,10 @@ MU = 0.4  # 竹串と紙の摩擦係数の見込み（量っていない）
 SAFETY = 3  # 戻る力が摩擦の何倍あれば戻ると見るか。紙のたわみ・糸の擦れを入れていないので余裕を取る
 POST_GAP = 6  # 2 本の柱の間。体の紙（2 枚重ね）が擦れずに入る幅の見込み
 CLAY_IN = 3  # 粘土の中心を紙の端からこれだけ内側に付ける
+# 竹串の抜け止め・鶏の位置決めに串へ付ける粘土（1 本の串あたり、見込み）。重り（weight_g）とは別に用意する。
+# 同じ粘土から取ると、振れる部品に付く量が式の weight_g より減るため（部品表でも別の行にする）。軸の上に付くので戻るモーメントは 0、摩擦の質量にだけ入れる。
+STOP_CLAY_G = 0.3
+BUMP_FACE, BUMP_GLUE = 8, 5  # こぶの三角の柱の 1 面の幅と、柱を閉じる糊代の幅
 WOOD, LINE, SKIN, CLOTH, ROUGE = "#c9b48a", "#3c3424", "#d9c2a0", "#6b4a2e", "#c9826b"
 GOLD, FACE, MOUTH, STICK = "#c8a845", "#d4b49a", "#9a4a3a", "#cdb066"
 TITLES = {"bow": "糸を引くと腰で礼をする", "jaw": "糸を引くと顎が閉じる", "peck": "糸を引くと鶏がついばむ"}
@@ -122,7 +128,8 @@ def return_moment(p):
     """静かな時の戻る向きのモーメント（g·mm）と、軸の摩擦のモーメント（g·mm）。"""
     pts, _ = lever(p)
     m = sum(w * x for w, x in pts)
-    friction = MU * sum(w for w, _ in pts) * AXLE_R
+    extra = STOP_CLAY_G if p["kind"] == "jaw" else 0.0
+    friction = MU * (sum(w for w, _ in pts) + extra) * AXLE_R
     return m, friction
 
 
@@ -131,14 +138,23 @@ def swing_deg(p):
 
     bow: 静かな時は体が水平（尾が後ろの柱に載る）。頭の下の縁（軸の高さ − 体の幅の半分）が臼の上（stop_height）まで下がると止まる。
     下がれる量が体の長さ以上なら、臼に当たらず 90° まで振れる（それ以上は見ない）。
-    jaw: 静かな時は舌がこぶに当たって口が開いている。引くと口が閉じるまで（顎が水平まで）振れる。振れる角度は舌の長さとこぶまでの隙間で決まる。
+    jaw: 静かな時は舌がこぶに当たって口が開いている。引くと口が閉じるまで（顎が水平まで）振れる。
+    こぶに当たるのは舌の端の上の角で、軸から (tab_len, jaw_h/2) にある。この角は半径 ρ = hypot(tab_len, jaw_h/2) の円を回るので、
+    θ 開いた時の高さは ρ sin(φ + θ)（φ = atan2(jaw_h/2, tab_len)）。こぶの下の面（軸から jaw_h/2 + stop_gap の高さ）に届く θ は
+    asin((jaw_h/2 + stop_gap)/ρ) − φ。こぶが ρ より高いと角は届かず、止めが無いのと同じなので None を返す。
+    （前は atan2(stop_gap, tab_len) で、上がる高さが角度に比例すると見ていた。高さは sin で頭打ちになるので、届かない寸法も通していた。）
     """
     if p["kind"] == "bow":
         drop = p["post_height"] - p["torso_w"] / 2 - p["stop_height"]
         if drop <= 0:
             return 0.0
         return math.degrees(math.asin(min(1.0, drop / p["torso_len"])))
-    return math.degrees(math.atan2(p["stop_gap"], p["tab_len"]))
+    h2 = p["jaw_h"] / 2
+    rho = math.hypot(p["tab_len"], h2)
+    reach = (h2 + p["stop_gap"]) / rho
+    if reach >= 1:
+        return None
+    return math.degrees(math.asin(reach) - math.atan2(h2, p["tab_len"]))
 
 
 def pull_gf(p):
@@ -175,13 +191,18 @@ def check_physics(p):
     m, friction = return_moment(p)
     sw = swing_deg(p)
     what = "尾の粘土" if p["kind"] == "bow" else "顎の先の粘土"
+    if sw is None:
+        # 止めに届かない時は角度が決まらない。顎は止まらずに垂れ下がるので、ここで落とす。
+        # 振り切った所の戻りと振れの量はこの時は決まらないので見ない（同じ原因で別の文を重ねて出さない）。
+        h2 = p["jaw_h"] / 2
+        out.append(Failure("F5.pull_nod", "こぶ", f"こぶが軸から {h2 + p['stop_gap']:.1f}mm 上で、舌の端の角（軸から {math.hypot(p['tab_len'], h2):.1f}mm）が届かない"))
     # 1. 戻る力が静かな時に勝つ。負なら止めから離れて倒れたまま、摩擦より小さければ引いた後に戻らない。
     if m <= SAFETY * friction:
         out.append(Failure("F5.pull_nod", what, f"戻るモーメント {m:.1f}g·mm が摩擦 {friction:.1f}g·mm の {SAFETY} 倍以下で、離しても戻らない"))
-    elif m * math.cos(math.radians(sw)) <= SAFETY * friction:
+    elif sw is not None and m * math.cos(math.radians(sw)) <= SAFETY * friction:
         out.append(Failure("F5.pull_nod", what, f"{sw:.0f}° 振り切った所で戻るモーメントが摩擦の {SAFETY} 倍以下になる"))
     # 2. 引いた時に止めに当たるまで MIN_SWING 以上振れる。
-    if sw < MIN_SWING:
+    if sw is not None and sw < MIN_SWING:
         stop = "臼" if p["kind"] == "bow" else "こぶ"
         out.append(Failure("F5.pull_nod", stop, f"{stop}に当たるまで {sw:.1f}° しか振れない（{MIN_SWING}° 要る）"))
     # 3. 穴の縁の余白。
@@ -246,7 +267,7 @@ def bird_moment(p, which):
     card = paper_mass(shape.area, p["paper_gsm"])
     xp = b["pivot"][0]
     m = p["weight_g"] * (b["clay"][0] - xp) + card * (shape.centroid.x - xp)
-    return m, MU * (card + p["weight_g"]) * AXLE_R
+    return m, MU * (card + p["weight_g"] + STOP_CLAY_G) * AXLE_R
 
 
 def bird_swing(p, which):
@@ -481,9 +502,11 @@ def _jaw_parts(p):
     sl, s = p["stick_len"], p["stick_w"]
     stick = Part(3, "stick", "棒", [(0, 0), (sl, 0), (sl, 2 * s), (0, 2 * s)], label_xy=(2, 1), label="3",
                  valley=[((0, s), (sl, s))], art=[_panel(6, 0.3, sl - 0.3, s - 0.3, STICK), _panel(0.3, s + 0.3, sl - 0.3, 2 * s - 0.3, STICK)])
-    # 4 こぶ: 三角の柱に折り、1 面を頭に貼る。舌がここに当たって口の開きが止まる。
-    bump = Part(4, "bump", "こぶ", [(0, 0), (24, 0), (24, 8), (0, 8)], label_xy=(1, 1), label="4",
-                valley=[((8, 0), (8, 8)), ((16, 0), (16, 8))], glue=[[(16, 0), (24, 0), (24, 8), (16, 8)]])
+    # 4 こぶ: 3 面を三角の柱に折り、端の糊代で閉じる。閉じた柱の 1 面（左の面）を頭に貼る。舌がここに当たって口の開きが止まる。
+    # 前は 3 面だけで、最後の面を頭に貼る糊代にしていたので、柱の残りの辺を留める所が無く、柱にならなかった。
+    f, gb = BUMP_FACE, BUMP_GLUE
+    bump = Part(4, "bump", "こぶ", [(0, 0), (3 * f + gb, 0), (3 * f + gb, f), (0, f)], label_xy=(1, 1), label="4",
+                valley=[((f, 0), (f, f)), ((2 * f, 0), (2 * f, f)), ((3 * f, 0), (3 * f, f))], glue=[[(3 * f, 0), (3 * f + gb, 0), (3 * f + gb, f), (3 * f, f)]])
     return [head, jaw, stick, bump]
 
 
@@ -556,6 +579,11 @@ def bom(p):
         {"number": 8, "key": "weight", "name": "重り", "qty": 2 if p["kind"] == "peck" else 1, "material": f"油粘土 {p['weight_g']:g}g", "substituted": True, "original_guess": "不明", "reason": "量を変えて戻り方を試しやすいため"},
         {"number": 9, "key": "string", "name": "糸", "qty": 1, "material": f"木綿の糸（長さ約 {thread}mm）", "substituted": True, "original_guess": "糸（図に描かれている）", "reason": "家にあるため"},
     ]
+    if p["kind"] in ("jaw", "peck"):
+        # 串の抜け止め（jaw）と鶏の位置決め（peck）の粘土。重りと同じ粘土から取ると、振れる部品に付く量が式より減るので別の行にする。
+        n = 2 if p["kind"] == "peck" else 1
+        rows.append({"number": 10, "key": "stopclay", "name": "抜け止めの粘土", "qty": n, "material": f"油粘土 {STOP_CLAY_G:g}g（串の両端に {STOP_CLAY_G / 2:g}g ずつ。重りとは別）",
+                     "substituted": True, "original_guess": "不明", "reason": "串が抜けないように・鶏が串の上でずれないようにするため"})
     return rows
 
 
@@ -565,8 +593,12 @@ def materials(p):
     # 鶏は 2 羽なので、竹串と粘土は 2 つずつ（部品表の qty）。
     n = by["axle"]["qty"]
     if n > 1:
-        return [f"{by[first]['material']}を 1 枚", "のり、はさみ、定規", f"{by['axle']['material']}を {n} 本", f"{by['weight']['material']}を {n} つ", by["string"]["material"]]
-    return [f"{by[first]['material']}を 1 枚", "のり、はさみ、定規", by["axle"]["material"], by["weight"]["material"], by["string"]["material"]]
+        out = [f"{by[first]['material']}を 1 枚", "のり、はさみ、定規", f"{by['axle']['material']}を {n} 本", f"{by['weight']['material']}を {n} つ（重り）", by["string"]["material"]]
+    else:
+        out = [f"{by[first]['material']}を 1 枚", "のり、はさみ、定規", by["axle"]["material"], f"{by['weight']['material']}（重り）", by["string"]["material"]]
+    if "stopclay" in by:
+        out.append(f"抜け止めに{by['stopclay']['material']}" + (f"を {by['stopclay']['qty']} 本分" if by["stopclay"]["qty"] > 1 else ""))
+    return out
 
 
 def steps(p):
@@ -585,15 +617,15 @@ def steps(p):
                 "1 藁苞を破線で谷折りし、糊代で貼って角の筒にする。両端は開けたまま",
                 "2 奥の鶏と 3 手前の鶏の胸の小さい穴に糸を 1 本ずつ結ぶ",
                 "鶏の脚の帯を溝に差し、糸は溝から苞の中へ入れて底の穴から出す",
-                "竹串を苞の横の穴と脚の帯の穴に通す。鶏が真ん中に来るよう、串の両側に粘土の小粒を付ける",
-                f"尾の裏に粘土を {p['weight_g']:g}g ずつ付ける。尾の先が苞に載って鶏が起きているか見る",
+                "竹串を苞の横の穴と脚の帯の穴に通す。鶏が真ん中に来るよう、串の鶏の両側に抜け止めの粘土を付ける（重りの粘土は使わない）",
+                f"尾の裏に重りの粘土を {p['weight_g']:g}g ずつ付ける。尾の先が苞に載って鶏が起きているか見る",
                 f"底から出た 2 本の糸を 1 本に結ぶ。引くと約 {pull_gf(p):.0f}gf（見込み）で 2 羽がついばむ"]
     else:
         out += ["3 棒を破線で谷折りして貼り合わせる",
                 "1 頭の裏の下を 3 棒の上の端に貼る",
-                "2 下顎を頭の口に重ね、短く切った竹串を両方の穴に通し、竹串の両端に粘土を少し付けて抜けないようにする",
-                f"4 こぶを三角に折り、舌の上の端から {p['stop_gap']}mm 上の頭に貼る",
-                "顎の先の裏に粘土を付ける。口が開いて舌がこぶに当たるか見る",
+                "2 下顎を頭の口に重ね、短く切った竹串を両方の穴に通し、竹串の両端に抜け止めの粘土を付ける（重りの粘土は使わない）",
+                f"4 こぶを破線で三角に折り、糊代で閉じて柱にする。左の面を、舌の上の端から {p['stop_gap']}mm 上の頭に貼る",
+                f"顎の先の裏に重りの粘土を {p['weight_g']:g}g 付ける。口が開いて舌がこぶに当たるか見る",
                 f"糸を舌の穴に結び、棒の裏に沿わせて下の端から出す。引くと約 {pull_gf(p):.0f}gf（見込み）で口が閉じる"]
     return out
 
