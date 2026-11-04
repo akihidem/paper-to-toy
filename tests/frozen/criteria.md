@@ -9,7 +9,7 @@ exit code: 0 = 通る / 3 = 落ちる（検査の名前を出す）/ 4 = 検査�
 | ID | 見る事 | 負の対照（場面） | 期待 |
 |---|---|---|---|
 | F1.marks | 型紙の PDF から pdftotext で、所蔵（国立国会図書館デジタルコレクションと永続 ID）・改変・出典 ID・「仮説」が取り出せる | `neg_marks_all`・`neg_marks_source_id` | 3・F1.marks |
-| F1.source | 刷る形ごとに出典が違う雛形（SOURCES を持つ雛形）で、形と合わない出典を渡すと落とす。既定の出典も形から選ぶ | `tests/test_guards.py` の 10・`spinner_neg_source`・`whistle_neg_source`・`popup_jar_neg_source`・`slide_box_neg_source`・`wheel_cart_neg_source`・`balance_neg_source`・`twist_drum_neg_source` | 3・F1.source |
+| F1.source | 刷る形ごとに出典が違う雛形（SOURCES を持つ雛形）で、形と合わない出典を渡すと落とす。既定の出典も形から選ぶ | `tests/test_guards.py` の 10・`spinner_neg_source`・`whistle_neg_source`・`popup_jar_neg_source`・`slide_box_neg_source`・`wheel_cart_neg_source`・`balance_neg_source`・`twist_drum_neg_source`・`stand_figure_neg_source` | 3・F1.source |
 | F2.bom | 部品表の素材が空でない。置き換えには元の素材（推定）と理由がある | `neg_bom_material`・`neg_bom_original` | 3・F2.bom |
 | F5.range | 寸法が雛形の範囲の中で、知らない名前が無い | `neg_range` | 3・F5.range |
 | F5.print_area | 全部品と全文字が印字域に収まる | `neg_print_area` | 3・F5.print_area |
@@ -66,6 +66,7 @@ F5.fan_height は、軸の形では「中心の高さ＋折りの高さ ≦ 押�
 | F5.wheel | 車の玩具（wheel_cart）。車輪の半径が軸の高さ＋2mm 以上、車輪と胴・蓋・二股のすき間 1.5mm、軸の穴の余白 4mm、鼠車の重心が前後の接地点の間 | `wheel_cart_neg`・`neg_tip`・`neg_stick`・`neg_mallet` | 3・F5.wheel |
 | F5.balance | 釣り合いの玩具（balance）。弥次郎兵衛は、重心が V の先より 10mm 以上下、左右で粘土が 0.3g 違っても 10° まで、左右の玉がそれぞれ台の竹串に当たるまで 20° 以上振れ、振れた時の一番低い所で机に当たらない、竹串が体の中に収まり交わらない、支点の紙の厚み 1.0mm 以上。起き上がり小法師は、重心が底の半球の曲がりの中心より半径の 1/4 以上下、粘土が底から半径の半分まで、円錐を開いた形が半円を超えない | `balance_neg`〜`neg3` | 3・F5.balance |
 | F5.drum | 振り鼓（twist_drum）。糸の長さ（結び目から玉の中心）が窓に入る: 下限は打つ点が面の中心から半径の半分の内（玉の半径も入れる）、上限は面を越えず柄に絡まない（L ＋ 玉の半径 < √2·R − 柄の半径。本当の距離の下限）。柄の穴と帯の縁は 3mm 以上、糊代の歯の先は 1mm 以上、竹串 180mm に収まる。諫鼓は、糸 ＞ 玉の半径 ＋ 1.5、花車が面に当たらない、棒を引ける長さで軸が 1 回以上回る、引く棒が竹串 180mm に収まる | `twist_drum_neg`〜`neg3`・`twist_drum_neg_kanko`〜`kanko4` | 3・F5.drum |
+| F5.stand | 立てる姿（stand_figure）。姿の面の重心が足の形の内に、重心の高さ × tan 8°（2mm 以上）の余白を持って入る（脚: 姿の下の縁と脚の先の三角。台: 箱の底で、傾きの軸は舌の先）。脚の糊代が姿の背に収まる。台は、溝に紙が入り（隙間 0.5mm 以上）、溝の隙間の傾きが 5° まで、溝の端から箱の縁まで 5mm、糊代が壁の高さ − 1mm まで、舌が姿の下の縁と半分以上つながって 1 つの足の下にあり、重心が床に触れる所と舌の幅の内 | `stand_figure_neg`（脚の開きが浅く後ろへ倒れる）・`neg2`（溝に紙が入らない）・`neg3`（舌が姿とつながらない）・`neg4`（糊代が壁に収まらない） | 3・F5.stand |
 
 `neg_fan_leg` の期待に F5.image_box を足した（2026-11-04・元の repo の v9 を写した時）。v9 で扇の板に色を塗るようになり、足の糊代が扇の本体に食い込む寸法では、糊代と糊代の折り線が本当に扇の絵にかかる。偽の失敗ではないので、2 つとも期待にした（F5.fan_leg が落ちる事は変わらない）。
 
