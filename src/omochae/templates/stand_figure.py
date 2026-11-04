@@ -72,7 +72,9 @@ RANGES = {
     "paper_thickness": (0.05, 0.5),
     "tab_width": (6, 30), "tab_length": (10, 120), "tab_glue": (6, 40), "tab_angle": (10, 60),
     "base_length": (30, 150), "base_depth": (15, 80), "base_height": (6, 30), "base_glue": (4, 12),
-    "slot_length": (5, 80), "slot_width": (1.0, 3.0),
+    # 溝の長さの下限 6 は、舌の幅（溝 − 2·SLOT_END）から両側の余白 MIN_MARGIN を引いて 1mm の窓が残る長さ。5 だと窓が 0 で、重心が舌の真ん中に
+    # ぴたり来る姿しか横の検査を通らない（試験で定数との関係を見る）。
+    "slot_length": (6, 80), "slot_width": (1.0, 3.0),
 }
 STANDS = ("easel", "base")
 # 刷る形を決める寸法（どの玩具の姿か）。姿ごとに輪郭も絵も違うので、寸法を直に渡す入口では必ず書かせる。
@@ -86,7 +88,8 @@ MIN_CLEAR = 0.5  # 溝の隙間の下限。紙の毛羽の 0.1mm に、狭く切
 MAX_WOBBLE = 5  # 溝の隙間で傾いてよい角度の上限
 CUT_TOL = 0.2  # 手で切る溝の縁 1 つのずれ（見込み）。溝の幅は ±2·CUT_TOL
 BOX_TOL = 0.5  # 箱を折った時の高さのずれ（見込み）。折り目の位置と紙の厚みで、この程度は高くも低くもなる
-TONGUE_EXTRA = 1.5  # 舌を箱の高さより長くする分。BOX_TOL 高く折れても、先が底の溝を抜けて机に届くように
+TONGUE_EXTRA = 1.5  # 舌を箱の高さより長くする分。BOX_TOL より大きくする（箱が BOX_TOL 高く折れても、先が底の溝を抜けて机に届く）。
+# この決まりは寸法に依らないので、check_physics で見ず（どの寸法でも同じ答えになる）、試験で定数の関係として見る。
 SLOT_EDGE = 5  # 溝の端から箱の縁までの紙。これより狭いと溝の端が裂ける
 SLOT_END = 0.5  # 舌の左右と溝の端の隙間
 TONGUE_ATTACH = 0.5  # 舌の上の縁のうち、姿とつながっている割合の下限
@@ -110,6 +113,9 @@ def _src(canvas, side):
 # （「縮図」は 1600px の図を幅 700px に縮め、200px ごとの目盛りを重ねた物。点はその上で目で読んだ）。
 # body は姿の外形を作る多角形の組（重ねて 1 つにする）。art は上に描く絵で、姿の外へ出た所は切り落とす。
 # height はその玩具の既定の高さ（mm）。図の比から、A4 に表と裏と台が並ぶ大きさを選んだ見込み。
+# 台で立てる姿のうち、紙雛・舌出し面・首人形・覆面の人形・蓑人形・魚・餅花・筒は、重心（舌の先＝机から 箱の高さ + TONGUE_EXTRA の上から
+# 測る）が既定の台（奥行き 30・高さ 16）に、溝の横の傾きを足しても余白を持って入る高さまで下げた。台の奥行きを広げる勧め（base_depth 40）
+# で通した姿もある。どちらも見込みで、scale で大きさを変えられる（高さを戻すなら台の奥行きも広げる）。
 # stand はその玩具に勧める立て方（下の縁が広い物は脚、細い物は台）。source は組になる出典（場面が同じ組を渡す）。
 # 1 頁に玩具が幾つもある時は、1 つの玩具を 1 つの値にし、出典は同じ頁の記録を使う。
 # 描き分けの省略: 細い棒（面の柄・首の竿）は、紙で切れて差せるよう、図より太くした（【解釈】）。
@@ -817,13 +823,6 @@ def side_wobble_deg(p):
 
 
 @_filling
-def tip_clear(p, box_height=None):
-    """舌の先が机に届いて、姿の下の縁が上の面から浮く高さ（mm）。0 以下なら舌の先が机から浮く（上の溝だけで挟む形）。
-    box_height を渡すと、その高さに折れた箱で見る。"""
-    return tongue(p)[2] - (p["base_height"] if box_height is None else box_height)
-
-
-@_filling
 def check_physics(p):
     """F5.stand: 姿が倒れない（重心が足の形の内に余白つきで入る）・脚が背に貼れる・溝が紙に合う、を見る。"""
     out = []
@@ -870,8 +869,6 @@ def check_physics(p):
         feet = [q for q in getattr(joint, "geoms", [joint]) if q.geom_type == "LineString" and q.length > 0]
         if len(feet) >= 2:
             out.append(Failure("F5.stand", "舌", f"舌が床に触れる所 {len(feet)} つにまたがり、間が紙でふさがる（溝を短くして 1 つの足の下に差す）"))
-        if tip_clear(p, p["base_height"] + BOX_TOL) <= 0:
-            out.append(Failure("F5.stand", "舌", f"箱が {BOX_TOL}mm 高く折れると、舌の先が机から浮く"))
         # 傾く軸は舌の先（机の上）なので、重心の高さは舌の長さを足して測る。余白も同じ高さから。
         up = depth
         mb = margin(g, up)
