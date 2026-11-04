@@ -14,6 +14,8 @@ def text_poly(t):
 
 # 接するだけの境界を重なりと数えないための許し。計算の丸めで偽の失敗を出さない。
 EPS = 1e-6
+# SVG の stroke-miterlimit の既定。描画（render.py）は結合の形を指定しないので、刷られる角はこの限りまで尖る。
+SVG_MITER = 4
 
 
 def check_layout(page, parts, texts):
@@ -77,11 +79,20 @@ def check_art(parts):
         poly = part_poly(p)
         for item in p.art:
             pts = [(p.x + x, p.y + y) for x, y in item["pts"]]
-            geom = Polygon(pts).buffer(-0.01) if item["kind"] == "poly" else LineString(pts)
-            # 線は刷られる太さの帯で見る。中心線だけだと、太い線が糊代や折り線にはみ出しても通った。
-            # 端は SVG の既定（butt）と同じく平らに切る。丸く足すと、刷られない分まで見て偽の失敗を出す。
-            ink = geom if item["kind"] == "poly" else geom.buffer(item.get("sw", 0) / 2, cap_style=2)
-            if not poly.buffer(0.05).contains(ink):
+            sw = item.get("sw", 0) if item.get("stroke") else 0
+            if item["kind"] == "poly":
+                geom = Polygon(pts).buffer(-0.01)
+                # 輪郭線つきの面は、線の太さの半分だけ外へ広がって刷られる。
+                ink = Polygon(pts).buffer(sw / 2, join_style=2, mitre_limit=SVG_MITER) if sw else geom
+            else:
+                geom = LineString(pts)
+                # 線は刷られる太さの帯で見る。中心線だけだと、太い線が糊代や折り線にはみ出しても通った。
+                # 端は SVG の既定（butt）と同じく平らに、角は SVG の既定（miter・限り 4）と同じく尖らせる。丸く見ると角の先を見逃す。
+                ink = geom.buffer(sw / 2, cap_style=2, join_style=2, mitre_limit=SVG_MITER)
+            # 部品の外かは、面なら塗りで見る。輪郭線が切る線の上に乗る絵（虎の頭）は、外へ出た半分を切り落とすので困らない。
+            # 折り線と糊代は、切り落とされないので輪郭線の太さまで見る。
+            inside = geom if item["kind"] == "poly" else ink
+            if not poly.buffer(0.05).contains(inside):
                 out.append(Failure("F5.image_box", p.name, "絵が部品の外に出ている"))
             for (x1, y1), (x2, y2) in p.valley + p.mountain:
                 if ink.intersects(LineString([(p.x + x1, p.y + y1), (p.x + x2, p.y + y2)])):

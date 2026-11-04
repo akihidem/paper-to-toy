@@ -68,6 +68,13 @@ thick = Part(1, "t", "試し", [(0, 0), (40, 0), (40, 20), (0, 20)], glue=glue, 
 thin = Part(1, "t", "試し", [(0, 0), (40, 0), (40, 20), (0, 20)], glue=glue, art=[{"kind": "line", "pts": [(29.5, 2), (29.5, 18)], "stroke": "#000", "sw": 0.3}])
 assert [f.floor for f in check_art([thick])] == ["F5.image_box"]
 assert check_art([thin]) == []
+# 輪郭線つきの面は、線の太さで糊代にかかれば落とす
+framed = Part(1, "t", "試し", [(0, 0), (40, 0), (40, 20), (0, 20)], glue=glue,
+              art=[{"kind": "poly", "pts": [(5, 5), (29.5, 5), (29.5, 15), (5, 15)], "fill": "#ccc", "stroke": "#000", "sw": 2.0}])
+assert [f.floor for f in check_art([framed])] == ["F5.image_box"]
+# 折れ曲がる線は、SVG と同じく尖った角の先まで見る（丸い角で見ると角の先が糊代にかかるのを見逃す）
+bent = Part(1, "t", "試し", [(0, 0), (40, 0), (40, 20), (0, 20)], glue=glue, art=[{"kind": "line", "pts": [(10, 4), (28.0, 10), (10, 16)], "stroke": "#000", "sw": 1.5}])
+assert [f.floor for f in check_art([bent])] == ["F5.image_box"]
 
 # 3. 型紙に刷る部品は全部、部品表に載る（首の形の重りの腕）
 from omochae.floors import check_bom
