@@ -113,6 +113,10 @@ def check_physics(p):
         out.append(Failure("F5.figure_height", "像", f"像の高さ {p['figure_h']} が折りの高さ＋6={h + 6} を超える"))
     if p["base_side"] > a:
         out.append(Failure("F5.base_size", "扇の台", f"扇の台 {p['base_side']} が内筒 {a} を超える"))
+    # 像の足の糊代は像の幅の 0.3〜0.7（parts の cx0・cx1）。台より広いと貼れない。像の高さだけを見ていたので通っていた。
+    foot = p["figure_w"] * (FOOT[1] - FOOT[0])
+    if foot > p["base_side"]:
+        out.append(Failure("F5.figure_base", "像", f"像の足の糊代 {foot:.1f} が扇の台 {p['base_side']} より広く、台に貼れない"))
     if p["push_part"] == "tab":
         if L > H - s:
             out.append(Failure("F5.stroke", "内筒", f"内筒の長さ {L} が静止時の筒の空き {H - s} に収まらない"))
@@ -264,7 +268,7 @@ def parts(p):
     fw, fh = p["figure_w"], p["figure_h"]
     pts = [(fw * x, fh * y) for x, y in FIGURE_OUTLINE]
     tab = 5  # 台に貼る足。絵には無いが、立てるのに要る。
-    cx0, cx1 = fw * 0.3, fw * 0.7
+    cx0, cx1 = fw * FOOT[0], fw * FOOT[1]
     figure = Part(5, "figure", "像", _insert_tab(pts, cx0, cx1, fh, tab), label_xy=(fw * 0.4, fh * 0.6), label="5",
                   glue=[[(cx0, fh), (cx1, fh), (cx1, fh + tab), (cx0, fh + tab)]],
                   art=_figure_art(fw, fh, pts))
@@ -276,6 +280,8 @@ def parts(p):
 
 # 扇の足の先の糊代の長さ。台に貼る面。
 LEG_GLUE = 6
+# 像の足の糊代を、像の幅のどこからどこまでに取るか。台に貼る幅の検査（F5.figure_base）と同じ値を使う。
+FOOT = (0.3, 0.7)
 
 
 def leg_length(p):
