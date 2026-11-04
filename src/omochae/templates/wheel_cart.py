@@ -4,7 +4,10 @@
 - rat: 大黒の鼠車（推定・19 コマ左）。鼠を箱の胴にし、前と後ろの 2 本の軸に車輪を 4 つ。人形は平らな切り抜きを上に立てる。
   絵では鼠は車の付いた板に乗るが、板と胴を 1 つの箱にまとめた（紙で作る部品を減らすため。箱の側面の下の帯を板の色にした）。
 - stick: 春駒（31 コマ右）。馬の頭の切り抜きを割り箸の上に貼り、下の端の紙の二股に車輪を 1 つ。手で持って押す。
-ぶりぶり（推定・9 コマ左）は作らない。絵の物は槌の形に見え、車の付いた棒かどうかを絵から決められなかったため。
+- mallet: ぶりぶり（推定・9 コマ左）。八角の槌の頭の両端に小さな車輪を付け、割り箸の柄で引くか転がす。
+  9 コマの絵は、菊の模様の丸い面を両端に持つ筒の頭に柄が付いた槌の形で、絵だけでは丸い面が車輪か飾りかは決まらない。
+  江戸の振々毬杖（ぶりぶりぎっちょう）は槌の頭に小さな車輪を付けて引いた、という一般の説明に拠って車輪と読んだ（推定。原典は未確認）。
+  頭は絵では丸い筒だが、紙で折りやすい八角柱にした（振々毬杖の頭を八角に作る例があるという説明にも合う。これも未確認）。
 
 寸法は手元の複写の図の比と、A4 に収まる事から出した。どの値も実物では未確認。Claude が変えてよいのは RANGES の名前の値だけ。
 """
@@ -27,6 +30,8 @@ DEFAULTS = {
     # 春駒。軸の高さ axle_height は二股の腕の先から測る
     "head_w": 56, "head_h": 31, "cloth_w": 44, "cloth_h": 28,
     "fork_width": 12, "fork_inner": 8, "fork_arm": 34, "stick_t": 4.5, "stick_in": 4,
+    # ぶりぶり。head_r は八角の頭の外接円の半径（角まで）、handle_in は柄を頭に差し込む深さ。車輪と頭のすき間は wheel_gap
+    "head_r": 9, "head_len": 36, "handle_len": 180, "handle_in": 3,
     # 紙と厚紙の見込み。実物の紙を量ったら置き換える。厚紙は空き箱の板紙を見込む。
     "paper_gsm": 150, "paper_thickness": 0.15, "card_gsm": 350, "card_thickness": 0.4,
 }
@@ -37,15 +42,16 @@ RANGES = {
     "figure_w": (15, 40), "figure_h": (20, 60), "rider_at": (0, 1),
     "head_w": (40, 64), "head_h": (20, 40), "cloth_w": (30, 50), "cloth_h": (20, 36),
     "fork_width": (6, 20), "fork_inner": (3, 20), "fork_arm": (15, 50), "stick_t": (3, 7), "stick_in": (0, 20),
+    "head_r": (6, 20), "head_len": (20, 60), "handle_len": (80, 220), "handle_in": (0, 10),
     "paper_gsm": (40, 400), "paper_thickness": (0.05, 0.6), "card_gsm": (150, 800), "card_thickness": (0.2, 1.5),
 }
-RIDES = ("rat", "stick")
+RIDES = ("rat", "stick", "mallet")
 # 刷る形を決める寸法（乗り物の形）。玩具の違いそのものなので、寸法を直に渡す入口（python -m omochae --params）では必ず書かせる。
 FORM = "ride"
 FORMS = RIDES  # 刷る形の値の一覧（作りうる部品を数える時に使う）
 # 既定の出典（data/sources/ の名前）。--source を書かない時に、雛形と合わない出典の印を刷らないため。
 SOURCE = "NDL-1187053-R0000019-L-wheel_cart"
-TITLES = {"rat": "鼠に車を付けて転がす", "stick": "棒の先の車で転がす"}
+TITLES = {"rat": "鼠に車を付けて転がす", "stick": "棒の先の車で転がす", "mallet": "槌の頭の車で転がす"}
 
 HOLE_MARGIN = 4  # 穴の中心から紙の端・折り目までの見込み（虎と同じ値）。これより狭いと裂けやすい
 MIN_GROUND = 2  # 胴の底（二股の腕の先）と床のすき間。紙の胴は撓むので 0 では擦る見込み
@@ -119,6 +125,41 @@ def cart_com_x(p):
     return sum(m * x for m, x in pts) / total
 
 
+def octagon(p):
+    """八角の頭の寸法: (面の幅, 内接円の半径)。head_r は外接円の半径。"""
+    r = p["head_r"]
+    return 2 * r * math.sin(math.pi / 8), r * math.cos(math.pi / 8)
+
+
+def mallet_axle_length(p):
+    """ぶりぶりの軸の竹串の長さ（mm）。頭の長さ + 両側の すき間・車輪 + 先に 5mm ずつ残す。"""
+    return p["head_len"] + 2 * (p["wheel_gap"] + wheel_thickness(p)) + 10
+
+
+def _check_mallet(p, fail):
+    """ぶりぶりの F5.wheel。軸は頭の芯を通るので、軸の高さは車輪の半径そのもので、axle_height は使わない。
+
+    1. 床: 頭は柄に付いて回らないが、柄を持ち上げる角度で八角のどの角も下に来うるので、外接円の半径 head_r で見る。
+    2. 側面: 車輪と頭の端の蓋のすき間 wheel_gap。柄の先は軸（竹串）と MIN_SIDE_GAP 離す（当たると軸が回らない）。
+    3. 穴: 蓋の軸の穴から蓋の縁まで（内接円の半径）HOLE_MARGIN 以上。柄の穴は面の幅の中に、折り目から 1mm 以上離す。
+    4. 重心: 回る物は車輪と軸だけで、回らない頭と柄の重心は、軸を通る真ん中の頭に対して必ず柄の側に来る。
+       置くと柄の先が床に付き、車輪の接地点と柄の先の間に重心が入るので、寸法で倒れる事は無い（式にしない理由）。
+    """
+    R, r = p["wheel_r"], p["head_r"]
+    side, apo = octagon(p)
+    if R - r < MIN_GROUND:
+        fail("車輪", f"車輪の半径 {R}mm が頭の角まで {r}mm より {MIN_GROUND}mm 以上大きくなく、頭が床を擦る")
+    if p["wheel_gap"] < MIN_SIDE_GAP:
+        fail("車輪", f"車輪と頭の蓋のすき間 {p['wheel_gap']}mm が {MIN_SIDE_GAP}mm より狭く、擦る")
+    room = apo - p["handle_in"] - SKEWER_D / 2
+    if room < MIN_SIDE_GAP:
+        fail("柄", f"柄の先と軸のすき間 {room:.1f}mm が {MIN_SIDE_GAP}mm より狭く、軸が回らない")
+    if apo < HOLE_MARGIN:
+        fail("軸の穴", f"蓋の軸の穴から蓋の縁まで {apo:.1f}mm で、裂けやすい")
+    if side < p["stick_t"] + 2:
+        fail("柄", f"割り箸（太さ {p['stick_t']}mm）を通す穴が頭の面（幅 {side:.1f}mm）に収まらない")
+
+
 def check_physics(p):
     """F5.wheel: 転がる形が成り立たない寸法を落とす。見る事は 4 つで、どれも紙の厚み・すき間・重心の量だけの式。
 
@@ -134,6 +175,9 @@ def check_physics(p):
     out = []
     R, a = p["wheel_r"], p["axle_height"]
     fail = lambda where, msg: out.append(Failure("F5.wheel", where, msg))
+    if p["ride"] == "mallet":
+        _check_mallet(p, fail)
+        return out
     t = wheel_thickness(p)
     if R - a < MIN_GROUND:
         under = "胴の底" if p["ride"] == "rat" else "二股の腕の先"
@@ -367,12 +411,63 @@ def _tail(p):
     return Part(3, "tail", "尾", _rect(0, 0, 6, 50), label_xy=(1, 1.5), label="3", art=art)
 
 
+def _drum(p):
+    """ぶりぶりの頭の胴。八角柱の 8 面を横に並べ、右の端に糊代。真ん中の面（4 面目）に柄を通す四角い穴。
+    絵の頭は木の色に黒い帯が 2 本なので、各面の端寄りに黒い帯を描く（折り目をまたがないよう面ごとに分ける）。
+    """
+    s, _ = octagon(p)
+    L, g, e = p["head_len"], 6, 0.25
+    W = 8 * s
+    outline = [(0, 0), (W, 0), (W + g, 1), (W + g, L - 1), (W, L), (0, L)]
+    art = []
+    for i in range(8):
+        x0, x1 = i * s + e, (i + 1) * s - e
+        art.append(_poly(_rect(x0, e, x1, L - e), WOOD))
+        for y0, y1 in ((0.12, 0.17), (0.21, 0.26)):
+            art.append(_poly(_rect(x0, L * y0, x1, L * y1), DARK))
+    st = p["stick_t"]
+    return Part(1, "drum", "頭", outline, label_xy=(1, L * 0.4), label="1",
+                valley=[((i * s, 0), (i * s, L)) for i in range(1, 9)], glue=[[(W, 0), (W + g, 1), (W + g, L - 1), (W, L)]],
+                cuts=[(3.5 * s - st / 2, L / 2 - st / 2, st, st)], art=art)
+
+
+def _cap(number, key, p):
+    """頭の端の蓋。八角の各辺に糊代を付け、谷折りして頭の内側に貼る。中心に軸の穴。絵の端の面の菊の模様を描く。"""
+    r = p["head_r"]
+    side, apo = octagon(p)
+    tab = min(5.0, side * 0.6)
+    c = r + tab
+    v = [(c + r * math.cos(math.pi / 8 + k * math.pi / 4), c + r * math.sin(math.pi / 8 + k * math.pi / 4)) for k in range(8)]
+    outline, valley, glue = [], [], []
+    for k in range(8):
+        a, b = v[k], v[(k + 1) % 8]
+        dx, dy = (b[0] - a[0]) / side, (b[1] - a[1]) / side
+        # 外向きの法線。正八角形なので、中心から辺の中点へ向かう向きがそのまま法線になる
+        nx, ny = ((a[0] + b[0]) / 2 - c) / apo, ((a[1] + b[1]) / 2 - c) / apo
+        # 隣の糊代と重ならないよう、外の辺を両側から縮める（八角の外角 45° の半分の tan より大きく）
+        k_in = tab * 0.6
+        ta = (a[0] + nx * tab + dx * k_in, a[1] + ny * tab + dy * k_in)
+        tb = (b[0] + nx * tab - dx * k_in, b[1] + ny * tab - dy * k_in)
+        outline += [a, ta, tb]
+        valley.append((a, b))
+        glue.append([a, ta, tb, b])
+    region = Polygon(v).buffer(-0.3)
+    art = [_poly(list(region.exterior.coords)[:-1], WOOD)]
+    art += [_line([(c + apo * 0.3 * math.cos(t), c + apo * 0.3 * math.sin(t)), (c + apo * 0.85 * math.cos(t), c + apo * 0.85 * math.sin(t))], PAPER, 0.5)
+            for t in (2 * math.pi * i / 16 for i in range(16))]
+    art.append(_poly(_circle(c, c, apo * 0.25, 16), CAP))
+    return Part(number, key, "頭の蓋", outline, label_xy=(c - 0.8, c - apo * 0.95), label=str(number), valley=valley, glue=glue,
+                holes=[(c, c, AXLE_HOLE_R)], art=_art(art, region))
+
+
 WHEEL_KEYS = ("wheela", "wheelb", "wheelc", "wheeld")
 
 
 def parts(p):
     if p["ride"] == "rat":
         return [_rat_body(p), _rider(p), _tail(p)] + [_wheel(4 + i, k, p) for i, k in enumerate(WHEEL_KEYS)]
+    if p["ride"] == "mallet":
+        return [_drum(p), _cap(2, "capa", p), _cap(3, "capb", p), _wheel(4, "wheela", p), _wheel(5, "wheelb", p)]
     return [_head(1, "head", "頭", p, False), _head(2, "headback", "頭の裏", p, True), _cloth(p), _fork(p), _wheel(5, "wheela", p)]
 
 
@@ -405,6 +500,16 @@ def place(by_key, page, top, gap):
         y = top + max(body.height, right_h) + gap
         x = _row(low, page.x0, y, gap)
         return y, page.x1 - x, x
+    if "drum" in by_key:
+        # ぶりぶり: 頭と蓋 2 枚を上の段、車輪 2 つを下の段。物差し（100mm）の幅が残らない時は 2 つ目の車輪を 1 つ目の下へ。
+        drum, ca, cb, wa, wb = (by_key[k] for k in ("drum", "capa", "capb", "wheela", "wheelb"))
+        _row([drum, ca, cb], page.x0, top, gap)
+        y = top + max(drum.height, ca.height) + gap
+        x = _row([wa, wb], page.x0, y, gap)
+        if page.x1 - x < 102:
+            wb.x, wb.y = page.x0, y + wa.height + gap
+            x = page.x0 + wa.width + gap
+        return y, page.x1 - x, x
     head, back, cloth = by_key["head"], by_key["headback"], by_key["cloth"]
     _row([head, back, cloth], page.x0, top, gap)
     y = top + max(head.height, cloth.height) + gap
@@ -429,6 +534,19 @@ def bom(p):
         if n:
             rows.append({"number": 9, "key": "core", "name": "車輪の芯", "qty": 4 * n, "material": core, "substituted": True, "original_guess": "不明", "reason": "紙 1 枚では車輪が柔らかく、首を振るため"})
         return rows
+    if p["ride"] == "mallet":
+        rows = [
+            {"number": 1, "key": "drum", "name": "頭", "qty": 1, "material": paper, "substituted": True, "original_guess": "木（推定。絵の頭は木の色に塗った筒に見える）", "reason": why},
+            {"number": 2, "key": "capa", "name": "頭の蓋", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明", "reason": why},
+            {"number": 3, "key": "capb", "name": "頭の蓋", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明", "reason": why},
+            {"number": 4, "key": "wheela", "name": "車輪", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（絵の端の丸い面が車輪かどうかも推定）", "reason": why},
+            {"number": 5, "key": "wheelb", "name": "車輪", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（同じ）", "reason": why},
+            {"number": 6, "key": "handle", "name": "柄", "qty": 1, "material": f"割り箸（割った 1 本、長さ約 {p['handle_len']}mm）", "substituted": True, "original_guess": "竹か木の柄（推定。絵の柄は黄色い）", "reason": "家にあり、引く力に耐えるため"},
+            {"number": 7, "key": "axle", "name": "軸", "qty": 1, "material": f"竹串（長さ約 {mallet_axle_length(p):.0f}mm に切り、先を落とす）", "substituted": True, "original_guess": "不明", "reason": "家にあり、穴の中で回るため"},
+        ]
+        if n:
+            rows.append({"number": 8, "key": "core", "name": "車輪の芯", "qty": 2 * n, "material": core, "substituted": True, "original_guess": "不明", "reason": "紙 1 枚では車輪が柔らかく、首を振るため"})
+        return rows
     rows = [
         {"number": 1, "key": "head", "name": "頭", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（張子か木か、絵から読めない）", "reason": why},
         {"number": 2, "key": "headback", "name": "頭の裏", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明", "reason": "割り箸を 2 枚の頭で挟んで貼るため"},
@@ -449,6 +567,8 @@ def materials(p):
     out = [f"{by['wheela']['material']}を 1 枚", "のり、はさみ、定規"]
     if p["ride"] == "stick":
         out.append(by["stick"]["material"])
+    if p["ride"] == "mallet":
+        out.append(by["handle"]["material"])
     out.append(f"{by['axle']['material']} {by['axle']['qty']} 本")
     if "core" in by:
         out.append(f"空き箱の厚紙（車輪の芯 {by['core']['qty']} 枚分）")
@@ -466,6 +586,13 @@ def steps(p):
                 f"車輪を竹串の両端に差し、胴との間を {p['wheel_gap']}mm あけて貼る（厚紙を挟んで測る）。軸ごと回る事を確かめる",
                 "2 人形の耳を谷折りし、1 胴の上の面に貼る", "3 尾を丸くして、後ろの壁に貼る",
                 "机の上で押して、まっすぐ転がるか見る"]
+    elif p["ride"] == "mallet":
+        out += ["1 頭を破線で谷折りして八角の筒にし、糊代で貼る",
+                "2・3 頭の蓋の糊代を谷折りし、頭の両端の内側に貼って蓋をする",
+                f"割り箸を 1 頭の四角い穴に {p['handle_in']}mm 差し込んで貼る（奥の軸に当てない）",
+                "竹串を 2 つの蓋の穴に通し、両端に 4・5 車輪を差す",
+                f"車輪と蓋の間を {p['wheel_gap']}mm あけて貼る（厚紙を挟んで測る）。軸ごと回る事を確かめる",
+                "柄を持って、車輪を床に付けて引くか押す"]
     else:
         out += ["1 頭と 2 頭の裏で割り箸の上の端を挟んで貼る", "3 布の胴を割り箸に巻き、頭の下に貼る",
                 "4 二股を破線で谷折りして コ の字にし、真ん中の四角い穴に割り箸の下の端を通して貼る",
@@ -496,6 +623,15 @@ def diagram(x, y, w, h, p):
         shapes.append({"kind": "rect", "x": fx - p["figure_w"] * s / 2, "y": by - p["figure_h"] * s, "w": p["figure_w"] * s, "h": p["figure_h"] * s})
         shapes.append({"kind": "line", "x1": x, "y1": floor, "x2": x + w, "y2": floor})
         return shapes
+    if p["ride"] == "mallet":
+        r, L = p["head_r"], p["head_len"]
+        s = min(w / (L + 2 * R + 60), h / (2 * R + 4))
+        floor = y + h
+        cx, cy = x + R * s, floor - R * s
+        return [{"kind": "rect", "x": cx - R * s, "y": cy - R * s, "w": 2 * R * s, "h": 2 * R * s, "dash": "1,0.6"},
+                {"kind": "rect", "x": cx - r * s, "y": cy - r * s, "w": 2 * r * s, "h": 2 * r * s},
+                {"kind": "line", "x1": cx + r * s, "y1": cy, "x2": x + w, "y2": floor},
+                {"kind": "line", "x1": x, "y1": floor, "x2": x + w, "y2": floor}]
     A = p["fork_arm"]
     s = h / (A + R + 60)
     cx, floor = x + w / 2, y + h

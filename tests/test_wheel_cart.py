@@ -53,4 +53,20 @@ assert not any("倒れる" in m for m in msgs({**tip, "wheel_layers": 6}))
 assert w.cart_com_x({**RAT, "rider_at": 0.2}) < w.cart_com_x(RAT)
 # 春駒は手で持つので重心は見ない
 assert not any("重心" in m for m in msgs(STICK))
+
+# 5. ぶりぶり（mallet）: 軸は頭の芯を通るので、床は頭の角（外接円の半径）で見る
+MALLET = {**w.DEFAULTS, "ride": "mallet"}
+assert msgs(MALLET) == [], msgs(MALLET)
+assert check_bom(w.bom(MALLET), w.parts(MALLET)) == []
+assert not any("床を擦る" in m for m in msgs({**MALLET, "head_r": 10}))  # 12 - 10 = 2 ちょうど
+assert any("床を擦る" in m for m in msgs({**MALLET, "head_r": 10.5}))
+side, apo = w.octagon(MALLET)
+assert abs(side - 2 * 9 * 0.38268) < 1e-3 and apo < MALLET["head_r"]
+assert any("蓋のすき間" in m for m in msgs({**MALLET, "wheel_gap": 1}))
+# 柄の先と軸: 内接円 8.3 - 差し込み - 竹串の半径 1.5 が 1.5 を割ると落ちる
+assert not any("軸が回らない" in m for m in msgs({**MALLET, "handle_in": 5}))
+assert any("軸が回らない" in m for m in msgs({**MALLET, "handle_in": 6}))
+assert any("頭の面" in m for m in msgs({**MALLET, "stick_t": 5}))  # 面の幅 6.9 に 5 + 2 が入らない
+# 範囲（head_r 6 以上）では内接円が 5.5mm 以上で穴の余裕は足りる。式の向きは範囲の外の値で確かめる（check_physics は範囲を見ない）
+assert any("蓋の縁" in m for m in msgs({**MALLET, "head_r": 4, "wheel_r": 8, "stick_t": 3, "handle_in": 0}))
 print("ok")
