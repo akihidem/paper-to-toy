@@ -186,4 +186,27 @@ mods = {i.name for i in pkgutil.iter_modules(tdir.__path__)}
 assert {"slider_fan", "pivot_counterweight"} <= set(TEMPLATES), sorted(TEMPLATES)
 assert {t.__name__.rsplit(".", 1)[1] for t in TEMPLATES.values()} == {m for m in mods if hasattr(__import__(f"omochae.templates.{m}", fromlist=["ID"]), "ID")}
 
+# 10. 刷る形ごとに出典が違う雛形（SOURCES）では、形と合わない出典を刷らない。既定の出典も形から選ぶ（形を 1 つの SOURCE に決め打ちすると、
+# 別の形の絵に別の玩具の出典を刷った。レビューの指摘）。SOURCES の無い雛形（御来迎・虎）は今までどおり SOURCE を使い、検査もしない
+import types
+from omochae.__main__ import load_source, scenario_from_args
+from omochae.compose import compose
+tiger = load_source(pc.SOURCE)
+pc.SOURCES = {"neck": pc.SOURCE, "hang": "NDL-1187053-R0000005-L"}
+try:
+    _, _, fl = compose(pc.ID, {"mount": "hang"}, tiger)
+    assert any(f.floor == "F1.source" for f in fl), [f.line() for f in fl]
+    _, _, fl = compose(pc.ID, {"mount": "neck"}, tiger)
+    assert not any(f.floor == "F1.source" for f in fl), [f.line() for f in fl]
+    pj = ROOT / "out" / "_src_hang.json"
+    pj.parent.mkdir(exist_ok=True)
+    pj.write_text('{"mount": "hang"}', encoding="utf-8")
+    args = types.SimpleNamespace(scenario=None, template=pc.ID, params=str(pj), source=None)
+    assert scenario_from_args(args)["source_id"] == "NDL-1187053-R0000005-L"
+    pj.unlink()
+finally:
+    del pc.SOURCES
+_, _, fl = compose(pc.ID, {"mount": "hang"}, tiger)
+assert not any(f.floor == "F1.source" for f in fl)
+
 print("ok")
