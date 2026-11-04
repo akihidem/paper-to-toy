@@ -42,7 +42,8 @@ RANGES = {
     "figure_w": (15, 40), "figure_h": (20, 60), "rider_at": (0, 1),
     "head_w": (40, 64), "head_h": (20, 40), "cloth_w": (30, 50), "cloth_h": (20, 36),
     "fork_width": (6, 20), "fork_inner": (3, 20), "fork_arm": (15, 50), "stick_t": (3, 7), "stick_in": (0, 20),
-    "head_r": (6, 20), "head_len": (20, 60), "handle_len": (80, 220), "handle_in": (0, 10),
+    # handle_in の下限 2mm: 0 だと組み方が「0mm 差し込む」と言い、柄が糊だけで穴に付かず抜ける（実物では未確認の見込み）
+    "head_r": (6, 20), "head_len": (20, 60), "handle_len": (80, 220), "handle_in": (2, 10),
     "paper_gsm": (40, 400), "paper_thickness": (0.05, 0.6), "card_gsm": (150, 800), "card_thickness": (0.2, 1.5),
 }
 RIDES = ("rat", "stick", "mallet")
@@ -85,8 +86,9 @@ def check_range(p):
             out.append(Failure("F5.range", k, "知らない寸法の名前"))
         elif not isinstance(v, (int, float)) or isinstance(v, bool) or not RANGES[k][0] <= v <= RANGES[k][1]:
             out.append(Failure("F5.range", k, f"{v} は範囲 {RANGES[k]} の外"))
-        elif k == "wheel_layers" and v != int(v):
-            out.append(Failure("F5.range", k, f"{v} は枚数なので整数"))
+        elif k == "wheel_layers" and not isinstance(v, int):
+            # 2.0 のような小数の形も落とす。通すと部品表と組み方に「4.0 枚」と刷る
+            out.append(Failure("F5.range", k, f"{v} は枚数なので整数（小数点を付けない）"))
     return out
 
 
@@ -577,6 +579,9 @@ def materials(p):
     # 行の位置でなく key で引く（形で行が変わるため。虎と同じ）。
     by = {r["key"]: r for r in bom(p)}
     out = [f"{by['wheela']['material']}を 1 枚", "のり、はさみ、定規"]
+    if p["ride"] in ("stick", "mallet"):
+        # 春駒の二股とぶりぶりの頭には、紙の中を切る四角い穴がある（はさみでは切れない）
+        out.append("カッター（四角い穴を切る。カッターは大人がする）")
     if p["ride"] == "stick":
         out.append(by["stick"]["material"])
     if p["ride"] == "mallet":
@@ -599,7 +604,8 @@ def steps(p):
                 f"2 人形の耳を谷折りし、1 胴の上の面の四角い印に貼る（印の真ん中は前の端から {p['rider_at'] * p['body_length']:g}mm）", "3 尾を丸くして、後ろの壁に貼る",
                 "机の上で押して、まっすぐ転がるか見る"]
     elif p["ride"] == "mallet":
-        out += ["1 頭を破線で谷折りして八角の筒にし、糊代で貼る",
+        out += ["1 頭の真ん中の面の四角い穴を切る（カッターは大人がする）",
+                "1 頭を破線で谷折りして八角の筒にし、糊代で貼る",
                 "2・3 頭の蓋の糊代を谷折りし、頭の両端の内側に貼って蓋をする",
                 f"割り箸の先から {p['handle_in']:g}mm に鉛筆で印を付け、1 頭の四角い穴に印まで差し込んで貼る（深く入れると奥の軸に当たる）",
                 "竹串を 2 つの蓋の穴に通し、両端に 4・5 車輪を差す",
@@ -607,6 +613,7 @@ def steps(p):
                 "柄を持って、車輪を床に付けて引くか押す"]
     else:
         out += ["1 頭と 2 頭の裏で割り箸の上の端を挟んで貼る", "3 布の胴を割り箸に巻き、頭の下に貼る",
+                "4 二股の真ん中の四角い穴を切る（カッターは大人がする）",
                 f"4 二股を破線で谷折りして コ の字にし、真ん中の四角い穴に割り箸の下の端を通す。割り箸の先は腕の線（頭の折り目から {p['stick_in']:g}mm）で止めて貼る（深く入れると車輪に当たる）",
                 "竹串を二股の穴と車輪の穴に通し、車輪を二股の真ん中に貼る。軸ごと回る事を確かめる",
                 "割り箸を持ち、車輪を床に付けて押す"]

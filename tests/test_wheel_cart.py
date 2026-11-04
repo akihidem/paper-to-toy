@@ -95,4 +95,16 @@ shapes = w.diagram(0, 0, 60, 80, STICK)
 floor = [s for s in shapes if s["kind"] == "line" and s["y1"] == s["y2"]][-1]["y1"]
 arm = shapes[1]
 assert arm["y"] + arm["h"] <= floor + 1e-9, (arm, floor)
+
+# 7a. 春駒とぶりぶりは紙の中の四角い穴を切るので、用意する物にカッターを、組み方に「カッターは大人がする」を書く（虎の首の形と同じ言葉）
+for p in (STICK, MALLET):
+    assert any("カッター" in m for m in w.materials(p)), w.materials(p)
+    assert any("四角い穴" in s and "カッターは大人がする" in s for s in w.steps(p)), w.steps(p)
+assert not any("カッター" in m for m in w.materials(RAT))  # 鼠車に中の穴は無い
+# 7b. 柄の差し込みが 0mm では貼れずに抜ける。範囲の下限で落とす
+assert [f.floor for f in w.check_range({**MALLET, "handle_in": 0})] == ["F5.range"]
+assert w.check_range({**MALLET, "handle_in": w.RANGES["handle_in"][0]}) == [] and w.RANGES["handle_in"][0] >= 2
+# 7c. 枚数は整数だけ。2.0 のような小数の形も落とす（「4.0 枚」と刷らないため）
+assert [f.floor for f in w.check_range({**RAT, "wheel_layers": 2.0})] == ["F5.range"]
+assert w.check_range({**RAT, "wheel_layers": 2}) == []
 print("ok")
