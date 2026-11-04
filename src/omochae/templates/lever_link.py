@@ -79,7 +79,7 @@ DEFAULTS = {
 }
 RANGES = {
     "pin_d": (2, 5), "bar_w": (5, 20), "drive_arm": (10, 45), "travel": (2, 40), "slot_len": (10, 60),
-    "crank": (5, 40), "pole_d": (2, 6), "hole_d": (2, 8), "plate_t": (0.1, 1.5), "paper_thickness": (0.05, 0.5),
+    "crank": (5, 40), "pole_d": (2, 6), "hole_d": (2, 8), "plate_t": (0.5, 1.5), "paper_thickness": (0.05, 0.5),
 }
 KINDS = ("sumo", "saru_take", "saru_sao", "ebako", "karakuri", "hashigo", "yakko")
 # 刷る形を決める寸法（どの玩具か）。仕掛けが形ごとに違うので、寸法を直に渡す入口では必ず書かせる。
@@ -103,6 +103,7 @@ MIN_DIST = 8  # 滑る物が動いて見える量の見込み
 MIN_TRANSMISSION = 30  # 四節の伝達角の下限の見込み
 MIN_LOCK, MAX_LOCK = 3, 25  # 板の噛む角の窓の見込み
 HOLE_TOL = 0.2  # 目打ちで穴をあける時の大きさの狂いの見込み（mm）。穴の大きさが噛む角の窓の内に、この余りで入る事を見る
+FRAME_CARD_T = 1.0  # からくり台の枠を貼る厚紙の厚さの見込み。要る厚さは実物で未確認（紙 1 枚では O と A の間が保てない）
 AXLE_D = 3  # からくり台の水車の軸の竹串の太さ。割ピンの太さ（pin_d）とは別の物なので結び付けない
 FLOOR_Y = {"karakuri": 130.0}  # 机の高さ（組み図の y）。からくり台は箱の下の縁が机に乗る
 TABLE_CLEAR = 2  # 水車・連桿と机の間に残す余り（mm）。紙の反りと、立てた枠の傾きの見込み（実物で未確認）
@@ -594,8 +595,10 @@ def _hashigo(p):
     slat["travel_x0"] = 5 + up + 2.5
     peg = (P[0] - p["drive_arm"] * u[0], P[1] - p["drive_arm"] * u[1])
     floor = box(-500, floor_y, 500, floor_y + 500)
+    # 板は台の前に重ね、つまみ（竹串）は前へだけ出す。前へ出たつまみは台と別の層なので当たらない。後ろへ出すと台の層に入り、
+    # 押すうちに台に乗り上げる（knob_back_hit で数える）。床は前へだけ出す組み方を前提にする（組み方の文に書く）。
     mech = {"type": "push", "mover": slat, "pivot": P, "input": peg, "u": (math.sin(ang), -math.cos(ang)), "sign": 1, "obstacles": [floor],
-            "slot": False, "out": "梯子の板"}
+            "slot": False, "out": "梯子の板", "stand": asm_poly(st)}
     return [st, slat], mech
 
 
@@ -812,6 +815,14 @@ def check_physics(p):
 
 # ---- 刷る部品・部品表・文 ---------------------------------------------------------------------------------------------
 
+def knob_back_hit(p):
+    """梯子のつまみを板の後ろへも出した時、つまみ（半径 AXLE_D/2）が台に乗り上げる板の角（度）。当たらなければ None。
+    組み方の文で前へだけ出すと決めた理由を数で見せる（後ろへ出すと、押した角に届く前に当たる）。"""
+    _, m = assembly(p)
+    knob = _disc(m["input"], AXLE_D / 2)
+    return swing_hit(knob, m["pivot"], m["sign"], 90, [m["stand"]])
+
+
 def reach(p):
     """作る人に押させる・引かせる量。押す・引く形は止まる所までの量（travel を越えない）、ほかは travel。"""
     m = motion(p)
@@ -871,6 +882,9 @@ def bom(p):
     for q in parts(p):
         # 登る板は厚紙に貼って厚くする（噛む角の窓を広げるため・床が plate_t で見る）
         mat = f"{paper}を厚紙（厚さ {p['plate_t']:g}mm 前後）に貼った物" if q.key.endswith("bar") and kind in ("saru_take", "saru_sao") else paper
+        if kind == "karakuri" and q.key == "frame":
+            # 枠は四節の台（O と A の間 d）。紙 1 枚だと回すうちに曲がり d が保てないので、厚紙に貼る（要る厚さは実物で未確認）
+            mat = f"{paper}を厚紙（厚さ {FRAME_CARD_T:g}mm 前後）に貼った物"
         rows.append({"number": q.number, "key": q.key, "name": q.name, "qty": 1, "material": mat, "substituted": True,
                      "original_guess": f"不明（{origin}）", "reason": PAPER_WHY})
     n = 10
@@ -894,6 +908,11 @@ def bom(p):
     return rows
 
 
+def _needs_cutter(p):
+    """中を切り抜く所（溝・窓・門の口）か、目打ちであける穴のある部品があるか。あれば刃物の道具と「大人がする」を書く。"""
+    return any(q.cuts or q.holes for q in parts(p))
+
+
 def materials(p):
     by = {r["key"]: r for r in bom(p)}
     out = [f"紙（厚さ {p['paper_thickness']}mm 前後）を 1 枚", "のり、はさみ、定規、穴をあける目打ちか竹串",
@@ -902,7 +921,11 @@ def materials(p):
     if k in ("saru_take", "saru_sao"):
         # 登る板を貼る厚紙。部品表では板の行の素材に入るが、用意する物は 1 行目の紙だけを見ると漏れた（5 回目の見直し）
         out.append(f"厚紙（厚さ {p['plate_t']:g}mm 前後・菓子箱など）を、登る板が入る大きさ")
-        out.append("厚紙を切るカッターと下敷き（大人がする）")
+    if k == "karakuri":
+        out.append(f"厚紙（厚さ {FRAME_CARD_T:g}mm 前後・菓子箱など）を、門の枠と箱が入る大きさ")
+    if _needs_cutter(p):
+        # 中の溝・窓・門の口ははさみでは切り抜けず、厚紙の穴は目打ちが滑りやすい。どちらも大人が下敷きの上でする（6 回目の見直し）
+        out.append("カッターと下敷き（中の溝・窓・門の口を切り抜く、厚紙を切る、目打ちで穴をあけるのは大人が下敷きの上でする）")
     if k in ("karakuri", "hashigo", "saru_take", "saru_sao", "yakko"):
         out.append("竹串を切るニッパー（大人がする）と、切り口をならす紙やすり")
     for k in ("pole", "peg", "axle", "cord", "weight"):
@@ -919,7 +942,9 @@ def steps(p):
     k = p["kind"]
     go = reach(p) if k in ("sumo", "hashigo", "yakko") else p["travel"]
     short = go < p["travel"] - 0.05  # 止まる物や糸で travel まで届かない
-    out = ["刷った物差しに定規を当て、10cm か確かめる", "部品を実線で切る。中の溝と窓も切り抜き、丸い穴は目打ちであける"]
+    out = ["刷った物差しに定規を当て、10cm か確かめる", "部品の外の実線をはさみで切る"]
+    if _needs_cutter(p):
+        out.append("中の溝・窓・門の口は、大人がカッターを下敷きの上で定規に当てて切り抜く。丸い穴は、大人が下敷きの上で目打ちであける")
     if k in ("karakuri", "hashigo", "saru_take", "saru_sao", "yakko"):
         out.append(SKEWER_STEP)
     out += {
@@ -942,14 +967,17 @@ def steps(p):
         "ebako": ["2 絵の札を 1 枠の後ろに置き、枠の溝から札の左右の穴へ割ピンを通して留める",
                   "札の上の端の穴と下の端の穴に糸を結び、枠の上と下へ出す",
                   f"上の糸と下の糸を交互に引き、ピンの頭の真ん中が溝の横の 2 本の朱の印の間（{p['travel']:g}mm）を動くか、窓の中の絵が動くか見る"],
-        "karakuri": ["2 犬を梁の穴に割ピンで留める",
+        "karakuri": [f"1 門の枠と箱は、刷った面を上にして厚紙（{FRAME_CARD_T:g}mm 前後）に貼ってから切る（紙 1 枚だと回すうちに曲がり、"
+                     "犬のピンと水車の軸の間が保てない）", "2 犬を梁の穴に割ピンで留める",
                      "3 水車の真ん中の穴に竹串の軸を通して糊で留め、前に出た串は水車の面で切りそろえる（軸に割ピンの頭を出すと、"
                      "斜めの棒が 1 周のどこかで必ず当たる）。軸の後ろを箱の穴に通し、箱の裏に出た串に紙を巻いて抜け止めにする",
                      "4 斜めの棒の両端を、犬の尾の穴と、水車の真ん中から外れた穴（手）に割ピンで留める",
                      "水車の手のピンの頭に竹串のつまみを糊で付ける",
                      "門の枠を机に立て、箱の下の縁を机に付けたまま、左手で箱の左の端を押さえる（床は、箱が机に乗って動かないと見る）",
                      "右手でつまみを持って水車を回し、犬が首を振るか見る"],
-        "hashigo": ["2 梯子の板の下の方の穴を 1 台の穴に重ね、割ピンで留める", "板の上の方の穴に竹串のつまみを差し、糊で留める",
+        "hashigo": ["2 梯子の板を 1 台の前に重ね、板の下の方の穴を台の穴に合わせて割ピンで留める",
+                    "板の上の方の穴に竹串のつまみを差し、前へだけ出して糊で留める（板の裏は板の面で切りそろえる。後ろへ出すと、"
+                    "押すうちに台に乗り上げる）。板は台の前、つまみは前へだけ",
                     f"つまみを、板の下の 2 本の朱の印の間の長さ（{go:.0f}mm）だけ板に直角に押し上げ、板が傾いて下の端が机に当たるか見る"
                     + ("（下の端が机に当たって、そこで止まる）" if short else "")],
         "yakko": ["2 蹴る足を胴の腰に割ピンで留める", "竹串を胴の下の帯の裏に糊で貼る（先を腰の下まで）",
