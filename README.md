@@ -1,4 +1,4 @@
-# paperto3d — 紙で試すための型紙（papercraft）のエンジン
+# paper-to-toy — 紙で試すための型紙（papercraft）のエンジン
 
 型紙（papercraft）を作るエンジン。江戸の玩具を紙で試すために、寸法から型紙の PDF を作り、刷れる・組めるかを機械で検査する。**Built with Claude: Japan 2026（ハッカソン）で作っている。**
 
