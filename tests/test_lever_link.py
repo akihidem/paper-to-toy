@@ -175,7 +175,6 @@ assert any("許し" in f.message for f in fs), fs
 
 # 4 回目の見直し 6: 竿の人形は 1 本のピンで吊るので、板を傾ける腕はピンまでの drive_arm で、粘土の置き場では変わらない。印はピンの真下
 ss = {**P, "kind": "saru_sao"}
-assert t.motion(ss)["load_arm"] == P["drive_arm"]
 fig = t.parts(ss)[0]
 clay = next(it for it in fig.art if it.get("mark") == "clay")
 assert abs(clay["at"][0] - fig.holes[0][0]) < 1e-6 and clay["at"][1] > fig.holes[0][1]
@@ -191,4 +190,44 @@ for tr in range(2, 41, 2):
     slat = next(x for x in t.parts(q) if x.key == "slat")
     ticks = [it for it in slat.art if it.get("mark") == "travel"]
     assert max(it["at"][0] for it in ticks) + 0.4 <= slat.width - 0.3, (tr, ticks)
+
+# 5 回目の見直し 1: 持つ所は指先の大きさ（半径 FINGER_R の円）で見て、その大きさで刷る。棒が 1mm だけ印を避ける寸法も落ちる
+for da, w in ((40, 10), (38, 15)):
+    fs = t.check_physics({**P, "drive_arm": da, "bar_w": w})
+    assert any(f.where == "持つ所" for f in fs), (da, w, fs)
+assert t.check_physics(P) == []
+hold = next(it for q in t.parts(P) if q.key == "wrestlerb" for it in q.art if it.get("mark") == "hold")
+from shapely.geometry import Polygon as _Poly
+assert _Poly(hold["pts"]).area > 0.5 * math.pi * t.FINGER_R ** 2 * 0.5, _Poly(hold["pts"]).area  # 指先の円の半分ほど（足の外は切れる）
+
+# 5 回目の見直し 2: 梯子のつまみは 3mm の竹串なので、その穴は pin_d によらない
+for d in (2, 5):
+    slat = next(q for q in t.parts({**P, "kind": "hashigo", "pin_d": d}) if q.key == "slat")
+    assert abs(slat.holes[0][2] - (t.AXLE_D / 2 + 0.2)) < 1e-9, slat.holes
+assert "3mm" in next(r for r in t.bom({**P, "kind": "hashigo"}) if r["key"] == "peg")["material"]
+
+# 5 回目の見直し 3: からくり台は机に立てて箱を押さえる手順があり、水車と机の間に TABLE_CLEAR の余りを持つ
+st = t.steps({**P, "kind": "karakuri"})
+assert any("机に立て" in x and "押さえ" in x for x in st), st
+assert any("机" in f.message for f in t.check_physics({**P, "kind": "karakuri", "crank": 12}))
+
+# 5 回目の見直し 4: 用意する物に、登る板を貼る厚紙が厚さ付きで載る
+m = t.materials({**P, "kind": "saru_take"})
+assert any("厚紙" in x and f"{P['plate_t']:g}mm" in x for x in m), m
+
+# 5 回目の見直し 5: 竹串や厚紙を刃物で切る形は、道具・「大人がする」・ささくれと尖りの始末を言う
+for k in ("karakuri", "hashigo", "saru_take", "saru_sao", "yakko"):
+    q = {**P, "kind": k}
+    assert any("ニッパー" in x or "カッター" in x for x in t.materials(q)), k
+    assert any("大人がする" in x for x in t.steps(q)) and any("ささくれ" in x or "尖り" in x for x in t.steps(q)), k
+
+# 5 回目の見直し 6: 噛む角は、厚紙と貼った紙を足した厚さで見る。厚紙の耳は筋を付けて折る
+q = {**P, "kind": "saru_take"}
+teff = P["plate_t"] + P["paper_thickness"]
+assert abs(t.motion(q)["lock"] - t.lock_angle(P["hole_d"], P["pole_d"], teff)) < 1e-9
+assert any("筋" in x for x in t.steps(q))
+assert t.RANGES["plate_t"][1] <= 1.5
+
+# 5 回目の見直し 7: 床が使わない load_arm は持たない（粘土の置き場は、どちらの形でも板の傾きを変えない）
+assert "load_arm" not in t.motion({**P, "kind": "saru_take"}) and "load_arm" not in t.motion({**P, "kind": "saru_sao"})
 print("ok")
