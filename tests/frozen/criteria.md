@@ -9,7 +9,7 @@ exit code: 0 = 通る / 3 = 落ちる（検査の名前を出す）/ 4 = 検査�
 | ID | 見る事 | 負の対照（場面） | 期待 |
 |---|---|---|---|
 | F1.marks | 型紙の PDF から pdftotext で、所蔵（国立国会図書館デジタルコレクションと永続 ID）・改変・出典 ID・「仮説」が取り出せる | `neg_marks_all`・`neg_marks_source_id` | 3・F1.marks |
-| F1.source | 刷る形ごとに出典が違う雛形（SOURCES を持つ雛形）で、形と合わない出典を渡すと落とす。既定の出典も形から選ぶ | `tests/test_guards.py` の 10・`spinner_neg_source`・`whistle_neg_source`・`popup_jar_neg_source`・`slide_box_neg_source`・`wheel_cart_neg_source`・`balance_neg_source`・`twist_drum_neg_source`・`pull_nod_neg_source`・`lever_link_neg_source`・`float_neg_source`・`pull_nod_neg_source`・`lever_link_neg_source` | 3・F1.source |
+| F1.source | 刷る形ごとに出典が違う雛形（SOURCES を持つ雛形）で、形と合わない出典を渡すと落とす。既定の出典も形から選ぶ | `tests/test_guards.py` の 10・`spinner_neg_source`・`whistle_neg_source`・`popup_jar_neg_source`・`slide_box_neg_source`・`wheel_cart_neg_source`・`balance_neg_source`・`twist_drum_neg_source`・`pull_nod_neg_source`・`lever_link_neg_source`・`launcher_neg_source`・`float_neg_source`・`pull_nod_neg_source`・`lever_link_neg_source`・`launcher_neg_source` | 3・F1.source |
 | F2.bom | 部品表の素材が空でない。置き換えには元の素材（推定）と理由がある | `neg_bom_material`・`neg_bom_original` | 3・F2.bom |
 | F5.range | 寸法が雛形の範囲の中で、知らない名前が無い | `neg_range` | 3・F5.range |
 | F5.print_area | 全部品と全文字が印字域に収まる | `neg_print_area` | 3・F5.print_area |
@@ -69,6 +69,7 @@ F5.fan_height は、軸の形では「中心の高さ＋折りの高さ ≦ 押�
 | F5.float | 浮き人形（float）。乾舷（壁 − 喫水）5mm 以上、ふちが水に着く傾き 12° 以上、GM ＝ KB ＋ BM − KG が 3mm 以上（狭い向きの横揺れ）、角の糊代が壁 − 2 まで、葉が底に入る、人形の足の糊代（台形の角まで）が葉に入る、粘土の厚み（四隅の四角を合わせて底の内に切った実の面積から）8mm まで、四隅の粘土の四角が互いに・底から・葉と風受けに重ならない、風受けの足跡（外へ折る歯 4mm を含む）が底に入り葉に重ならない、風受けが壁の上に 5mm 以上出る | `float_neg`〜`neg3`・`float_neg_clay` | 3・F5.float |
 | F5.pull_nod | 引いて振れて戻る族（pull_nod）。戻るモーメント（質量の点ごとに腕 x cosθ − z sinθ、静かな時から振り切りまで）が軸の摩擦の 3 倍を超える。止め（臼・こぶ・苞）に当たるまで 15° 以上振れる（米搗きは頭が臼に当たり 80° 未満、顎は舌の角がこぶに届く）。穴の余白 4mm。藁苞の鶏は 2 羽がぶつからない | `pull_nod_neg`〜`neg9` | 3・F5.pull_nod |
 | F5.link | 腕木の連動（lever_link）。ピンの穴と溝の縁から紙の端まで 3mm。入力で出力が 15°（滑る物は 8mm）以上動き、その前に割ピンの頭・机・持つ所（指先の円・半径 8mm）に当たらない。届く量が travel の 0.8 倍に届かなければ落とし、届けば届く量で刷る。四節は Grashof と伝達角 30°、連桿は実際の穴の間で測り、1 周の間どの頭と机にも当たらない（机との間 2mm）。溝の長さ − 穴の直径 ≧ 動かす量。登る板の穴は噛む角の窓（厚さは厚紙と紙の和）に ±0.2mm の余りで入る | `lever_link_neg`〜`neg7` | 3・F5.link |
+| F5.launch | 飛ばす玩具（launcher）。ばねは刷った紙の腕だけで、k を寸法から硬い側の見込み（E 6GPa）で出し、½·k·x²（x は座の奥まで）が 30mJ 以下。止めの条件の下がりは切り上げて刷り、3mm 以上で読める。玉は紙だけで、0.1〜1.0g・先の太さ（芯の玉）15mm 以上・かさの密度 0.25g/cm³ 以下・物差しの穴に入る。穴・溝・引き金の切れ込みと縁の紙 3mm 以上。弦のたるみを取った後に、玉を押せる長さ 5mm 以上（動く床）。竹串は弦に押されない高さ。毛玉の糸 250mm まで | `launcher_neg`〜`neg3` | 3・F5.launch |
 
 `neg_fan_leg` の期待に F5.image_box を足した（2026-11-04・元の repo の v9 を写した時）。v9 で扇の板に色を塗るようになり、足の糊代が扇の本体に食い込む寸法では、糊代と糊代の折り線が本当に扇の絵にかかる。偽の失敗ではないので、2 つとも期待にした（F5.fan_leg が落ちる事は変わらない）。
 
