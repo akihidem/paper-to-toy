@@ -41,9 +41,9 @@ fs = t.check_physics({**Y, "arm_angle": 45, "arm_insert": 40})
 assert any(f.where.endswith("腕") for f in fs), fs
 # 台が低いと玉が机に当たる
 assert any(f.where == "台" for f in t.check_physics({**Y, "stand_h": 80}))
-# 表と裏は左右が逆で、重ねると外形がそろう
+# 裏は刷った面を内にして表の刷っていない面と貼るので、外形は表と同じ向き（鏡にしない）
 front, back = (q for q in t.parts(Y) if q.key in ("front", "back"))
-assert sorted((round(Y["body_w"] - x, 6), round(y, 6)) for x, y in back.outline) == sorted((round(x, 6), round(y, 6)) for x, y in front.outline)
+assert back.outline == front.outline
 
 # --- 起き上がり小法師
 # 粘土の欠けの体積は重さと合い、重心は欠けの中（底から欠けの高さの間）
@@ -69,6 +69,33 @@ assert any(f.where == "円錐" for f in t.check_physics({**O, "cone_h": 20}))
 assert abs(2 * t.gore_half_width(O, 0) * O["gores"] - 2 * math.pi * R) < 1e-9 and abs(t.gore_half_width(O, math.pi * R / 2)) < 1e-9
 
 # 形ごとの部品は部品表と合い、鍵が重ならない
-assert {q.key for q in t.parts(Y)} == {"front", "back", "tip"} and {q.key for q in t.parts(O)} == {"shell", "dome"}
+assert {q.key for q in t.parts(Y)} == {"front", "back", "tip", "gauge"} and {q.key for q in t.parts(O)} == {"shell", "dome"}
 assert {r["key"] for r in t.bom(Y)} >= {"arm", "ball", "stand"} and "weight" in {r["key"] for r in t.bom(O)}
+# 置く位置に頼る床（腕の差し込み・玉の位置・底の粘土）は、型紙に印を刷り、組み方の文に位置を書く
+from omochae.compose import compose
+from omochae.__main__ import load_source
+back = next(q for q in t.parts(Y) if q.key == "back")
+tx, ty = t._yk(Y, [t._TIP])[0]
+guides = [it for it in back.art if it.get("role") == "arm"]
+assert len(guides) == 2, "裏に腕の竹串を置く線が 2 本"
+for g, (inner, sh, _) in zip(guides, t.arm_geometry(Y)):
+    (x0, y0), (x1, y1) = g["pts"][0], g["pts"][-1]
+    assert abs(x0 - (inner[0] + tx)) < 1e-6 and abs(y0 - (inner[1] + ty)) < 1e-6  # 差し込みの奥の端
+    assert math.hypot(x1 - (sh[0] + tx), y1 - (sh[1] + ty)) < 1.5  # 肩の角の手前まで
+gauge = next(q for q in t.parts(Y) if q.key == "gauge")
+assert abs(gauge.width - (Y["arm_insert"] + Y["arm_length"])) < 1e-9
+marks = sorted(round(it["at"], 6) for it in gauge.art if "at" in it)
+assert marks == [Y["arm_insert"], Y["arm_insert"] + Y["arm_length"]], marks
+st = " ".join(t.steps(Y))
+assert f"{Y['arm_insert']}mm" in st and f"{Y['arm_length']}mm" in st and "4 腕の物差し" in st
+dome = next(q for q in t.parts(O) if q.key == "dome")
+clay = [it for it in dome.art if it.get("role") == "clay"]
+assert len(clay) == O["gores"], "切れごとに粘土の高さの線"
+arc = R * math.acos(1 - t.clay_cap(O)[0] / R)  # 底の極から線までの、切れの上の長さ
+assert all(abs(c["pts"][0][1] - (O["band"] + math.pi * R / 2 - arc)) < 1e-6 for c in clay)
+assert f"{t.clay_cap(O)[0]:.0f}mm" in " ".join(t.steps(O))
+# 形ごとの出典: 既定でない形に既定の形の出典を渡すと F1.source で落ちる
+assert t.SOURCES == {"yajirobe": t.SOURCE, "okiagari": "NDL-1187053-R0000026-L-balance"}
+_, _, fs = compose("balance", O, load_source(t.SOURCE))
+assert [f.floor for f in fs] == ["F1.source"], fs
 print("ok")
