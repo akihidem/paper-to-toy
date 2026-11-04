@@ -108,7 +108,7 @@ PYTHONPATH=src .venv/bin/python -m omochae.foldsim --scenario examples/fan_tab.j
 # → out/foldsim/slider_fan_tube_foldsim.svg ・ _pusher_ ・ _base_ ・ _fan_（部品ごとに 1 つ）
 ```
 
-書いた SVG を Origami Simulator の「File → Import」で開く。線の色は Origami Simulator の約束に合わせた（外形 黒 `#000000`・山折り 赤 `#ff0000`・谷折り 青 `#0000ff`）。線の濃さは付けないので、どの折りも折り切った角度（180°）として扱われる。紙の厚みと摩擦は模擬しないので、実物の動きとは違う。部品を選ぶ時は `--parts fan,tube`。
+書いた SVG を Origami Simulator の「File → Import」で開く。線の色は Origami Simulator の約束に合わせた（外形と中を切り抜く穴 黒 `#000000`・山折り 赤 `#ff0000`・谷折り 青 `#0000ff`）。検査に落ちた時と、書き出した時は、前の回の同じ頭の SVG を残さない（`--parts` で部品を減らした回は、その部品だけになる）。線の濃さは付けないので、どの折りも折り切った角度（180°）として扱われる。紙の厚みと摩擦は模擬しないので、実物の動きとは違う。部品を選ぶ時は `--parts fan,tube`。
 
 ## 終了の番号
 

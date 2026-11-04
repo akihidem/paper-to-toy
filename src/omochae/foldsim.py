@@ -11,7 +11,9 @@
 """
 import argparse
 import pathlib
+import shutil
 import sys
+import tempfile
 
 from .__main__ import Parser, load_source, scenario_from_args
 from .compose import TEMPLATES, compose
@@ -30,6 +32,12 @@ def part_svg(part):
     pts = part.outline + part.outline[:1]
     for (a, b), (c, d) in zip(pts, pts[1:]):
         lines.append((a, b, c, d, COLORS["outline"]))
+    # 中を切り抜く穴（cuts の矩形）も黒の外形の線で書く。Origami Simulator は黒を「外形と中の穴」と読む（2026-11-04 に
+    # origamisimulator.org の説明で確かめた。緑は細い切れ目なので穴には使わない）。書かないと、穴の無い紙として折れて形も硬さも違う。
+    for x, y, cw, ch in part.cuts:
+        corners = [(x, y), (x + cw, y), (x + cw, y + ch), (x, y + ch), (x, y)]
+        for (a, b), (c, d) in zip(corners, corners[1:]):
+            lines.append((a, b, c, d, COLORS["outline"]))
     for kind in ("mountain", "valley"):
         for (a, b), (c, d) in getattr(part, kind):
             lines.append((a, b, c, d, COLORS[kind]))
@@ -39,24 +47,40 @@ def part_svg(part):
             f"{body}</svg>\n")
 
 
-def export(template_id, params, source, out_dir, name=None, parts=None):
+def export(template_id, params, source, out_dir, name=None, parts=None, title=None, inject=None):
     """雛形と寸法から部品を作り、検査を通ったら、折りのある部品を 1 つずつ SVG にする。Returns (書いたファイル, 検査の失敗)。
 
-    parts は書き出す部品の key の組（None なら折りのある部品を全部）。name はファイル名の頭（既定は雛形の名前）。
+    parts は書き出す部品の key の組（None なら折りのある部品を全部。知らない key は ValueError）。name はファイル名の頭
+    （既定は雛形の名前）。title と inject は場面の物で、python -m omochae と同じ検査にするために compose へ渡す。
+    前の回の同じ頭の SVG（<頭>_*_foldsim.svg）は、検査に落ちた時も書き出した時も残さない（部品を減らした回と混ざらないように）。
+    書き出しは仮の置き場で作り、全部書けてから移す。途中で止まった時は前の回の物に触らない。
     """
-    _, layout, failures = compose(template_id, params, source)
-    if failures:
-        return [], failures
+    _, layout, failures = compose(template_id, params, source, title=title, inject=inject or {})
     out = pathlib.Path(out_dir)
-    out.mkdir(parents=True, exist_ok=True)
     head = name or template_id
-    written = []
-    # 検査を通った配置の部品を使う（型紙に刷る物と同じ部品）。部品の座標は部品の左上が原点なので、頁の上の置き場は関わらない。
-    for q in layout["parts"]:
-        if (parts is None or q.key in parts) and (q.valley or q.mountain):
-            f = out / f"{head}_{q.key}_foldsim.svg"
-            f.write_text(part_svg(q), encoding="utf-8")
-            written.append(f)
+    old = lambda: list(out.glob(f"{head}_*_foldsim.svg")) if out.exists() else []
+    if failures:
+        for f in old():
+            f.unlink()
+        return [], failures
+    keys = {q.key for q in layout["parts"]}
+    if parts is not None and not set(parts) <= keys:
+        raise ValueError(f"知らない部品: {'・'.join(sorted(set(parts) - keys))}（この雛形の部品は {'・'.join(sorted(keys))}）")
+    out.mkdir(parents=True, exist_ok=True)
+    work = pathlib.Path(tempfile.mkdtemp(prefix=".foldsim-", dir=out))
+    try:
+        made = []
+        # 検査を通った配置の部品を使う（型紙に刷る物と同じ部品）。部品の座標は部品の左上が原点なので、頁の上の置き場は関わらない。
+        for q in layout["parts"]:
+            if (parts is None or q.key in parts) and (q.valley or q.mountain):
+                f = work / f"{head}_{q.key}_foldsim.svg"
+                f.write_text(part_svg(q), encoding="utf-8")
+                made.append(f)
+        for f in old():
+            f.unlink()
+        written = [f.replace(out / f.name) for f in made]
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
     return written, []
 
 
@@ -76,8 +100,9 @@ def main(argv=None):
         if sc["template"] not in TEMPLATES:
             raise ToolMissing(f"知らない雛形: {sc['template']}")
         parts = set(args.parts.split(",")) if args.parts else None
-        written, failures = export(sc["template"], sc["params"], load_source(sc["source_id"]), args.out, args.name, parts)
-    except ToolMissing as e:
+        written, failures = export(sc["template"], sc["params"], load_source(sc["source_id"]), args.out, args.name, parts,
+                                   sc.get("title"), sc.get("inject"))
+    except (ToolMissing, ValueError) as e:
         print(f"書き出せない: {e}", file=sys.stderr)
         return 4
     except Exception as e:  # 想定外は「書き出した」にも「落ちた」にも数えない。

@@ -25,7 +25,8 @@ def check(out, tpl, params, head):
         key = f.name[len(head) + 1:-len("_foldsim.svg")]
         q, svg = by_key[key], f.read_text(encoding="utf-8")
         assert svg.count("#ff0000") == len(q.mountain) and svg.count("#0000ff") == len(q.valley), key
-        assert svg.count("#000000") == len(q.outline), key
+        # 黒は外形の辺と、中を切り抜く穴の矩形の 4 辺（Origami Simulator は黒を外形と中の穴と読む）
+        assert svg.count("#000000") == len(q.outline) + 4 * len(q.cuts), key
     return sorted(f.name for f in out)
 
 
@@ -43,10 +44,27 @@ assert check(out, pivot_counterweight, neck, "tiger") == ["tiger_body_foldsim.sv
 out, _ = export("slider_fan", tab, load_source(slider_fan.SOURCE), tempfile.mkdtemp(), parts={"fan"})
 assert [f.name for f in out] == ["slider_fan_fan_foldsim.svg"]
 
-# 3. 検査に落ちる寸法は書き出さない
+# 虎の首の形の胴は、前の壁の穴（cuts）を黒で書く
+assert pivot_counterweight.parts({**pivot_counterweight.DEFAULTS, **neck})[0].cuts
+
+# 3. 検査に落ちる寸法は書き出さず、前の回の同じ頭の SVG も残さない。部品を減らした回は、減らした分だけになる
 d = tempfile.mkdtemp()
-out, failures = export("slider_fan", {"push_part": "tab", "fold_height": 50}, load_source(slider_fan.SOURCE), d)
+src = load_source(slider_fan.SOURCE)
+assert len(export("slider_fan", tab, src, d)[0]) == 4
+out, failures = export("slider_fan", {"push_part": "tab", "fold_height": 50}, src, d)
 assert out == [] and [f.floor for f in failures] == ["F5.fan_height"] and not any(pathlib.Path(d).iterdir())
+export("slider_fan", tab, src, d)
+assert [f.name for f in export("slider_fan", tab, src, d, parts={"fan"})[0]] == ["slider_fan_fan_foldsim.svg"]
+assert sorted(p.name for p in pathlib.Path(d).iterdir()) == ["slider_fan_fan_foldsim.svg"]
+# 場面の inject も検査に渡す（python -m omochae と同じ判定）
+_, failures = export("slider_fan", {}, src, tempfile.mkdtemp(), inject={"move_part": {"name": "base", "x": 10, "y": 60}})
+assert "F5.overlap" in [f.floor for f in failures]
+# 知らない部品の key は落とす
+try:
+    export("slider_fan", tab, src, tempfile.mkdtemp(), parts={"fan", "fna"})
+    raise AssertionError("知らない部品を通した")
+except ValueError as e:
+    assert "fna" in str(e)
 
 # 4. 入口（python -m omochae.foldsim）の終了の番号: 0 書き出した / 3 検査に落ちた / 4 書き出せない
 with tempfile.TemporaryDirectory() as d:
@@ -63,5 +81,9 @@ with tempfile.TemporaryDirectory() as d:
     r = cli("--template", "pivot_counterweight", "--params", str(noform))
     assert r.returncode == 4 and "mount が要る" in r.stderr, r.stderr
     r = cli("--scenario", str(ROOT / "examples/fan_tab.json"), "--parts", "nothing")
+    assert r.returncode == 4 and "知らない部品" in r.stderr, r.stderr
+    r = cli("--scenario", str(ROOT / "examples/fan_tab.json"), "--parts", "figure")
     assert r.returncode == 4 and "折りのある部品が無い" in r.stderr, r.stderr
+    r = cli("--scenario", str(ROOT / "tests/frozen/scenarios/neg_overlap.json"))
+    assert r.returncode == 3 and "F5.overlap" in r.stderr, r.stderr
 print("ok")
