@@ -20,10 +20,12 @@ A papercraft template engine: generates printable PDF patterns from dimensions a
 
 雛形は 2 つ。
 
-| 雛形 | 玩具 | 仕組み |
-|---|---|---|
-| `slider_fan` | 御来迎 | 角筒の中で動く台に蛇腹の扇と像を載せ、押し上げると開く。押し方（つまみ・内筒・棒）と扇の中心の置き方（軸・台）を描き分ける |
-| `pivot_counterweight` | 張子の首振り虎 | 箱の胴に軸を通し、重りで頭を揺らす。頭の支え方（吊る・首）を描き分ける |
+| 雛形 | 玩具 | 仕組み | 刷る形の寸法（必ず書く） |
+|---|---|---|---|
+| `slider_fan` | 御来迎 | 角筒の中で動く台に蛇腹の扇と像を載せ、押し上げると開く。扇の中心の置き方も描き分ける（`hub`: `axle` 軸・`rim` 口の台。既定 `axle`） | `push_part`: `tab` つまみ・`tube` 内筒・`stick` 棒 |
+| `pivot_counterweight` | 張子の首振り虎 | 箱の胴に軸を通し、重りで頭を揺らす | `mount`: `neck` 首・`hang` 吊る |
+
+刷る形の寸法は仮説の違いそのもの（どれが昔の作り方かは分からない）なので、既定の値に頼らず必ず書く。
 
 どの寸法も計算と検査で出した値です。検査は「刷れる・形の上で組める」事を見る物で、紙で動く事の保証や、昔の作り方の証明ではありません。
 
@@ -55,6 +57,15 @@ PYTHONPATH=src .venv/bin/python -m omochae --scenario examples/fan_tab.json --ou
   "inject": {}
 }
 ```
+
+寸法の JSON を直に渡す時は `--params`（`--template` で雛形を選ぶ。出典は雛形ごとに既定がある）:
+
+```bash
+echo '{"mount": "hang", "axle_height": 50}' > tiger.json
+PYTHONPATH=src .venv/bin/python -m omochae --template pivot_counterweight --params tiger.json --out out/tiger
+```
+
+引数の説明は `python -m omochae --help`。
 
 `params` に書かなかった寸法は雛形の既定値（`DEFAULTS`）を使う。変えてよい名前と範囲は雛形の `RANGES`。`source_id` は `data/sources/` の出典の記録の名前で、型紙に刷る所蔵と改変の印をここから取る。
 

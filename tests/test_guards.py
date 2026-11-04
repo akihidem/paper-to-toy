@@ -145,4 +145,23 @@ for form in ({"push_part": "tab"}, {"push_part": "stick", "pusher_height": 84}, 
 _, layout, _ = compose("slider_fan", {"hub": "rim", "push_amount": 36, "pusher_height": 40, "fold_count": 14, "fold_width": 8, "fold_height": 36}, source)
 assert next(q for q in layout["parts"] if q.key == "fan").print_folds == []
 
+# 7. 寸法を直に渡す入口（--params）: 雛形ごとの刷る形の寸法を求め、御来迎も虎も刷れる。出典と出力の名前は雛形ごとの既定
+def params_run(d, template, params, out=None):
+    f = pathlib.Path(d) / f"{template}.json"
+    f.write_text(json.dumps(params), encoding="utf-8")
+    cmd = [PY, "-m", "omochae", "--template", template, "--params", str(f)] + (["--out", str(out)] if out else [])
+    return subprocess.run(cmd, cwd=d, env=ENV, capture_output=True, text=True)
+
+with tempfile.TemporaryDirectory() as d:
+    # 出典を書かない時は雛形の既定の出典を使う。ROOT の data/sources から読むので、cwd は repo の外でよい
+    r = params_run(d, "pivot_counterweight", {"mount": "hang", "axle_height": 50})
+    assert r.returncode == 0, r.stderr
+    assert (pathlib.Path(d) / "out/templates/pivot_counterweight_v1.pdf").exists()
+    assert params_run(d, "slider_fan", {"push_part": "stick", "pusher_height": 84}, pathlib.Path(d) / "s").returncode == 0
+    r = params_run(d, "pivot_counterweight", {"axle_height": 50})
+    assert r.returncode == 4 and "mount が要る" in r.stderr, r.stderr
+    r = params_run(d, "slider_fan", {"fold_count": 20})
+    assert r.returncode == 4 and "push_part が要る" in r.stderr, r.stderr
+    assert "omochae.hypotheses" not in r.stderr  # この repo に無い道具を案内しない
+
 print("ok")

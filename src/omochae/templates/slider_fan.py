@@ -42,6 +42,8 @@ RANGES = {
     "fan_length": (50, 300),
 }
 PUSH_PARTS = ("tab", "tube", "stick")
+# 刷る形を決める寸法（押し方）。仮説の違いそのものなので、寸法を直に渡す入口（python -m omochae --params）では既定に頼らず必ず書かせる。
+FORM = "push_part"
 HUBS = ("axle", "rim")
 # 開く糸を扇の中心からこの距離につなぐ。途中で突っ張らない糸が一番短く、よく開く位置。糸の長さはこの距離から fan_model.shortest_free_thread で出す。
 THREAD_RADIUS = 35

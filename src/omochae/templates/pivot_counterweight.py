@@ -30,6 +30,8 @@ RANGES = {
     "paper_gsm": (40, 400),
 }
 MOUNTS = ("neck", "hang")
+# 刷る形を決める寸法（頭の支え方）。仮説の違いそのものなので、寸法を直に渡す入口（python -m omochae --params）では既定に頼らず必ず書かせる。
+FORM = "mount"
 HOLE_MARGIN = 4  # 穴から紙の端までの見込み。これより狭いと裂けやすい
 MIN_SWING = 10
 MAX_TILT = 15

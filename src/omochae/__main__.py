@@ -9,11 +9,13 @@ import shutil
 import sys
 import tempfile
 
-from .compose import compose
+from .compose import TEMPLATES, compose
 from .marks import check_image_count, check_pdf
 from .model import ToolMissing
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+# 雛形ごとの既定の出典。--source を書かない時に、雛形と合わない出典の印を刷らないため。
+DEFAULT_SOURCE = {"slider_fan": "NDL-1187053-R0000005-L", "pivot_counterweight": "NDL-1187053-R0000014-R"}
 
 
 class Parser(argparse.ArgumentParser):
@@ -76,23 +78,27 @@ def run(args):
     if args.scenario:
         sc = json.loads(pathlib.Path(args.scenario).read_text(encoding="utf-8"))
     else:
-        # 使い手の入口は omochae.hypotheses。ここは寸法を直接試す開発用で、押し方を必ず指定させる（既定の答えを作らない）。
+        # 寸法を直に渡す入口。刷る形を決める寸法（雛形の FORM）は仮説の違いそのものなので、必ず書かせる（既定の答えを作らない）。
+        if args.template not in TEMPLATES:
+            raise ToolMissing(f"知らない雛形: {args.template}（{'・'.join(TEMPLATES)} のどれか）")
+        tpl = TEMPLATES[args.template]
         params = json.loads(pathlib.Path(args.params).read_text(encoding="utf-8")) if args.params else {}
-        if "push_part" not in params:
-            raise ToolMissing("寸法の JSON に push_part が要る。仮説から刷るなら python -m omochae.hypotheses print")
-        sc = {"template": args.template, "source_id": args.source, "params": params, "inject": {}}
-    return generate(sc["template"], sc["params"], sc["source_id"], args.out, args.page, args.version, sc.get("title"), sc["inject"])
+        if tpl.FORM not in params:
+            raise ToolMissing(f"寸法の JSON に {tpl.FORM} が要る（雛形 {args.template} の刷る形。{tpl.FORM} の値は README の「雛形」の表）")
+        sc = {"template": args.template, "source_id": args.source or DEFAULT_SOURCE[args.template], "params": params, "inject": {}}
+    out = args.out or f"out/templates/{sc['template']}_v{args.version}"
+    return generate(sc["template"], sc["params"], sc["source_id"], out, args.page, args.version, sc.get("title"), sc["inject"])
 
 
 def main():
-    ap = Parser(prog="omochae")
-    ap.add_argument("--scenario")
-    ap.add_argument("--template", default="slider_fan")
-    ap.add_argument("--source", default="NDL-1187053-R0000005-L")
-    ap.add_argument("--params")
-    ap.add_argument("--page", default="A4", choices=["A4", "B4"])
-    ap.add_argument("--version", type=int, default=1)
-    ap.add_argument("--out", default="out/templates/slider_fan_v1")
+    ap = Parser(prog="omochae", description="寸法から型紙の SVG・PDF・PNG を作り、描く前と刷った後に検査する。終了: 0 通る / 3 落ちる / 4 検査できない")
+    ap.add_argument("--scenario", help="場面の JSON（template・source_id・params・inject）。examples/ と tests/frozen/scenarios/ の形。渡すと --template・--source・--params は使わない")
+    ap.add_argument("--template", default="slider_fan", choices=sorted(TEMPLATES), help="雛形（既定 slider_fan）")
+    ap.add_argument("--source", help="data/sources/ の出典の記録の名前（既定は雛形ごと: slider_fan は御来迎、pivot_counterweight は張子の首振り虎）")
+    ap.add_argument("--params", help="寸法の JSON。雛形の刷る形の寸法（slider_fan は push_part、pivot_counterweight は mount）が要る。書かない寸法は雛形の既定値")
+    ap.add_argument("--page", default="A4", choices=["A4", "B4"], help="紙の大きさ（既定 A4）")
+    ap.add_argument("--version", type=int, default=1, help="題に刷る版の番号（既定 1）")
+    ap.add_argument("--out", help="出力の名前（拡張子なし）。既定は out/templates/<雛形>_v<版>")
     args = ap.parse_args()
     try:
         return run(args)
