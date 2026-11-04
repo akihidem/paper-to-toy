@@ -16,7 +16,12 @@ Claude が変えてよいのは RANGES の名前の値だけ。
 - 軸の摩擦のモーメントは 摩擦係数 MU × 全質量 × 軸の半径。竹串と紙の MU は見込み（量っていない）。
 - 振れる角度は、止めに当たるまでの幾何だけで出す（bow は頭が臼の上に当たるまで、jaw は舌がこぶに当たるまで、
   peck は鶏の輪郭の頂点のどれかが苞の上の面に届くまで。辺の途中が先に当たる事は見ていない＝頂点で近似）。
-- peck の鶏の紙は 1 枚（裏は無地）。2 羽は同じ形で、手前の鶏は HEN 倍に縮める。重り（weight_g）は 1 羽ずつに付ける。
+- peck の鶏の紙は 1 枚（裏は無地）。手前の鶏は奥の鶏の輪郭（幅・高さ・腹の高さ）をそのまま HEN 倍にした形。脚の帯の幅と長さ・軸の深さは、
+  苞の溝と穴の余白で決まるので縮めない。重り（weight_g）は 1 羽ずつに付ける。
+- 傾いた後の戻るモーメントは、質量の点 (質量, 戻る向きの水平の距離 x, 軸からの高さ z) を軸のまわりに回して測る:
+  θ 引いた時の腕は x cosθ − z sinθ（引く向きに傾くと、軸より上の点は引く側へ出る）。0〜振り切りの間を 1° ごとに見て最小を取る。
+  bow と jaw は質量の点を軸の高さ（z = 0）に置く（体・顎の紙の中心線の上に軸と粘土がある）ので、cos 倍と同じになる。
+  peck の鶏は粘土と紙の重心が軸より上にあるので、この項が効く（前は cos 倍だけで見ていて、振り切った所で前へ倒れる既定を通していた）。
 """
 import math
 
@@ -68,6 +73,8 @@ CLAY_IN = 3  # 粘土の中心を紙の端からこれだけ内側に付ける
 # 竹串の抜け止め・鶏の位置決めに串へ付ける粘土（1 本の串あたり、見込み）。重り（weight_g）とは別に用意する。
 # 同じ粘土から取ると、振れる部品に付く量が式の weight_g より減るため（部品表でも別の行にする）。軸の上に付くので戻るモーメントは 0、摩擦の質量にだけ入れる。
 STOP_CLAY_G = 0.3
+# 竹串の長さの見込み: 串が通る紙の厚さと、両端に抜け止めの粘土を付ける分。
+PAPER_T, STOP_END = 0.15, 5
 BUMP_FACE, BUMP_GLUE = 8, 5  # こぶの三角の柱の 1 面の幅と、柱を閉じる糊代の幅
 WOOD, LINE, SKIN, CLOTH, ROUGE = "#c9b48a", "#3c3424", "#d9c2a0", "#6b4a2e", "#c9826b"
 GOLD, FACE, MOUTH, STICK = "#c8a845", "#d4b49a", "#9a4a3a", "#cdb066"
@@ -103,8 +110,20 @@ def paper_mass(area_mm2, gsm):
     return area_mm2 * 1e-6 * gsm
 
 
+def moment_at(pts, deg):
+    """質量の点 [(質量 g, x, z)] を軸のまわりに deg 度回した時の戻る向きのモーメント（g·mm）。腕は x cosθ − z sinθ。"""
+    t = math.radians(deg)
+    return sum(m * (x * math.cos(t) - z * math.sin(t)) for m, x, z in pts)
+
+
+def min_moment(pts, sw):
+    """0° から振り切り（sw）までの戻るモーメントの最小。1° ごとと振り切りの所で見る（腕は角度の sin・cos の和なので、端か途中で最小）。"""
+    angles = [a for a in range(0, int(sw) + 1)] + [sw]
+    return min(moment_at(pts, a) for a in angles)
+
+
 def lever(p):
-    """振れる部品の質量の点 [(質量 g, 戻る向きに正の水平の距離 mm)] と、糸の腕（mm）。
+    """振れる部品の質量の点 [(質量 g, 戻る向きに正の水平の距離 mm, 軸からの高さ mm)] と、糸の腕（mm）。高さは bow・jaw とも 0。
 
     bow は体の紙（2 枚重ね）と尾の粘土。紙の重心は体の中央で、軸より前（礼の向き）に (torso_len - tail_len)/2。
     jaw は顎の紙（1 枚）と顎の先の粘土。戻る向き（口が開く向き）は前。
@@ -112,10 +131,10 @@ def lever(p):
     g = p["paper_gsm"]
     if p["kind"] == "bow":
         card = paper_mass(2 * p["torso_w"] * (p["torso_len"] + p["tail_len"]), g)
-        pts = [(card, -(p["torso_len"] - p["tail_len"]) / 2), (p["weight_g"], p["tail_len"] - CLAY_IN)]
+        pts = [(card, -(p["torso_len"] - p["tail_len"]) / 2, 0), (p["weight_g"], p["tail_len"] - CLAY_IN, 0)]
         return pts, p["string_arm"]
     card = paper_mass(p["jaw_h"] * (p["jaw_len"] + p["tab_len"]), g)
-    pts = [(card, (p["jaw_len"] - p["tab_len"]) / 2), (p["weight_g"], p["jaw_len"] - CLAY_IN)]
+    pts = [(card, (p["jaw_len"] - p["tab_len"]) / 2, 0), (p["weight_g"], p["jaw_len"] - CLAY_IN, 0)]
     return pts, jaw_string_arm(p)
 
 
@@ -127,9 +146,9 @@ def jaw_string_arm(p):
 def return_moment(p):
     """静かな時の戻る向きのモーメント（g·mm）と、軸の摩擦のモーメント（g·mm）。"""
     pts, _ = lever(p)
-    m = sum(w * x for w, x in pts)
-    extra = STOP_CLAY_G if p["kind"] == "jaw" else 0.0
-    friction = MU * (sum(w for w, _ in pts) + extra) * AXLE_R
+    m = moment_at(pts, 0)
+    # 抜け止めの粘土は軸の上に付くので、腕は 0 で摩擦の質量にだけ入る。
+    friction = MU * (sum(w for w, _, _ in pts) + STOP_CLAY_G) * AXLE_R
     return m, friction
 
 
@@ -199,7 +218,7 @@ def check_physics(p):
     # 1. 戻る力が静かな時に勝つ。負なら止めから離れて倒れたまま、摩擦より小さければ引いた後に戻らない。
     if m <= SAFETY * friction:
         out.append(Failure("F5.pull_nod", what, f"戻るモーメント {m:.1f}g·mm が摩擦 {friction:.1f}g·mm の {SAFETY} 倍以下で、離しても戻らない"))
-    elif sw is not None and m * math.cos(math.radians(sw)) <= SAFETY * friction:
+    elif sw is not None and min_moment(lever(p)[0], sw) <= SAFETY * friction:
         out.append(Failure("F5.pull_nod", what, f"{sw:.0f}° 振り切った所で戻るモーメントが摩擦の {SAFETY} 倍以下になる"))
     # 2. 引いた時に止めに当たるまで MIN_SWING 以上振れる。
     if sw is not None and sw < MIN_SWING:
@@ -229,7 +248,8 @@ _BIRD = [(0.0, 0.12), (0.05, 0.09), (0.06, 0.0), (0.2, 0.0), (0.24, 0.06), (0.2,
          (0.4, 0.74), (0.22, 0.62), (0.12, 0.42), (0.06, 0.24), (0.02, 0.18)]
 _COMB = [(0.06, 0.0), (0.2, 0.0), (0.24, 0.06), (0.2, 0.1), (0.07, 0.08)]
 _FEATHERS = [[(0.5, 0.5), (0.7, 0.62)], [(0.62, 0.48), (0.85, 0.7)], [(0.8, 0.4), (0.92, 0.62)], [(0.78, 0.56), (0.86, 0.9)], [(0.3, 0.45), (0.45, 0.6)]]
-BELLY_V, CLAY_UV = 0.74, (0.86, 0.5)
+# 粘土は尾の先の近く（苞の上の面のすぐ上）に付ける。軸より高い所に付けると、ついばんで前へ傾いた時に腕が縮んで負になり、前へ倒れる。
+BELLY_V, CLAY_UV = 0.74, (0.82, 0.92)
 
 
 def _bird_y(v, H, leg):
@@ -243,7 +263,7 @@ def _bird_y(v, H, leg):
 def bird(p, which):
     """鶏 1 羽の紙の形と、軸・糸・粘土の位置（紙の座標。苞の上の面は y = H）。"""
     k = 1.0 if which == "cock" else HEN
-    w, H, leg, d = p["cock_w"] * k, p["cock_h"] * k, p["leg_h"], p["axle_depth"]
+    w, H, leg, d = p["cock_w"] * k, p["cock_h"] * k, p["leg_h"] * k, p["axle_depth"]
     uv = lambda ps: [(u * w, _bird_y(v, H, leg)) for u, v in ps]
     body = Polygon(uv(_BIRD))
     xp = 0.5 * w
@@ -260,14 +280,19 @@ def bird(p, which):
     return {"w": w, "H": H, "d": d, "body": body, "outline": outline, "pivot": (xp, H + d), "string": (sx, sy), "clay": clay, "k": k}
 
 
-def bird_moment(p, which):
-    """鶏 1 羽の戻るモーメント（後ろ向きが正、g·mm）と軸の摩擦（g·mm）。紙の重心は輪郭の重心。"""
+def bird_points(p, which):
+    """鶏 1 羽の質量の点 [(質量 g, 後ろ向きに正の水平の距離 x, 軸からの高さ z)]。粘土と紙（重心は輪郭の重心）。"""
     b = bird(p, which)
     shape = Polygon(b["outline"])
+    xp, zp = b["pivot"]
     card = paper_mass(shape.area, p["paper_gsm"])
-    xp = b["pivot"][0]
-    m = p["weight_g"] * (b["clay"][0] - xp) + card * (shape.centroid.x - xp)
-    return m, MU * (card + p["weight_g"] + STOP_CLAY_G) * AXLE_R
+    return [(p["weight_g"], b["clay"][0] - xp, zp - b["clay"][1]), (card, shape.centroid.x - xp, zp - shape.centroid.y)]
+
+
+def bird_moment(p, which):
+    """鶏 1 羽の静かな時の戻るモーメント（g·mm）と軸の摩擦（g·mm）。"""
+    pts = bird_points(p, which)
+    return moment_at(pts, 0), MU * (sum(m for m, _, _ in pts) + STOP_CLAY_G) * AXLE_R
 
 
 def bird_swing(p, which):
@@ -294,8 +319,9 @@ def _check_peck(p):
         sw = bird_swing(p, which)
         if m <= SAFETY * friction:
             out.append(Failure("F5.pull_nod", f"{name}の尾の粘土", f"戻るモーメント {m:.1f}g·mm が摩擦 {friction:.1f}g·mm の {SAFETY} 倍以下で、離しても戻らない"))
-        elif m * math.cos(math.radians(sw)) <= SAFETY * friction:
-            out.append(Failure("F5.pull_nod", f"{name}の尾の粘土", f"{sw:.0f}° 傾いた所で戻るモーメントが摩擦の {SAFETY} 倍以下になる"))
+        elif min_moment(bird_points(p, which), sw) <= SAFETY * friction:
+            low = min_moment(bird_points(p, which), sw)
+            out.append(Failure("F5.pull_nod", f"{name}の尾の粘土", f"{sw:.0f}° 傾くまでに戻るモーメントが {low:.1f}g·mm になり、摩擦の {SAFETY} 倍以下（前へ倒れる）"))
         if sw < MIN_SWING:
             out.append(Failure("F5.pull_nod", name, f"苞に当たるまで {sw:.1f}° しか傾かない（{MIN_SWING}° 要る）"))
     for name, (x, y), gap in hole_margins(parts(p)):
@@ -324,7 +350,7 @@ def _slots(p):
 
 def _bird_part(p, which, number, key, name):
     b = bird(p, which)
-    w, H, leg = b["w"], b["H"], p["leg_h"]
+    w, H, leg = b["w"], b["H"], p["leg_h"] * b["k"]
     uv = lambda ps: [(u * w, _bird_y(v, H, leg)) for u, v in ps]
     body = list(b["body"].exterior.coords)[:-1]
     inner = b["body"].buffer(-0.15)
@@ -555,7 +581,9 @@ def bom(p):
             {"number": 4, "key": "stop", "name": "止めの柱", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（図に無い。戻りを止める所として足した）", "reason": why},
             {"number": 5, "key": "mortar", "name": "臼", "qty": 1, "material": paper, "substituted": True, "original_guess": "木（図の色と形による推定）", "reason": why},
         ]
-        axle_len = 2 * p["post_width"] + POST_GAP + 14
+        # 串は U の字の 2 本の柱を横切る。柱の間（POST_GAP）と柱の紙 2 枚と、両端の抜け止めの分。柱の幅は串の向きに関わらない
+        # （前は柱の幅を 2 回足していて、串が 44mm と長すぎた）。
+        axle_len = round(POST_GAP + 2 * PAPER_T + 2 * STOP_END)
         thread = p["post_height"] + 150
     elif p["kind"] == "peck":
         rows = [
@@ -563,7 +591,7 @@ def bom(p):
             {"number": 2, "key": "cock", "name": "奥の鶏", "qty": 1, "material": paper, "substituted": True, "original_guess": "張子か土（不明）", "reason": why},
             {"number": 3, "key": "hen", "name": "手前の鶏", "qty": 1, "material": paper, "substituted": True, "original_guess": "張子か土（不明）", "reason": why},
         ]
-        axle_len = p["straw_w"] + 10
+        axle_len = round(p["straw_w"] + 2 * PAPER_T + 2 * STOP_END)
         thread = p["straw_h"] + 150
     else:
         rows = [
@@ -572,18 +600,17 @@ def bom(p):
             {"number": 3, "key": "stick", "name": "棒", "qty": 1, "material": paper, "substituted": True, "original_guess": "竹か木の棒（図の色による推定）", "reason": why},
             {"number": 4, "key": "bump", "name": "こぶ", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（図に無い。口の開きを止める所として足した）", "reason": why},
         ]
-        axle_len = 10
+        axle_len = round(2 * PAPER_T + 2 * STOP_END)  # 頭と顎の紙 2 枚と、両端の抜け止めの分
         thread = p["stick_len"] + 80
     rows += [
         {"number": 7, "key": "axle", "name": "軸", "qty": 2 if p["kind"] == "peck" else 1, "material": f"竹串（長さ約 {axle_len}mm に切り、先を落とす）", "substituted": True, "original_guess": "不明", "reason": "家にあり、穴に通しやすいため"},
         {"number": 8, "key": "weight", "name": "重り", "qty": 2 if p["kind"] == "peck" else 1, "material": f"油粘土 {p['weight_g']:g}g", "substituted": True, "original_guess": "不明", "reason": "量を変えて戻り方を試しやすいため"},
         {"number": 9, "key": "string", "name": "糸", "qty": 1, "material": f"木綿の糸（長さ約 {thread}mm）", "substituted": True, "original_guess": "糸（図に描かれている）", "reason": "家にあるため"},
     ]
-    if p["kind"] in ("jaw", "peck"):
-        # 串の抜け止め（jaw）と鶏の位置決め（peck）の粘土。重りと同じ粘土から取ると、振れる部品に付く量が式より減るので別の行にする。
-        n = 2 if p["kind"] == "peck" else 1
-        rows.append({"number": 10, "key": "stopclay", "name": "抜け止めの粘土", "qty": n, "material": f"油粘土 {STOP_CLAY_G:g}g（串の両端に {STOP_CLAY_G / 2:g}g ずつ。重りとは別）",
-                     "substituted": True, "original_guess": "不明", "reason": "串が抜けないように・鶏が串の上でずれないようにするため"})
+    # 串の抜け止め（bow・jaw）と鶏の位置決め（peck）の粘土。重りと同じ粘土から取ると、振れる部品に付く量が式より減るので別の行にする。
+    rows.append({"number": 10, "key": "stopclay", "name": "抜け止めの粘土", "qty": 2 if p["kind"] == "peck" else 1,
+                 "material": f"油粘土 {STOP_CLAY_G:g}g（串の両端に {STOP_CLAY_G / 2:g}g ずつ。重りとは別）",
+                 "substituted": True, "original_guess": "不明", "reason": "串が抜けないように・鶏が串の上でずれないようにするため"})
     return rows
 
 
@@ -607,10 +634,10 @@ def steps(p):
         out += ["1 台を破線で谷折りして 2 枚に貼り合わせる。穴は重ねたまま通す",
                 "3 体を破線で谷折りして貼り合わせる。軸の穴と糸の穴は重ねたまま通す",
                 f"2 柱を U の字に折り、糊代を台の上の面の小さい四角（糸の穴から {p['string_arm']}mm 後ろ）に貼る",
-                "体を柱の間に入れ、竹串を柱の穴と体の軸の穴に通す",
+                "体を柱の間に入れ、竹串を柱の穴と体の軸の穴に通す。串の両端に抜け止めの粘土を付ける（重りの粘土は使わない）",
                 f"4 止めの柱の糊代を、台の後ろの細い四角（軸から {p['tail_len'] - CLAY_IN}mm 後ろ）に貼る",
                 f"5 臼を丸めて筒にし、台の前の大きい四角（軸から {p['torso_len'] - 5}mm 前）に立てて貼る",
-                "尾の端に粘土を付ける。体が水平で止めの柱に載るか見る",
+                f"尾の端に重りの粘土を {p['weight_g']:g}g 付ける。体が水平で止めの柱に載るか見る",
                 f"糸を体の糸の穴に結び、台の穴から下へ通す。引くと約 {pull_gf(p):.0f}gf（見込み）で礼をして臼に当たる"]
     elif p["kind"] == "peck":
         out += ["1 藁苞の上の面の 2 本の溝を切る（カッターは大人がする）",
@@ -618,7 +645,7 @@ def steps(p):
                 "2 奥の鶏と 3 手前の鶏の胸の小さい穴に糸を 1 本ずつ結ぶ",
                 "鶏の脚の帯を溝に差し、糸は溝から苞の中へ入れて底の穴から出す",
                 "竹串を苞の横の穴と脚の帯の穴に通す。鶏が真ん中に来るよう、串の鶏の両側に抜け止めの粘土を付ける（重りの粘土は使わない）",
-                f"尾の裏に重りの粘土を {p['weight_g']:g}g ずつ付ける。尾の先が苞に載って鶏が起きているか見る",
+                f"尾の先の裏（苞のすぐ上）に重りの粘土を {p['weight_g']:g}g ずつ付ける。尾の先が苞に載って鶏が起きているか見る",
                 f"底から出た 2 本の糸を 1 本に結ぶ。引くと約 {pull_gf(p):.0f}gf（見込み）で 2 羽がついばむ"]
     else:
         out += ["3 棒を破線で谷折りして貼り合わせる",
