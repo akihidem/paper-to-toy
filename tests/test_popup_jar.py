@@ -36,10 +36,11 @@ assert floors(push_amount=need - 1) == ["F5.popup"]
 # 帯の長さは、押し切った時に帯の下の端が箱の底とそろう長さ
 assert pj.strip_length(d) == d["box_height"] + pj.FOOT_TAB + d["push_amount"]
 
-# 3. 傾き: 案内（箱の高さ）が短いほど、壺の口での横ずれが大きい。横ずれ = 壺の高さ × 遊び ÷ 箱の高さ
+# 3. 傾き: 案内（箱の高さ）が短いほど、壺の口での横ずれが大きい。横ずれ = 遊び ÷ 2 ＋ 壺の高さ × 遊び ÷ 箱の高さ
 dx, dy = pj.sway(d, d["jar_height"])
-assert abs(dx - d["jar_height"] * pj.SLIDE_GAP / d["box_height"]) < 1e-9
-assert abs(dy - d["jar_height"] * (pj.HOLE_DEPTH - 2 * d["paper_thickness"]) / d["box_height"]) < 1e-9
+assert abs(dx - (pj.SLIDE_GAP / 2 + d["jar_height"] * pj.SLIDE_GAP / d["box_height"])) < 1e-9
+gap = pj.HOLE_DEPTH - 2 * d["paper_thickness"]
+assert abs(dy - (gap / 2 + d["jar_height"] * gap / d["box_height"])) < 1e-9
 assert pj.sway({**d, "box_height": 10}, 60)[0] > pj.sway(d, 60)[0]
 assert floors(box_height=10) == ["F5.popup"]
 # 袖の幅の境目: 半分の幅 + 横ずれ + 余り ≦ 内の半分 − 紙の厚さ
@@ -55,9 +56,9 @@ assert pj.check_physics({**d, **easy, "box_height": 10}) == []
 low = [f.message for f in pj.check_physics({**d, **easy, "box_height": 9})]
 assert any("引っかかる" in m for m in low), low
 
-# 5. 壺が箱に乗る: 6 面の壺は角から角（2 × W/√3）で見る。4 面は W
-assert abs(pj.footprint({**d, "jar": "hex"}) - 2 * d["jar_width"] / math.sqrt(3)) < 1e-9
-assert pj.footprint({**d, "jar": "square"}) == d["jar_width"]
+# 5. 壺が箱に乗る: 6 面の壺は角から角（2 × W/√3）で見る。4 面は W。どちらも外の寸法なので紙 2 枚分を足す
+assert abs(pj.footprint({**d, "jar": "hex"}) - (2 * d["jar_width"] / math.sqrt(3) + 2 * d["paper_thickness"])) < 1e-9
+assert abs(pj.footprint({**d, "jar": "square"}) - (d["jar_width"] + 2 * d["paper_thickness"])) < 1e-9
 assert floors(jar="hex", box_side=44) == ["F5.jar_seat"]
 assert floors(jar="square", box_side=44) == []
 
@@ -86,5 +87,32 @@ assert "印の線" in text and "上の端にそろえ" in text, text
 assert "印に合わせて" in text and "「2 箱」の字のある壁を前" in text, text
 # 出典は形によらず 22 コマ左の 1 つ（形は同じ玩具の作り分け）
 assert set(pj.SOURCES) == set(pj.FORMS) and set(pj.SOURCES.values()) == {pj.SOURCE}
+
+# 8. 二度目の見直しの指摘（中・低）を押さえる
+def msgs(**kw):
+    return [f.message for f in pj.check_physics({**pj.DEFAULTS, **kw})]
+
+# 8a. 足の収まりは静かな時だけでなく、押し上げる途中（傾きが一番大きい壺の口の高さ）でも見る。足は人形より広くなりうる
+#     人形は細く（袖は収まる）、帯は広く（足は 27mm）、糊代は短く（静かな時は収まる）した寸法で、途中で足が壁に擦れる
+wide_foot = dict(jar="square", figure_w=16, strip_width=20, jar_tab=3)
+assert any("押し上げる途中" in m for m in msgs(**wide_foot)), msgs(**wide_foot)
+assert floors(**wide_foot) == ["F5.popup"]
+# 8b. 横ずれは、傾きの分に、上の穴の中で帯が丸ごと横へ寄る分（遊びの半分）を足す
+assert abs(pj.sway(d, 0)[0] - pj.SLIDE_GAP / 2) < 1e-9
+assert abs(pj.sway(d, 60)[0] - (pj.SLIDE_GAP / 2 + 60 * pj.SLIDE_GAP / d["box_height"])) < 1e-9
+# 8c. 厚みの向きの遊びが 0（3mm の帯が 3mm の穴）や負は落とす。最小の遊び MIN_DEPTH_GAP を要る
+assert any("厚みの向きの遊び" in m for m in msgs(paper_thickness=1.5)), msgs(paper_thickness=1.5)
+edge_t = (pj.HOLE_DEPTH - pj.MIN_DEPTH_GAP) / 2
+assert not any("厚みの向きの遊び" in m for m in msgs(paper_thickness=edge_t))
+assert any("厚みの向きの遊び" in m for m in msgs(paper_thickness=edge_t + 0.01))
+# 8d. jar_width は型紙の折り線の間（展開図の 1 面の幅はこの値から出す）。内の幅は紙 2 枚分狭く、外の差し渡しは 2 枚分広い
+t = 0.5
+assert pj.face_width({**d, "jar": "square", "paper_thickness": t}) == d["jar_width"]
+assert abs(pj.inner_half({**d, "paper_thickness": t}) - (d["jar_width"] / 2 - t)) < 1e-9
+assert abs(pj.footprint({**d, "jar": "square", "paper_thickness": t}) - (d["jar_width"] + 2 * t)) < 1e-9
+assert abs(pj.footprint({**d, "jar": "hex", "paper_thickness": t}) - (2 * d["jar_width"] / math.sqrt(3) + 2 * t)) < 1e-9
+# 8e. 決して当たらない検査（足は帯よりいつも 7mm 広い）は持たない
+import inspect
+assert "帯が足より広い" not in inspect.getsource(pj)
 
 print("ok")
