@@ -23,6 +23,9 @@
 - 風受け（vane=cups）は半円に丸めた紙 2 つを、舟の長い向きの両端に、口を逆の向きにして立てる。
   横から吹くと、口の側の風受けは平らな側より強く押される（お椀形の抗力の差。値は見込み）ので、舟が回ると見込む。
   回る速さ・水の抵抗は式にせず、風受けが壁より上に出て息を受けられる事と、底に収まる事だけを見る。
+  底に収まるかは、外へ折って貼る足の歯の先まで（半径 ρ + CUP_TAB の半円）で見る。人形の足の糊代も、葉に寝かせた台形の角まで見る。
+- 粘土の厚みは、四隅の四角を合わせて底の内に切った実の面積から出す（狭い舟で四角が重なると 4 × 辺² より狭い）。
+  粘土は G を下げるが、重さで V が増えて BM ＝ I/V も下がるので、狭い舟では GM が上がらない事がある。
 """
 import math
 
@@ -37,7 +40,8 @@ DEFAULTS = {
     # 舟の底の長さ・幅と壁の高さ。底が広いほど浅く浮き、横に倒れにくい（BM が幅の 2 乗で効く）。
     "tray_length": 90, "tray_width": 60, "wall_height": 22, "glue": 8,
     # 人形の高さはコマ 28 の図で葉の直径の 1.2 倍ほどに見える（斜めの図の目測）。
-    "figure_height": 60, "leaf_radius": 25,
+    # 葉の半径 20 は、風受けの足跡（半円 ＋ 外へ折る歯）を葉の両側の底に置けるため（90mm の舟で 40 + 2 × 23 = 86mm）。
+    "figure_height": 60, "leaf_radius": 20,
     # 風受けの紙の幅（丸めると半円の周になる）と高さ。壁より上に出す。
     "cup_width": 22, "cup_height": 34,
     "ballast_g": 4.0, "clay_side": 12,
@@ -67,7 +71,8 @@ GM_MIN = 3  # 戻る力の余裕（mm）。紙の歪み・人形の貼り位置�
 CLAY_DENSITY = 1.7  # 油粘土の密度（g/cm³）の見込み。実物を量ったら置き換える
 CLAY_T_MAX = 8  # 粘土の厚みの上限（mm）。これより厚く小さな四角に積むと、押し付けても崩れて片寄ると見込む
 CLAY_INSET = 3  # 粘土の四角を底の四隅の折り線から離す長さ（mm）
-CUP_INSET = 1  # 風受けの半円を底の両端の折り線から離す長さ（mm）
+CUP_INSET = 1  # 風受けの足跡（外へ折った歯の先）を底の両端の折り線から離す長さ（mm）
+CUP_TAB = 4  # 風受けの足の歯の長さ（mm）。歯は外へ折って底に貼るので、足跡は半円の外へこの長さだけ広がる
 TAB = 7  # 人形と風受けの足の糊代の高さ（mm）
 CUP_ABOVE = 5  # 風受けが壁の上に出る長さの下限（mm）。壁の陰では息を受けない
 # 貼る所の印の色と太さ。破線は谷折り、黒の実線は切る線と読まれるので、印は茶の細い実線にする。
@@ -209,16 +214,27 @@ def floor_marks(p):
     if p["vane"] == "cups":
         # 風受けは長い向きの両端に、丸い口を逆の向きにして立てる。
         rho = cup_radius(p)
-        for ex, sign in ((CUP_INSET + rho, -1), (L - CUP_INSET - rho, 1)):
+        R = rho + CUP_TAB
+        for ex, sign in ((CUP_INSET + R, -1), (L - CUP_INSET - R, 1)):
             arc = [(ex + rho * math.cos(math.pi * i / 24), cy + sign * rho * math.sin(math.pi * i / 24)) for i in range(25)]
-            out["cup_arcs"].append(arc)
-            out["cups"].append(Polygon(arc))
+            out["cup_arcs"].append(arc)  # 刷る印は丸めた紙が立つ線（半径 ρ）
+            # 足跡は外へ折った歯の先まで（半径 ρ + 歯）。半円だけで見ると、歯が壁を上がるか葉に乗っても通っていた
+            out["cups"].append(Polygon([(ex + R * math.cos(math.pi * i / 24), cy + sign * R * math.sin(math.pi * i / 24)) for i in range(25)]))
     return out
 
 
+def clay_area(p):
+    """粘土を載せる実の面積（mm²）。四角を合わせ、底の内に切った面。狭い舟では四角が重なるか底から出るので、4 × 辺² では広すぎる。"""
+    sq = floor_marks(p)["ballast"]
+    if not sq:
+        return 0.0
+    return unary_union(sq).intersection(box(0, 0, p["tray_length"], p["tray_width"])).area
+
+
 def clay_thickness(p):
-    """粘土の厚み（mm）＝ 体積（mm³）÷ 四隅の四角 4 つの面積。"""
-    return p["ballast_g"] * 1000 / CLAY_DENSITY / (4 * p["clay_side"] ** 2)
+    """粘土の厚み（mm）＝ 体積（mm³）÷ 実の面積。"""
+    a = clay_area(p)
+    return p["ballast_g"] * 1000 / CLAY_DENSITY / a if a > 0 else 0.0
 
 
 def _circle(cx, cy, r, n=72):
@@ -238,6 +254,12 @@ def _leaf(p):
     return Part(2, "leaf", "葉", _circle(r, r, r), label_xy=(r - 1.5, 1.4 * r), label="2", art=art)
 
 
+def foot_footprint(p):
+    """人形の足の糊代を葉の上に寝かせた足跡（葉の中心を原点にした mm）。足の線が葉の中心を通り、糊代は手前（+y）へ倒す。"""
+    fw = foot_width(p)
+    return Polygon([(-fw / 2, 0), (fw / 2, 0), (fw / 2 - 1.5, TAB), (-fw / 2 + 1.5, TAB)])
+
+
 def cup_radius(p):
     """風受けの紙を半円に丸めた時の半径。紙の幅が半円の周（π × 半径）になる。"""
     return p["cup_width"] / math.pi
@@ -254,10 +276,10 @@ def _cup(number, key, name, p):
     teeth = [(i * pitch + (FRINGE_GAP / 2 if i else 0), (i + 1) * pitch - (FRINGE_GAP / 2 if i < n - 1 else 0)) for i in range(n)]
     pts = [(0, 0), (w, 0)]
     for a, b in reversed(teeth):
-        pts += [(b, H), (b, H + TAB), (a, H + TAB), (a, H)]
+        pts += [(b, H), (b, H + CUP_TAB), (a, H + CUP_TAB), (a, H)]
     part = Part(number, key, name, pts[:-1], label_xy=(1, 1.5), label=str(number))
     part.valley = [((a, H), (b, H)) for a, b in teeth]
-    part.glue = [[(a, H), (b, H), (b, H + TAB), (a, H + TAB)] for a, b in teeth]
+    part.glue = [[(a, H), (b, H), (b, H + CUP_TAB), (a, H + CUP_TAB)] for a, b in teeth]
     part.art = [{"kind": "poly", "pts": [(0.2, 0.2), (w - 0.2, 0.2), (w - 0.2, H - 0.4), (0.2, H - 0.4)], "fill": CUP}]
     return part
 
@@ -330,8 +352,8 @@ def check_physics(p):
     r = p["leaf_radius"]
     if 2 * r > min(L, W) - 2:
         out.append(Failure("F5.float", "葉", f"葉の直径 {2 * r:g}mm が舟の底に入らない"))
-    if foot_width(p) > 2 * r * 0.9:
-        out.append(Failure("F5.float", "人形", f"人形の足の台 {foot_width(p):.0f}mm が葉に乗らない"))
+    if not foot_footprint(p).within(Polygon(_circle(0, 0, r))):
+        out.append(Failure("F5.float", "人形", f"人形の足の糊代（幅 {foot_width(p):.0f}mm・奥行き {TAB}mm）が葉からはみ出す"))
     t = clay_thickness(p)
     if t > CLAY_T_MAX:
         out.append(Failure("F5.float", "重り", f"粘土 {p['ballast_g']:g}g は四隅の {p['clay_side']:g}mm の四角で厚さ {t:.1f}mm になり、崩れて片寄る（{CLAY_T_MAX}mm まで。四角を広げるか減らす）"))
@@ -340,11 +362,14 @@ def check_physics(p):
     if p["vane"] == "cups":
         rho = cup_radius(p)
         if any(not floor.contains(c) or c.intersects(fm["leaf"]) for c in fm["cups"]):
-            out.append(Failure("F5.float", "風受け", f"半径 {rho:.1f}mm の風受け 2 つが葉の両側の底（端から {CUP_INSET}mm 内）に入らない"))
+            out.append(Failure("F5.float", "風受け", f"半径 {rho:.1f}mm の風受け 2 つ（外へ折る歯 {CUP_TAB}mm を含む）が葉の両側の底（端から {CUP_INSET}mm 内）に入らない"))
     # 粘土の四角は、葉と風受けの足跡に重ねない（重ねると葉が浮くか、風受けが立たない）
     others = [fm["leaf"]] + fm["cups"]
     if any(sq.intersects(o) for sq in fm["ballast"] for o in others):
         out.append(Failure("F5.float", "粘土の印", "四隅の粘土の四角が、葉か風受けの置き場に重なる"))
+    sq = fm["ballast"]
+    if any(not floor.contains(q) for q in sq) or any(a.intersection(b).area > 1e-9 for i, a in enumerate(sq) for b in sq[i + 1:]):
+        out.append(Failure("F5.float", "粘土の印", "四隅の粘土の四角が、互いに重なるか底から出る（四角を小さくする）"))
     if p["vane"] == "cups" and p["cup_height"] < h + CUP_ABOVE:
         out.append(Failure("F5.float", "風受け", f"風受けが壁の上に {p['cup_height'] - h:g}mm しか出ず、息を受けない（{CUP_ABOVE}mm 以上）"))
     return out
@@ -389,18 +414,19 @@ def materials(p):
 
 
 def steps(p):
-    out = ["水を使う時は大人と一緒に・紙は濡れると弱る",
+    out = ["水を使う時は大人と一緒に・紙は濡れると弱る", "水は床に敷いた新聞紙の上で使い、こぼした水はすぐ拭く",
            "刷った物差しに定規を当て、10cm か確かめる", "部品を実線で切る。舟の角の糊代の脇も切り込む",
            "1 舟を破線で谷折りして壁を立て、角の糊代を短い壁の内側に貼って箱にする",
            "舟の外側の底と壁を透明テープですき間なく覆う（ふちは内へ折り返す）。紙は水を吸うので、すき間があると重くなって沈む",
-           "2 葉を舟の底の茶の丸い葉の印に合わせて貼る", "3 人形の足の糊代を破線で折り、折り目を葉の茶の足の印に合わせて立てて貼る"]
+           "2 葉を舟の底の茶の丸い葉の印に合わせて貼る", "3 人形の足の糊代を破線で折り、折り目を葉の茶の足の印に合わせ、糊代を 2 の数字の側へ寝かせて貼る"]
     if p["vane"] == "cups":
         out.append("4・5 風受けの足の糊代の歯の間の切り込みを、破線まで切る。風受けを半円に丸め、歯を外へ折って、舟の両端の茶の半円の風受けの印に沿わせて貼る（丸い口が逆の向きになる）")
     if p["ballast_g"] > 0:
         out.append(f"油粘土 {p['ballast_g']:g}g を同じ重さの 4 つに分け、舟の底の四隅の印の四角に平たく押し付ける（片寄ると傾く）")
-    out.append("水に浮かべ、傾きと沈んだ深さを見る。濡れた紙は乾かすまで触らない")
+    out.append("水に浮かべ、傾きと沈んだ深さを見る。舟の内側はテープで覆っていないので、水が入ると刷った色がにじむ")
     if p["vane"] == "cups":
         out.append("横から風受けに息を吹き、回るか見る")
+    out.append("終わったら舟を水から出し、布で拭いて広げて乾かす。使った水を捨てる")
     return out
 
 
