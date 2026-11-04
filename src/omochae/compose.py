@@ -36,7 +36,7 @@ def compose(template_id, params, source, page_name="A4", version=1, title=None, 
             r["material"] = ""
         if r["key"] == inject.get("bom_drop_original"):
             r["original_guess"] = ""
-    failures += check_bom(rows)
+    failures += check_bom(rows, tpl.parts(p))
     page = PAGES[page_name]
     texts = []
     title = title or f"{source['toy']} 型紙（{tpl.title(p)}）版 {version}"

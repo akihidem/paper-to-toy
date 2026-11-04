@@ -45,4 +45,17 @@ clear = Part(1, "t", "試し", [(0, 0), (40, 0), (40, 20), (0, 20)], glue=glue, 
 assert [f.floor for f in check_art([over])] == ["F5.image_box"]
 assert check_art([clear]) == []
 
+# 3. 型紙に刷る部品は全部、部品表に載る（首の形の重りの腕）
+from omochae.floors import check_bom
+from omochae.templates import pivot_counterweight as pc, slider_fan as sf
+
+for tpl, forms in ((pc, [{"mount": "neck"}, {"mount": "hang"}]), (sf, [{"push_part": x} for x in ("tab", "tube", "stick")])):
+    for form in forms:
+        p = {**tpl.DEFAULTS, **form}
+        assert check_bom(tpl.bom(p), tpl.parts(p)) == [], (tpl.ID, form)
+neck = {**pc.DEFAULTS, "mount": "neck"}
+short = [r for r in pc.bom(neck) if r["number"] != 5]
+assert [f.floor for f in check_bom(short, pc.parts(neck))] == ["F2.bom"]
+assert any("竹串" in m for m in pc.materials(neck)) and any("油粘土" in m for m in pc.materials(neck))
+
 print("ok")

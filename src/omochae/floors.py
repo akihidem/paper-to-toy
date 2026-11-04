@@ -46,9 +46,14 @@ def check_layout(page, parts, texts):
     return out
 
 
-def check_bom(rows):
-    """素材が空の部品と、置き換えの根拠が無い部品を落とす。「不明」は正直な答えなので通す。"""
+def check_bom(rows, parts=()):
+    """素材が空の部品と、置き換えの根拠が無い部品と、部品表に載っていない部品を落とす。「不明」は正直な答えなので通す。"""
     out = []
+    listed = {r["number"] for r in rows}
+    for q in parts:
+        # 型紙に刷る部品は番号で部品表と結ぶ。部品表に無いと、作る人が素材も数も分からない。
+        if q.number not in listed:
+            out.append(Failure("F2.bom", q.name, f"部品 {q.number} が部品表に無い"))
     for r in rows:
         if not str(r.get("material", "")).strip():
             out.append(Failure("F2.bom", r["name"], "素材の欄が空"))
