@@ -64,6 +64,10 @@ neck = {**pc.DEFAULTS, "mount": "neck"}
 short = [r for r in pc.bom(neck) if r["number"] != 5]
 assert [f.floor for f in check_bom(short, pc.parts(neck))] == ["F2.bom"]
 assert any("竹串" in m for m in pc.materials(neck)) and any("油粘土" in m for m in pc.materials(neck))
+other = [dict(r, key="other", name="別の物") if r["number"] == 5 else r for r in pc.bom(neck)]
+assert [f.floor for f in check_bom(other, pc.parts(neck))] == ["F2.bom"]
+twice = pc.bom(neck) + [dict(pc.bom(neck)[0])]
+assert [f.floor for f in check_bom(twice, pc.parts(neck))] == ["F2.bom"]
 
 # 4. 刷った後の印の検査は、所蔵・改変の注記・仮説の文をそのまま探す
 from omochae.marks import check_pdf

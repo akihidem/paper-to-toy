@@ -49,11 +49,19 @@ def check_layout(page, parts, texts):
 def check_bom(rows, parts=()):
     """素材が空の部品と、置き換えの根拠が無い部品と、部品表に載っていない部品を落とす。「不明」は正直な答えなので通す。"""
     out = []
-    listed = {r["number"] for r in rows}
+    listed = {}
+    for r in rows:
+        # 番号が重なると、どちらの行がどの部品か決まらない。
+        if r["number"] in listed:
+            out.append(Failure("F2.bom", r["name"], f"部品表の番号 {r['number']} が重なっている"))
+        listed.setdefault(r["number"], r)
     for q in parts:
-        # 型紙に刷る部品は番号で部品表と結ぶ。部品表に無いと、作る人が素材も数も分からない。
-        if q.number not in listed:
+        # 型紙に刷る部品は番号と key で部品表と結ぶ。番号だけだと、同じ番号の別の行でも通ってしまう。
+        r = listed.get(q.number)
+        if r is None:
             out.append(Failure("F2.bom", q.name, f"部品 {q.number} が部品表に無い"))
+        elif r["key"] != q.key:
+            out.append(Failure("F2.bom", q.name, f"部品 {q.number} の部品表の行が別の物（{r['name']}）"))
     for r in rows:
         if not str(r.get("material", "")).strip():
             out.append(Failure("F2.bom", r["name"], "素材の欄が空"))
