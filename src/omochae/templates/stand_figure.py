@@ -666,12 +666,14 @@ def check_range(p):
             if v not in FIGURES:
                 out.append(Failure("F5.range", k, f"{v} は姿の一覧（{len(FIGURES)} 個）に無い"))
         elif k == "stand":
-            if v not in STANDS:
+            # None は、姿が一覧に無くて勧めで埋まらなかった既定。姿の名の誤りとして上で 1 つだけ落とす（ここで重ねて落とさない）。
+            if v is not None and v not in STANDS:
                 out.append(Failure("F5.range", k, f"{v} は {STANDS} のどれでもない"))
         elif k == "back":
-            # 0 か 1 だけ。0.5 のような値は「半分刷る」にならないので落とす。
-            if v not in (0, 1) or isinstance(v, bool):
-                out.append(Failure("F5.range", k, f"{v} は 0 か 1 でない"))
+            # 整数の 0 か 1 だけ。0.5 のような値は「半分刷る」にならず、true/false や 1.0 も、ほかの寸法と同じく型で落とす
+            # （ほかの雛形の check_range も bool を落とす。1.0 だけ黙って通すと、受ける型が寸法ごとに違って読みにくい）。
+            if type(v) is not int or v not in (0, 1):
+                out.append(Failure("F5.range", k, f"{v!r} は整数の 0 か 1 でない"))
         elif k not in RANGES:
             out.append(Failure("F5.range", k, "知らない寸法の名前"))
         elif v is None:
@@ -829,9 +831,20 @@ def check_physics(p):
             out.append(Failure("F5.stand", "溝", f"溝が緩く、姿が {wob:.1f}° ぐらつく（{MAX_WOBBLE}° まで）"))
         if p["slot_length"] > p["base_length"] - 2 * SLOT_EDGE:
             out.append(Failure("F5.stand", "溝", f"溝の端から箱の縁まで {SLOT_EDGE}mm 取れない"))
-        edge = LineString([(x - w / 2, H - CONTACT_UP), (x + w / 2, H - CONTACT_UP)]).intersection(g["body"]).length
+        # 前後の壁と左右の壁の糊代は、壁の内に貼るので壁の高さに収まる要がある。上の面の左右の糊代だけは base_net が
+        # 壁 − 1mm に切り詰めるが、ほかの糊代は切り詰めない（寸法の名のとおりに刷る）。高い糊代は展開図で隣の糊代と重なる
+        # （左右の壁の上の糊代が後ろの壁の上の縁を越えて、上の面の左右の糊代に重なる）ので、ここで落とす。
+        if p["base_glue"] > p["base_height"] - 1:
+            out.append(Failure("F5.stand", "台", f"糊代 {p['base_glue']:g}mm が箱の高さ {p['base_height']:g}mm の壁に収まらない（壁の高さ − 1mm まで）"))
+        joint = LineString([(x - w / 2, H - CONTACT_UP), (x + w / 2, H - CONTACT_UP)]).intersection(g["body"])
+        edge = joint.length
         if edge < TONGUE_ATTACH * w:
             out.append(Failure("F5.stand", "舌", f"差し込みの舌が姿と {edge:.1f}mm しかつながらず、差すと折れる（溝を短く）"))
+        # 舌の上の縁が姿と 2 か所以上で接する（2 本の脚にまたがる）と、脚の間が舌と胴で囲まれ、部品の外形では穴を持てないので
+        # 紙で埋まる（_figure_part）。絵に無い紙の壁を黙って刷らず、溝を 1 つの足に収めさせる。
+        feet = [q for q in getattr(joint, "geoms", [joint]) if q.geom_type == "LineString" and q.length > 0]
+        if len(feet) >= 2:
+            out.append(Failure("F5.stand", "舌", f"舌が床に触れる所 {len(feet)} つにまたがり、間が紙でふさがる（溝を短くして 1 つの足の下に差す）"))
         # 傾く軸は舌の先（机の上）なので、重心の高さは箱の高さを足して測る。余白も同じ高さから。
         hb = p["base_height"]
         mb = margin(g, hb)
@@ -859,8 +872,13 @@ def _figure_part(number, key, name, p, mirror):
         x, w, depth = tongue(p)
         # 舌は姿の下の縁から少し上で重ねて足す。重ねないと、接するだけで 1 つの形にならない。
         joined = unary_union([shape, box(x - w / 2, H - CONTACT_UP, x + w / 2, H + depth)])
-        if joined.geom_type == "Polygon":
-            shape = orient(Polygon(joined.exterior.coords), sign=1.0)
+        # つながらない（2 つの形のまま）時は、黙って姿だけを刷らない。部品表と組み方と床は舌がある前提なので、ここで止めて
+        # 「検査できない」（exit 4）にする。tongue() は舌の中心を床に触れる所の内に置くので、起きない見込み（姿の値の誤りの守り）。
+        if joined.geom_type != "Polygon":
+            raise ValueError(f"姿 {p['figure']} の舌（x {x:.1f}・幅 {w:.1f}）が姿の下の縁とつながらない")
+        # 舌が 2 つの足にまたがると、足の間が舌と胴で囲まれて穴になる。部品の外形は穴を持てないので、その所は紙で埋まる
+        # （exterior だけを取る）。黙って埋めず、check_physics が「またぐ」で落とす。ここは落ちた寸法でも部品を返すため（check_bom が呼ぶ）。
+        shape = orient(Polygon(joined.exterior.coords), sign=1.0)
     outline = list(shape.exterior.coords)[:-1]
     art = [{"kind": "poly", "pts": list(g["body"].buffer(-0.1).exterior.coords)[:-1], "fill": FIGURES[p["figure"]]["fill"]}]
     art += [dict(a) for a in g["art"]]
@@ -902,7 +920,9 @@ def _gauge(p):
 @_filling
 def _tab(p):
     tw, L, gl = p["tab_width"], p["tab_length"], p["tab_glue"]
-    part = Part(3, "tab", "脚", [(0, 0), (tw, 0), (tw, gl + L), (0, gl + L)], label_xy=(1, gl + 2), label="3 脚")
+    # 札「3 脚」は字の幅が 7mm ほどで、RANGES の下限（6mm）の脚からはみ出し、F5.text_overlap で落ちた。狭い脚は番号だけにする。
+    label = "3 脚" if tw >= 8 else "3"
+    part = Part(3, "tab", "脚", [(0, 0), (tw, 0), (tw, gl + L), (0, gl + L)], label_xy=(1, gl + 2), label=label)
     part.valley = [((0, gl), (tw, gl))]
     part.glue = [[(0, 0), (tw, 0), (tw, gl), (0, gl)]]
     part.art = [{"kind": "poly", "pts": [(0.2, gl + 0.2), (tw - 0.2, gl + 0.2), (tw - 0.2, gl + L - 0.2), (0.2, gl + L - 0.2)], "fill": STAND_FILL}]
