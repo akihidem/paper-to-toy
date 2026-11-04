@@ -71,6 +71,8 @@ def check_art(parts):
                 if geom.intersects(LineString([(p.x + x1, p.y + y1), (p.x + x2, p.y + y2)])):
                     out.append(Failure("F5.image_box", p.name, "絵が折り線をまたいでいる"))
             for g in p.glue:
-                if geom.intersection(Polygon([(p.x + x, p.y + y) for x, y in g])).area > EPS:
+                # 線の絵と面の交わりは線なので面積が 0 になる。線は交わった長さで見る（面積だけだと線が糊代を横切っても通った）。
+                cross = geom.intersection(Polygon([(p.x + x, p.y + y) for x, y in g]))
+                if (cross.length if item["kind"] == "line" else cross.area) > EPS:
                     out.append(Failure("F5.image_box", p.name, "絵が糊代にかかっている"))
     return out

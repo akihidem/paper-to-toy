@@ -34,4 +34,15 @@ with tempfile.TemporaryDirectory() as d:
     left = sorted(p.name for p in pathlib.Path(d).glob("x.*"))
     assert left == [], f"落ちた後に前の紙が残った: {left}"
 
+# 2. 線の絵が糊代を横切ったら落とす（面積でなく長さで見る）
+sys.path.insert(0, str(ROOT / "src"))
+from omochae.floors import check_art
+from omochae.model import Part
+
+glue = [[(30, 0), (40, 0), (40, 20), (30, 20)]]
+over = Part(1, "t", "試し", [(0, 0), (40, 0), (40, 20), (0, 20)], glue=glue, art=[{"kind": "line", "pts": [(5, 10), (38, 10)], "stroke": "#000", "sw": 0.3}])
+clear = Part(1, "t", "試し", [(0, 0), (40, 0), (40, 20), (0, 20)], glue=glue, art=[{"kind": "line", "pts": [(5, 10), (25, 10)], "stroke": "#000", "sw": 0.3}])
+assert [f.floor for f in check_art([over])] == ["F5.image_box"]
+assert check_art([clear]) == []
+
 print("ok")
