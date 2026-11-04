@@ -10,6 +10,7 @@
 動きの見込み（F5.float）の前提:
 - 水の密度は 1g/cm³（1g が 1000mm³ を押しのける）。舟は箱のまま平らに沈み、喫水 d ＝ 押しのける体積 ÷ 底の面積。
 - 質量は刷る部品の面積 × 紙の面密度、外側に貼るテープの面積 × テープの面密度、油粘土の重り。糊の重さは入れない。
+  テープは底と壁の外側に、ふちから内へ折り返す帯（幅 TAPE_FOLD・壁の上端にあるので G を上げる）を足して数える。
 - 紙は水を吸うと重くなり柔らかくなるが、この式は吸水を入れない（乾いた紙の重さと形のまま見る）。
   テープかろうで外側をふさぐのはそのため。濡れた後の浮き方は実物で確かめていない。
   水よけは必ず貼る物として、その面密度（tape_gsm）を下限つきで持つ。ろうを塗る時は、塗ったろうの g/m² をここに入れる。
@@ -74,6 +75,10 @@ CLAY_INSET = 3  # 粘土の四角を底の四隅の折り線から離す長さ�
 CUP_INSET = 1  # 風受けの足跡（外へ折った歯の先）を底の両端の折り線から離す長さ（mm）
 CUP_TAB = 4  # 風受けの足の歯の長さ（mm）。歯は外へ折って底に貼るので、足跡は半円の外へこの長さだけ広がる
 TAB = 7  # 人形と風受けの足の糊代の高さ（mm）
+TAPE_FOLD = 5  # 水よけのテープをふちから内へ折り返す幅（mm）。組み方の文と質量の式で同じ値を使う（四度目の検品の指摘）
+# 舟のラベル「1 舟」の幅と高さの見込み（compose の字の大きさ 2.8mm・行送り 1.25。幅は Noto Serif CJK JP で 4.8mm と測り、1mm の空きを足した）。
+# 粘土の印の右に置けるかの判定と、雷文を始める所にだけ使う。
+LABEL_W, LABEL_H = 6, 3.5
 CUP_ABOVE = 5  # 風受けが壁の上に出る長さの下限（mm）。壁の陰では息を受けない
 # 貼る所の印の色と太さ。破線は谷折り、黒の実線は切る線と読まれるので、印は茶の細い実線にする。
 MARK, MARK_SW = "#8a4f2e", 0.35
@@ -112,8 +117,9 @@ _FACE = [(372, 402), (414, 396), (424, 448), (388, 476), (366, 452)]
 _SLEEVE_L = [(195, 560), (345, 495), (380, 600), (250, 672)]
 _TORSO = [(345, 470), (460, 440), (482, 622), (360, 642)]
 _SLEEVE_R = [(455, 450), (600, 490), (662, 505), (632, 522), (626, 692), (530, 692), (480, 622)]
-_HAKAMA = [(290, 690), (360, 640), (482, 622), (530, 692), (632, 822), (622, 872), (452, 890), (260, 890)]
-_FOOT = (262, 628)  # 足の台（糊代）を付ける幅（x の範囲）
+# 袴の裾は足の線（y=890）まで平らに取る。元の点は右の裾が 872 まで上がっていて、糊代の右 4 割の上に紙が無かった（四度目の検品の指摘）。
+_HAKAMA = [(290, 690), (360, 640), (482, 622), (530, 692), (632, 822), (622, 890), (260, 890)]
+_FOOT = (262, 628)  # 足の台（糊代）を付ける幅（x の範囲）。袴の裾の幅に収める
 
 
 def _fig_scale(p):
@@ -142,7 +148,8 @@ def _figure(p):
     s = _fig_scale(p)
     feet = _feet(p)
     spear = Polygon(LineString(_fig_pts(_SPEAR, s)).buffer(max(0.9, 12 * s), cap_style=2))
-    shapes = [Polygon(_fig_pts(q, s)) for q in (_TIP, _BLADE, _HAT, _SLEEVE_L, _TORSO, _SLEEVE_R, _HAKAMA)] + [spear]
+    # 顔も外形に入れる。帽子と胴の間の顔の点は、高い人形（70mm から）で 0.6mm の太らせでは隠れず、外形の外に出た（四度目の検品の指摘）
+    shapes = [Polygon(_fig_pts(q, s)) for q in (_TIP, _BLADE, _HAT, _FACE, _SLEEVE_L, _TORSO, _SLEEVE_R, _HAKAMA)] + [spear]
     upper = unary_union(shapes).buffer(_OFF, join_style=2).intersection(box(-5, -5, 1000, feet))
     x0, x1 = (_FOOT[0] - _LEFT) * s + _OFF, (_FOOT[1] - _LEFT) * s + _OFF
     tab = Polygon([(x0, feet), (x1, feet), (x1 - 1.5, feet + TAB), (x0 + 1.5, feet + TAB)])
@@ -172,8 +179,11 @@ def _tray(p):
     pts = [(h, 0), (h + L, 0), (h + L + g, c), (h + L + g, h - g), (h + L, h), (2 * h + L, h), (2 * h + L, h + W), (h + L, h + W),
            (h + L + g, h + W + g), (h + L + g, 2 * h + W - c), (h + L, 2 * h + W), (h, 2 * h + W), (h - g, 2 * h + W - c), (h - g, h + W + g),
            (h, h + W), (0, h + W), (0, h), (h, h), (h - g, h - g), (h - g, c)]
-    # ラベルは左上の粘土の印の右に置く（印と重ねると読めない）。
-    part = Part(1, "tray", "舟", pts, label_xy=(h + CLAY_INSET + 2 + p["clay_side"], h + 2), label="1 舟")
+    # ラベルは左上の粘土の印の右に置く（印と重ねると読めない）。短い舟で葉の丸の印がそこまで来る時は、上の壁の左端に置き、
+    # 雷文をその右から始める（四度目の検品の指摘: 長さ 40〜60 の舟でラベルが葉の印に重なった）。
+    lx = h + CLAY_INSET + 2 + p["clay_side"]
+    on_floor = lx + LABEL_W <= h + L / 2 - p["leaf_radius"]
+    part = Part(1, "tray", "舟", pts, label_xy=(lx, h + 2) if on_floor else (h + 2, (h - LABEL_H) / 2), label="1 舟")
     part.valley = [((h, h), (h + L, h)), ((h, h + W), (h + L, h + W)), ((h, h), (h, h + W)), ((h + L, h), (h + L, h + W)),
                    ((h, 0), (h, h)), ((h + L, 0), (h + L, h)), ((h, h + W), (h, 2 * h + W)), ((h + L, h + W), (h + L, 2 * h + W))]
     part.glue = [[(h + L, 0), (h + L + g, c), (h + L + g, h - g), (h + L, h)], [(h + L, h + W), (h + L + g, h + W + g), (h + L + g, 2 * h + W - c), (h + L, 2 * h + W)],
@@ -185,21 +195,26 @@ def _tray(p):
     part.art = [panel(h, h, h + L, h + W, HULL), panel(h, 0, h + L, h, HULL_DARK), panel(h, h + W, h + L, 2 * h + W, HULL_DARK),
                 panel(0, h, h, h + W, HULL_DARK), panel(h + L, h, 2 * h + L, h + W, HULL_DARK)]
     # 壁の外側の雷文（コマ 28 の鉢の縁の模様）を、長い壁に細い線で写す。鉢の模様を舟に移した翻案。
-    for y0 in (h * 0.35, 2 * h + W - h * 0.65):
+    for y0, x in ((h * 0.35, h + 3 + (0 if on_floor else LABEL_W)), (2 * h + W - h * 0.65, h + 3)):
         hh = h * 0.3
-        x = h + 3
         while x + 8 < h + L - 3:
             part.art.append({"kind": "line", "pts": [(x, y0 + hh), (x, y0), (x + 6, y0), (x + 6, y0 + hh), (x + 2.5, y0 + hh), (x + 2.5, y0 + hh * 0.45)], "stroke": INK, "sw": 0.35})
             x += 9
     # 貼る所の印。式（mass_points）は葉と人形が底の真ん中、粘土が四隅に同じだけ、と見るので、その所を刷って組み方の文で言う。
     # 印の形は floor_marks の 1 つの式から出す（刷る印と F5.float が見る置き場を食い違わせない）。
+    # 底に収まらない印は刷らない。収まらない寸法は F5.float で落ちるので、絵の検査（折り線をまたぐ）を重ねて鳴らさない。
+    # 折り線から 0.5mm 内で見る（折り線に触れる印も「またぐ」と読まれる。F5.float が許す葉は折り線から 1mm 内なので、通る寸法の印は刷る）。
     fm = floor_marks(p)
-    ring = list(fm["leaf"].exterior.coords)
-    part.art.append({"kind": "line", "pts": [(x + h, y + h) for x, y in ring], "stroke": MARK, "sw": MARK_SW, "mark": "leaf"})
+    floor = box(0.5, 0.5, L - 0.5, W - 0.5)
+    if floor.contains(fm["leaf"]):
+        ring = list(fm["leaf"].exterior.coords)
+        part.art.append({"kind": "line", "pts": [(x + h, y + h) for x, y in ring], "stroke": MARK, "sw": MARK_SW, "mark": "leaf"})
     for sq in fm["ballast"]:
-        part.art.append({"kind": "poly", "pts": [(x + h, y + h) for x, y in list(sq.exterior.coords)[:-1]], "fill": "none", "stroke": MARK, "sw": MARK_SW, "mark": "ballast"})
+        if floor.contains(sq):
+            part.art.append({"kind": "poly", "pts": [(x + h, y + h) for x, y in list(sq.exterior.coords)[:-1]], "fill": "none", "stroke": MARK, "sw": MARK_SW, "mark": "ballast"})
     for arc in fm["cup_arcs"]:
-        part.art.append({"kind": "line", "pts": [(x + h, y + h) for x, y in arc], "stroke": MARK, "sw": MARK_SW, "mark": "cups"})
+        if floor.contains(LineString(arc)):
+            part.art.append({"kind": "line", "pts": [(x + h, y + h) for x, y in arc], "stroke": MARK, "sw": MARK_SW, "mark": "cups"})
     return part
 
 
@@ -249,7 +264,8 @@ def _leaf(p):
         a = 2 * math.pi * i / 7 + 0.3
         art.append({"kind": "line", "pts": [(r + 0.08 * r * math.cos(a), r + 0.08 * r * math.sin(a)), (r + k * r * math.cos(a), r + k * r * math.sin(a))], "stroke": VEIN, "sw": 0.4})
     # 人形の足の印。式は人形が葉の真ん中（＝舟の真ん中）に立つと見る。
-    fw = foot_width(p)
+    # 葉より広い足は F5.float（人形）で落ちる。印は葉の内に留め、絵の検査（F5.image_box）を重ねて鳴らさない
+    fw = min(foot_width(p), 2 * r - 1)
     art.append({"kind": "line", "pts": [(r - fw / 2, r), (r + fw / 2, r)], "stroke": MARK, "sw": 0.6, "mark": "figure"})
     return Part(2, "leaf", "葉", _circle(r, r, r), label_xy=(r - 1.5, 1.4 * r), label="2", art=art)
 
@@ -302,8 +318,8 @@ def mass_points(p):
     by = {q.key: q for q in parts(p)}
     floor = L * W
     pts = [(floor * gsm, 0), ((_area(by["tray"]) - floor) * gsm, h / 2),
-           # テープは底と 4 枚の壁の外側を覆う（糊代は内なので覆わない）
-           (floor * tape, 0), (2 * (L + W) * h * tape, h / 2),
+           # テープは底と 4 枚の壁の外側を覆う（糊代は内なので覆わない）。ふちから内へ折り返す帯は壁の上端にある
+           (floor * tape, 0), (2 * (L + W) * h * tape, h / 2), (2 * (L + W) * TAPE_FOLD * tape, h - TAPE_FOLD / 2),
            (_area(by["leaf"]) * gsm, 0)]
     fig = by["figure"]
     feet = _feet(p)
@@ -375,17 +391,35 @@ def check_physics(p):
     return out
 
 
+def _flow(items, x0, y0, x1, gap):
+    """部品を x0 から右へ並べ、x1 に入らなければ次の行の x0 へ送る。並べた物の下端の y を返す。"""
+    x, y, row_h = x0, y0, 0
+    for q in items:
+        if x > x0 and x + q.width > x1:
+            x, y, row_h = x0, y + row_h + gap, 0
+        q.x, q.y = x, y
+        x += q.width + gap
+        row_h = max(row_h, q.height)
+    return y + row_h
+
+
 def place(by_key, page, top, gap):
-    """1 段目の左に舟、その右に葉、葉の下に風受け 2 つを並べる。2 段目の左に人形、その右から説明の列。"""
+    """1 段目の左に舟、その右の帯に葉と風受け 2 つを並べる（帯に入らなければ次の行へ、帯に入らない物は舟の下へ）。
+    2 段目は、1 段目に置いた物の一番下の次の行で、左に人形、その右から説明の列。
+    四度目の検品の指摘: 前は葉を必ず舟の右、風受けを葉の下に置いたので、広い舟で葉が印字域を出て、高い風受けが説明の文に重なった。"""
     tray, leaf, fig = by_key["tray"], by_key["leaf"], by_key["figure"]
     tray.x, tray.y = page.x0, top
-    x = page.x0 + tray.width + gap
-    leaf.x, leaf.y = x, top
-    if "cupa" in by_key:
-        a, b = by_key["cupa"], by_key["cupb"]
-        a.x, a.y = x, top + leaf.height + gap
-        b.x, b.y = x + a.width + gap, a.y
-    y = top + tray.height + gap
+    items = [leaf] + [by_key[k] for k in ("cupa", "cupb") if k in by_key]
+    side_x = tray.x + tray.width + gap
+    n = 0  # 舟の右の帯に（1 つずつなら）入る物の数。入らない物から先は舟の下へ
+    while n < len(items) and side_x + items[n].width <= page.x1:
+        n += 1
+    bottom = tray.y + tray.height
+    if n:
+        bottom = max(bottom, _flow(items[:n], side_x, top, page.x1, gap))
+    if n < len(items):
+        bottom = _flow(items[n:], page.x0, bottom + gap, page.x1, gap)
+    y = bottom + gap
     fig.x, fig.y = page.x0, y
     x = page.x0 + fig.width + gap
     return y, page.x1 - x, x
@@ -417,7 +451,7 @@ def steps(p):
     out = ["水を使う時は大人と一緒に・紙は濡れると弱る", "水は床に敷いた新聞紙の上で使い、こぼした水はすぐ拭く",
            "刷った物差しに定規を当て、10cm か確かめる", "部品を実線で切る。舟の角の糊代の脇も切り込む",
            "1 舟を破線で谷折りして壁を立て、角の糊代を短い壁の内側に貼って箱にする",
-           "舟の外側の底と壁を透明テープですき間なく覆う（ふちは内へ折り返す）。紙は水を吸うので、すき間があると重くなって沈む",
+           f"舟の外側の底と壁を透明テープですき間なく覆う（ふちは内へ {TAPE_FOLD}mm ほど折り返す）。紙は水を吸うので、すき間があると重くなって沈む",
            "2 葉を舟の底の茶の丸い葉の印に合わせて貼る", "3 人形の足の糊代を破線で折り、折り目を葉の茶の足の印に合わせ、糊代を 2 の数字の側へ寝かせて貼る"]
     if p["vane"] == "cups":
         out.append("4・5 風受けの足の糊代の歯の間の切り込みを、破線まで切る。風受けを半円に丸め、歯を外へ折って、舟の両端の茶の半円の風受けの印に沿わせて貼る（丸い口が逆の向きになる）")
