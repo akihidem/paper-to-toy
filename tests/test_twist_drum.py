@@ -80,4 +80,26 @@ assert {q.key for q in t.parts(K)} == {"front", "back", "band", "post", "base", 
 assert {r["key"] for r in t.bom(K)} >= {"peg", "rod", "pull", "cord", "bead"}
 from omochae.floors import check_bom
 assert check_bom(t.bom(K), t.parts(K)) == []
+
+# ---- レビューの指摘（2026-11-04）を押さえる行 ----
+import re
+# 1. 玉は点でない。結び目から面までの軸の向きの距離は、奥行きの半分＋玉の半径（玉の表が面に触れる時、中心は面の外に半径だけ出る）。
+#    下限ちょうどの糸は、その中心の位置で半径の半分の所を打つ。既定の寸法で下限は √(13² + (9 + 4)²) ≒ 18.4mm
+low, _ = t.cord_window(P)
+assert abs(low - math.hypot(P["radius"] / 2, P["depth"] / 2 + P["bead_d"] / 2)) < 1e-9, low
+assert t.check_physics({**P, "cord_length": 17}) != [], "玉の半径を入れると 17mm では面の真ん中に届かない"
+#    諫鼓は玉が軸の側から面へ近づくので、軸から面までの距離から玉の半径を引く（向きが逆で、引くのが正しい）
+assert abs(t.wheel_anchor(K) + t.kanko_window(K)[0] - (K["face_gap"] - K["bead_d"] / 2)) < 1e-9
+# 2. 鳥の面: 幣の房の上の帯（STREAMER_TOP）を、胴の上に出た竹串に巻いて貼れるだけ、串を上へ出す
+tori = {**P, "face": "tori"}
+out_mm = [float(m) for s in t.steps(tori) for m in re.findall(r"上へ (\d+(?:\.\d+)?)mm 出す", s)]
+assert out_mm and out_mm[0] >= t.STREAMER_TOP, (out_mm, t.STREAMER_TOP)
+#    串を長く出す分も、竹串の長さの床で数える
+need = P["handle_length"] + 2 * P["radius"] + out_mm[0]
+assert any(f.where == "柄" for f in t.check_physics({**tori, "handle_length": math.floor(t.SKEWER_LEN - 2 * P["radius"] - out_mm[0]) + 1}))
+# 3. 柄に絡まない条件は厳密に L + 玉の半径 < √2·R。等しい糸（柄にちょうど届く）は落とす
+edge = math.sqrt(2) * P["radius"] - P["bead_d"] / 2
+assert any(f.where == "糸" for f in t.check_physics({**P, "cord_length": edge})), "柄にちょうど届く糸を通した"
+# 4. 刷る形ごとの出典。既定の SOURCE は菊の面
+assert t.SOURCES == {"kiku": t.SOURCE, "tori": "NDL-1187053-R0000029-L-twist_drum", "kanko": "NDL-1187053-R0000010-R-twist_drum"}
 print("ok")
