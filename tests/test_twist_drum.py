@@ -49,4 +49,35 @@ assert any(f.where == "柄" for f in fs), fs
 assert "streamer" in {q.key for q in t.parts({**P, "face": "tori"})}
 assert "streamer" not in {q.key for q in t.parts(P)}
 assert {r["key"] for r in t.bom({**P, "face": "tori"})} >= {"streamer", "stick", "cord", "bead"}
+
+# ---- 諫鼓（face=kanko）----
+K = {**P, "face": "kanko"}
+assert t.check_physics(K) == [], t.check_physics(K)
+# 帯の長さは諫鼓の半径から出し、柱の四角い穴は帯の幅の真ん中・継ぎ目の向かいにある
+kb = next(q for q in t.parts(K) if q.key == "band")
+kc = 2 * math.pi * (K["k_radius"] - K["paper_thickness"] / 2)
+assert abs(kb.width - (kc + K["seam_glue"])) < 1e-9 and kb.holes == [] and len(kb.cuts) == 1
+x, y, w, h = kb.cuts[0]
+assert abs(x + w / 2 - kc / 2) < 1e-9 and abs(y + h / 2 - (K["tab"] + K["k_length"] / 2)) < 1e-9
+# 窓: 下限ちょうどで、玉の表が面に触れる（軸から玉の中心まで face_gap − 玉の半径）
+low, high, dz = t.kanko_window(K)
+assert abs(t.wheel_anchor(K) + low - (K["face_gap"] - K["bead_d"] / 2)) < 1e-9 and dz == 0
+# 上限ちょうどで、打つ点のずれが STRIKE_ZONE·R になる
+rho, g = t.wheel_anchor(K) + high, K["face_gap"] - K["bead_d"] / 2
+assert abs(math.sqrt(rho * rho - g * g) - t.STRIKE_ZONE * K["k_radius"]) < 1e-9
+# 花車が鼓の中心の高さからずれるほど窓が狭まり、kR を越えると無くなる
+assert t.kanko_window({**K, "peg_height": K["peg_height"] + 5})[1] < high
+assert t.kanko_window({**K, "peg_height": 20})[1] is None
+for bad in (low - 0.5, high + 0.5):
+    fs = t.check_physics({**K, "k_cord": bad})
+    assert [(f.floor, f.where) for f in fs] == [("F5.drum", "糸")], fs
+# 花車が面に近すぎる・軸が台から出る・壁が低くて棒の穴が取れない
+assert any(f.where == "花車" for f in t.check_physics({**K, "wheel_r": 16, "face_gap": 17, "k_cord": 3}))
+assert any(f.where == "軸" for f in t.check_physics({**K, "base_length": 60}))
+assert any(f.where == "棒の穴" for f in t.check_physics({**K, "base_height": 10}))
+# 諫鼓の部品と部品表（紙でない物も）が合う
+assert {q.key for q in t.parts(K)} == {"front", "back", "band", "post", "base", "wheel"}
+assert {r["key"] for r in t.bom(K)} >= {"peg", "rod", "pull", "cord", "bead"}
+from omochae.floors import check_bom
+assert check_bom(t.bom(K), t.parts(K)) == []
 print("ok")
