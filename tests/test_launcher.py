@@ -18,8 +18,8 @@ x_cap = (2 * t.ENERGY_CAP_MJ / 1000 / t.spring_k(P)) ** 0.5 * 1000
 assert t.check_physics({**P, "draw": x_cap - 1e-6}) == []
 fs = t.check_physics({**P, "draw": x_cap + 0.5})
 assert [(f.floor, f.where) for f in fs] == [("F5.launch", "ばね")], fs
-# 弓の形も同じ式で、弓の長さの半分を梁にする
-assert abs(t.spring_k(B) - 2 * k1 * (P["arm_len"] / (B["bow_span"] / 2)) ** 3) < 1e-9
+# 弓の形も同じ式で、持つ所の帯の外の片側を梁にする
+assert abs(t.spring_k(B) - 2 * k1 * (P["arm_len"] / ((B["bow_span"] - t.GRIP_W) / 2)) ** 3) < 1e-9
 assert any(f.where == "ばね" for f in t.check_physics({**B, "paper_t": 0.35}))
 # 止めの条件の下がり: 重りの力 ÷ k₁。下がりが読めないほど硬い腕は落とす
 assert abs(t.tip_sag_min(P) - t.COIN_G / 1000 * 9.8 / k1 * 1000) < 1e-9
@@ -85,14 +85,15 @@ from shapely.geometry import Polygon
 from shapely.ops import unary_union
 CHECKS = {
  "H1 弓の k は作った物から": lambda: (not any("輪ゴム" in r["material"] for r in t.bom(B)) and "spring_k" not in t.DEFAULTS
-     and abs(t.spring_k(B) - 2 * 3 * t.E_HIGH * (P["arm_w"] * (t.LAYERS * P["paper_t"]) ** 3 / 12) / (B["bow_span"] / 2) ** 3 * 1000) < 1e-9
+     and abs(t.spring_k(B) - 2 * 3 * t.E_HIGH * (P["arm_w"] * (t.LAYERS * P["paper_t"]) ** 3 / 12) / ((B["bow_span"] - t.GRIP_W) / 2) ** 3 * 1000) < 1e-9  # 4 回目で梁を持つ所の外に改めた
      and t.energy_mj({**B, "paper_t": 0.3}) > t.energy_mj(B)),
  "H2 弩の引きは 1 つで、測って止める": lambda: (not any("引く長さを減らす" in s for s in t.steps(P))
      and any("使わない" in s and f"{t.sag_print(P)}mm" in s for s in t.steps(P))
      and any("使わない" in s and f"{t.sag_print(B)}mm" in s for s in t.steps(B))),
  "M 物差しの穴と閉じた範囲": lambda: (lambda s, b: any(f.where == "玉" for f in t.check_physics({**P, "ball_d": s}))
-     and any(f.where == "玉" for f in t.check_physics({**P, "ball_d": b})) and t.check_physics({**P, "ball_d": s + t.GAUGE_TOL}) == [])(*t.gauge_holes(P)),
- "M 弓の真ん中の穴": lambda: any("真ん中の穴" in s and "あけ" in s for s in t.steps(B)),
+     and any(f.where == "玉" for f in t.check_physics({**P, "ball_d": b})) and not any("物差しの穴" in f.message for f in t.check_physics({**P, "ball_d": s + t.GAUGE_TOL})))(*t.gauge_holes(P)),
+ # 4 回目で弓の真ん中の毛玉の穴をやめた（持つ所の帯の上から巻いて結ぶ）。刷る穴（両端）をあける文があるかを見る
+ "M 弓の穴をあける文": lambda: any("両端の穴" in s and "あけ" in s for s in t.steps(B)) and len(next(q for q in t.parts(B) if q.key == "stave").holes) == 2 * t.LAYERS,
  "M 弓の弦の糸が部品表に": lambda: any(r["key"] == "string" and "糸" in r["material"] for r in t.bom(B)),
  "M 貼り重ねの 3 つの面": lambda: (lambda a: abs(unary_union([Polygon(g) for g in a.glue]).area - a.width * a.height) < 1e-6)(next(q for q in t.parts(P) if q.key == "arma"))
      and any("裏" in s and "貼" in s for s in t.steps(P)),
@@ -124,9 +125,31 @@ CHECKS3 = {
  "M 弓の真ん中の穴と引き止めの糊代": hole_clear,
  "M 弩の腕の穴をあける文": lambda: any("腕の先の穴" in s and "あけ" in s for s in t.steps(P)),
  "M 弓は両側を測る": lambda: any("止めの条件" in s and "両端" in s and "どちらか" in s for s in t.steps(B)),
- "L 穴あけの竹串が用意する物に": lambda: all(any("竹串" in m and "飛ばさない" in m for m in t.materials(p)) for p in (P, B)),
+ "L 穴あけの竹串が用意する物に": lambda: all(any("竹串" in m and "片づけ" in m for m in t.materials(p)) for p in (P, B)),
  "L 房の長さが合う": lambda: (lambda q: abs(q.width - t.POM_LEN) < 1e-9 and abs(t.projectile_mass({**B, "ball_paper": 1e-9}) - Polygon(q.outline).area * B["paper_gsm"] * 1e-6) < 1e-6)(next(q for q in t.parts(B) if q.key == "pompom")),
 }
 for name, check in CHECKS3.items():
+    assert check(), name
+# 4 回目の指摘の行: 弓は持つ所を刷り梁はその外、弩は引いてから玉を入れる、竹串は大人があけて片づけ筒の中で弦に掛からない、
+# 固く丸めた玉を落とす、弓の向けと構えと糸の長さの上限、腕は根元の折り線で押さえる、δ と x の余裕を書く
+def idx(steps, *words):
+    return next(i for i, s in enumerate(steps) if all(w in s for w in words))
+CHECKS4 = {
+ "H 弓は持つ所を刷り、梁はその外": lambda: (getattr(t, "GRIP_W", None) and t.beam_len(B) == (B["bow_span"] - t.GRIP_W) / 2
+     and "grip" in {q.key for q in t.parts(B)} and "grip" in {r["key"] for r in t.bom(B)}
+     and any("持つ所の帯の内だけ" in s for s in t.steps(B))
+     and any(f.where == "ばね" for f in t.check_physics({**B, "bow_span": 80, "paper_t": 0.12, "arm_w": 10, "draw": 34}))),
+ "H 弩は引いてから玉を入れる": lambda: idx(t.steps(P), "引き金", "弦を掛ける") < idx(t.steps(P), "玉を台の前の口から入れ"),
+ "M 竹串は大人があけて片づけ、筒の中で弦に掛からない": lambda: (t.skewer_clear(P) >= 2 and any(f.where == "弦の溝" and "竹串" in f.message for f in t.check_physics({**P, "stock_w": 12, "glue": 4, "ball_d": 10, "ball_paper": 40}))
+     and all(any("大人" in s and "竹串" in s and "片づけ" in s for s in t.steps(p)) for p in (P, B))
+     and all(any("大人" in m and "竹串" in m for m in t.materials(p)) for p in (P, B))),
+ "M 固く丸めた玉を落とす": lambda: (t.bulk_density(P) <= t.DENSITY_MAX
+     and any("固" in f.message for f in t.check_physics({**P, "ball_paper": 100, "paper_gsm": 100, "ball_d": 16.5}))),
+ "M 弓の向けと構え・糸の長さの上限": lambda: (any("遠くの壁か床" in s for s in t.steps(B)) and any("顔から離し" in s for s in t.steps(B))
+     and any(f.where == "毛玉の糸" for f in t.check_physics({**B, "tether": t.TETHER_MAX + 1})) and t.check_physics({**B, "tether": t.TETHER_MAX}) == []),
+ "L 腕は根元の折り線で押さえる": lambda: any("止めの条件" in s and "根元の折り線" in s for s in t.steps(P)),
+ "L δ と x の余裕を書く": lambda: "δ ≒ x/2" in t.__doc__ and "上限" in t.__doc__,
+}
+for name, check in CHECKS4.items():
     assert check(), name
 print("ok")

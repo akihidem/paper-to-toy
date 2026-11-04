@@ -21,15 +21,26 @@
 - ためる力の上限: 弦の真ん中を x 引く時、腕の先が下がる長さは x を越えない（糸は伸びないので）。梁 2 本にためる力は
   2·½·k₁·δ² ≦ k₁·x² ＝ ½·(2k₁)·x²。これを E = ½·k·x²（k = 2k₁）と書く。弦の角度の効き・紙のへたり・空気の抵抗は入れない。
   玉に渡る力はこの E より小さいので、E を上限の見込みに使う。
-- 既定の寸法（厚さ 0.2mm・幅 9mm・腕 60mm・引き 25mm）で、弩は k ≒ 64N/m・E ≒ 20mJ、弓（170mm）は k ≒ 22N/m・E ≒ 7mJ。
+  δ ≦ x は上限で、実物では弦が斜めになる分だけ先は x より少なく下がると見込む（ざっと δ ≒ x/2 なら、力は上限の 1/4 ほど）。
+  ただし δ ≒ x/2 は確かめていない見込みなので、床は上限（δ = x）で見て、この余裕を通す理由には使わない。
+- 弓の梁の長さは、手で持つ所（GRIP_W の幅の持つ所の帯）の外の片側 L = (bow_span − GRIP_W)/2。手で握ると、握った所は
+  曲がらず梁が短く硬くなる（真ん中の 1 点で支えると見ると、硬さを小さく見積もる）。持つ所の帯を刷って巻き、帯の内だけを
+  持つと組み方の文で言い、止めの条件も帯の端で押さえて測る。
+- 既定の寸法（厚さ 0.2mm・幅 9mm・腕 60mm・引き 25mm）で、弩は k ≒ 64N/m・E ≒ 20mJ、弓（170mm・持つ所 30mm）は k ≒ 40N/m・E ≒ 13mJ。
 - E の上限 ENERGY_CAP_MJ = 30mJ は、この雛形が選んだ余裕の値で、規格の値ではない。選んだ理由: 既定の弩で 20mJ に
   なり、紙の厚さが 1 割ほど増えるか、引く長さが 2 割ほど増えると越える所に置いて、強くしすぎた寸法を落とすため。参考に、飛ぶ物の力の
   目安として 0.08J という数を聞くが、出所も原文も確かめていない目安なので、上限の根拠にはしていない（半分より下ではある）。
+  上限は δ = x の上限の E に当てるので、δ ≒ x/2 の見込みの余裕（実際は上限の 1/4 ほど）は、上限の選び方の外にさらに残る。
   玉の速さの上限の見込みは √(2E/m)（既定で 8m/s 前後）。
 - 引く長さ x が E を決めるので、引ける所の限りを紙に刷る。弩は弦の溝が根元から x + 1mm で終わり（溝の端が止め）、
   引き金の切れ込みがその x の所にある（引ける所は 1 つだけで、引く長さは変えられない）。弓は手で引くので、弓の真ん中に貼る引き止めの帯に x の所の線を刷る。
   線を越えて引けば E は上限を越えうる（紙では引くのを止められない。組み方の文で言う）。
 - 玉の重さは紙の面積 × 面密度。丸めた紙の玉の直径は、紙の辺の 0.3 倍より大きくはまとまらないと見込む（推定。実物で未確認）。
+  固く丸めすぎた玉は硬く重いので、玉のかさの密度（重さ ÷ 球の体積）を DENSITY_MAX = 0.25g/cm³ までにする。軽く丸めた
+  紙の玉は 0.1〜0.2g/cm³ ほどと見込む（推定。実物で未確認）。
+- 弩の筒に竹串（太さ SKEWER_D）を入れても、底に寝た竹串の上を弦が通り、押されないよう、弦の溝の下の縁を竹串の上から
+  SKEWER_CLEAR 以上離す。竹串は穴あけにだけ使い、大人があけて片づける（玩具と一緒に置かない）。
+- 弓の毛玉の糸は TETHER_MAX まで。腰の高さで持った弓から、跳ね返った毛玉が顔に届かない長さの見込み（推定）。
 - 先の太さ: 玉の直径が MIN_NOSE より細いと、目のくぼみに入りうるので落とす。毛玉も、房を広げた太さでは見ない。
   当たると房はつぶれ、芯が先になるため。毛玉の芯は弩の玉と同じ丸めた紙の玉（ball_d）で、房の帯はその玉に巻く。
   玉の大きさは型紙の玉の物差しの穴で合わせ、床の範囲は穴から GAUGE_TOL 内へ入れる（穴ちょうどの玉は決まらない）。
@@ -52,7 +63,7 @@ DEFAULTS = {
     "draw": 25, "paper_t": 0.2,
     "trigger_w": 10, "notch_depth": 4,
     "ball_paper": 64, "ball_d": 18,
-    "fringe_len": 15, "tether": 400,
+    "fringe_len": 15, "tether": 250,
     # 150g/m² は厚めの紙の見込み。実物の紙を量ったら置き換える。
     "paper_gsm": 150,
 }
@@ -91,7 +102,10 @@ GRIP = 14  # 引き金の台の上に出るつまみの長さ
 BELOW = 4  # 引き金を台の底の切れ込みに差し込む長さ。上と下の 2 点で支え、弦に引かれて倒れないように
 TOOTH, TOOTH_GAP, POM_BASE, POM_TEETH = 3, 1, 6, 25  # 毛玉の房の帯（房の幅・すき間・上の帯・房の数）
 POM_LEN = POM_TEETH * TOOTH + (POM_TEETH - 1) * TOOTH_GAP  # 房の帯の長さ（99mm）。刷る外形と重さの式が同じ値を使う
-TETHER_OFF = 10  # 毛玉の糸の穴を弓の真ん中からずらす長さ。真ん中には引き止めの帯の糊代を貼るため
+GRIP_W = 30  # 弓の持つ所の帯の幅（mm）。この内だけを手で持つ。梁はこの外から数える
+TETHER_MAX = 250  # 毛玉の糸の長さの上限（mm）
+DENSITY_MAX = 0.25  # 丸めた玉のかさの密度の上限（g/cm³）
+SKEWER_D, SKEWER_CLEAR = 3, 3  # 竹串の太さと、底に寝た竹串の上から弦の溝の下の縁までの余り（mm）
 STOP_W, STOP_BASE, STOP_TAIL = 8, 8, 6  # 引き止めの帯の幅・弓に貼る糊代・線の後ろの余り
 E_HIGH = 6000  # 紙の縦弾性係数の高い側の見込み（N/mm²＝6GPa）。前提は module の docstring
 COIN_G = 22.5  # 腕の硬さを確かめる重り: 10 円玉 5 枚（1 枚 4.5g）
@@ -125,8 +139,20 @@ def check_range(p):
 
 
 def beam_len(p):
-    """片持ちの梁 1 本の長さ（mm）。弩は腕、弓は真ん中から端まで。"""
-    return p["arm_len"] if p["form"] == "crossbow" else p["bow_span"] / 2
+    """片持ちの梁 1 本の長さ（mm）。弩は腕、弓は持つ所の帯の端から弓の端まで。"""
+    return p["arm_len"] if p["form"] == "crossbow" else (p["bow_span"] - GRIP_W) / 2
+
+
+def bulk_density(p):
+    """丸めた玉のかさの密度（g/cm³）。玉（弓は芯の玉）の紙の重さ ÷ 直径 ball_d の球の体積。"""
+    m = p["ball_paper"] ** 2 * p["paper_gsm"] * 1e-6
+    v = math.pi / 6 * (p["ball_d"] / 10) ** 3
+    return m / v
+
+
+def skewer_clear(p):
+    """弩の筒の底に寝た竹串の上から、弦の溝の下の縁までの余り（mm）。"""
+    return p["stock_w"] / 2 - SLIT / 2 - SKEWER_D
 
 
 def arm_k(p):
@@ -209,6 +235,8 @@ def check_physics(p):
         where = "腕" if p["form"] == "crossbow" else "弓"
         out.append(Failure("F5.launch", where, f"弦の穴から{where}の縁まで {w / 2 - HOLE_R:.1f}mm で、引くと裂けやすい（{HOLE_MARGIN}mm 以上）"))
     d = p["ball_d"]
+    if bulk_density(p) > DENSITY_MAX:
+        out.append(Failure("F5.launch", "玉", f"玉が固すぎる（かさの密度 {bulk_density(p):.2f}g/cm³・{DENSITY_MAX}g/cm³ まで）。紙を小さくするか、大きく軽く丸める"))
     if d > CRUMPLE * p["ball_paper"]:
         out.append(Failure("F5.launch", "玉", f"{p['ball_paper']:g}mm の紙では直径 {d:g}mm の玉にまとまらない（{CRUMPLE * p['ball_paper']:.1f}mm まで）"))
     # 物差しの穴の大きさちょうどの玉は、通るか通らないか決まらない。床の範囲は穴から GAUGE_TOL 内へ入れる。
@@ -216,8 +244,12 @@ def check_physics(p):
     lo, hi = small + GAUGE_TOL, big - GAUGE_TOL
     if not lo <= d <= hi:
         out.append(Failure("F5.launch", "玉", f"玉 {d:g}mm が物差しの穴（{small:g}・{big:g}mm）に合わない（{lo:g}〜{hi:g}mm）"))
+    if p["form"] == "bow" and p["tether"] > TETHER_MAX:
+        out.append(Failure("F5.launch", "毛玉の糸", f"毛玉の糸 {p['tether']:g}mm は長く、跳ね返った毛玉が顔に届きうる（{TETHER_MAX}mm まで）"))
     if p["form"] == "crossbow":
         sw, g = p["stock_w"], p["glue"]
+        if skewer_clear(p) < SKEWER_CLEAR:
+            out.append(Failure("F5.launch", "弦の溝", f"筒の底に寝た竹串の上から弦まで {skewer_clear(p):.1f}mm で、竹串が弦に押されうる（{SKEWER_CLEAR}mm 以上）"))
         if p["arm_w"] > sw - 2:
             out.append(Failure("F5.launch", "腕", "腕の根元が台の横の壁に収まらない"))
         if sw / 2 - SLIT / 2 - g < HOLE_MARGIN:
@@ -291,8 +323,8 @@ def _stave(p):
     L = p["bow_span"]
     part = _laminate(1, "stave", "弓", L, p, False)
     aw = p["arm_w"]
-    # 両端は弦の糸、真ん中の脇は毛玉の糸。真ん中には引き止めの帯の糊代を貼るので、毛玉の穴は TETHER_OFF ずらす。
-    xs = (HOLE_MARGIN + HOLE_R, L / 2 + TETHER_OFF, L - HOLE_MARGIN - HOLE_R)
+    # 穴は両端の弦の糸だけ。真ん中は持つ所の帯を巻き、引き止めの帯を貼り、毛玉の糸を帯の上から巻いて結ぶ（梁の根元に穴をあけない）。
+    xs = (HOLE_MARGIN + HOLE_R, L - HOLE_MARGIN - HOLE_R)
     part.holes = [(x, k * aw + aw / 2, HOLE_R) for x in xs for k in range(LAYERS)]
     part.label_xy = (L / 2 + 3, 1)
     return part
@@ -328,6 +360,20 @@ def _gauge(p):
     return part
 
 
+def grip_len(p):
+    """持つ所の帯の長さ: 貼り重ねた弓の断面を 1 周（幅 arm_w・厚さ 4 枚分）して、糊代 6mm を足す。"""
+    return 2 * (p["arm_w"] + LAYERS * p["paper_t"]) + 6
+
+
+def _grip(p):
+    """弓の持つ所の帯。弓の真ん中に巻いて、手で持つ所を色で見せる。この内だけを持つ（梁の長さの前提）。"""
+    L = grip_len(p)
+    part = Part(4, "grip", "持つ所の帯", [(0, 0), (L, 0), (L, GRIP_W), (0, GRIP_W)], label_xy=(0.8, 1), label="4")
+    part.glue = [[(L - 6, 0), (L, 0), (L, GRIP_W), (L - 6, GRIP_W)]]
+    part.art = [_rect(0, 0, L - 6, GRIP_W, DARK)]
+    return part
+
+
 def _drawstop(p):
     """弓の引き止めの帯。糊代を弓の真ん中の裏に貼り、帯を引く向き（後ろ）へ出す。弓の面から draw の所に線を刷り、
     毛玉と弦をその線より後ろへ引かない。紙の帯なので引くのを止める力は無く、目で見る印にとどまる。"""
@@ -360,7 +406,7 @@ def _pompom(p):
 def parts(p):
     if p["form"] == "crossbow":
         return [_stock(p), _arm(2, "arma", "右の腕", p), _arm(3, "armb", "左の腕", p), _trigger(p), _ball(p), _gauge(p)]
-    return [_stave(p), _pompom(p), _drawstop(p), _ball(p), _gauge(p)]
+    return [_stave(p), _pompom(p), _drawstop(p), _grip(p), _ball(p), _gauge(p)]
 
 
 def place(by_key, page, top, gap):
@@ -386,7 +432,9 @@ def place(by_key, page, top, gap):
         pom.x, pom.y = x0, top + sv.height + gap
         ds = by_key["drawstop"]
         ds.x, ds.y = pom.x + pom.width + gap, pom.y
-        y3 = max(pom.y + pom.height, ds.y + ds.height) + gap
+        gr = by_key["grip"]
+        gr.x, gr.y = ds.x + ds.width + gap, pom.y
+        y3 = max(pom.y + pom.height, ds.y + ds.height, gr.y + gr.height) + gap
         ga, ball = by_key["gauge"], by_key["ball"]
         ga.x, ga.y = x0, y3
         ball.x, ball.y = x0 + ga.width + gap, y3
@@ -414,6 +462,7 @@ def bom(p):
         {"number": 2, "key": "pompom", "name": "毛玉の房", "qty": 1, "material": paper, "substituted": True, "original_guess": "毛か糸の玉（図のとげのある玉からの推定）", "reason": "柔らかく軽い玉を刷って作るため"},
         {"number": 5, "key": "ball", "name": "芯の玉の紙", "qty": 1, "material": f"{paper}を丸めた玉", "substituted": True, "original_guess": "不明（図の毛玉の芯）", "reason": "当たって房がつぶれても先が太く柔らかいよう、芯を丸めた紙の玉にするため"},
         {"number": 6, "key": "gauge", "name": "玉の物差し", "qty": 1, "material": paper, "substituted": False, "original_guess": "", "reason": ""},
+        {"number": 4, "key": "grip", "name": "持つ所の帯", "qty": 1, "material": paper, "substituted": False, "original_guess": "", "reason": ""},
         {"number": 3, "key": "drawstop", "name": "引き止めの帯", "qty": 1, "material": paper, "substituted": False, "original_guess": "", "reason": ""},
         {"number": 7, "key": "string", "name": "弦", "qty": 1, "material": f"木綿の糸（{p['bow_span'] + 40:g}mm に切る）", "substituted": True, "original_guess": "糸（図の線による）", "reason": "伸びない糸にして、ばねを刷った紙の弓だけにするため（輪ゴムは硬さが決まらない）"},
         {"number": 8, "key": "tether", "name": "毛玉の糸", "qty": 1, "material": f"木綿の糸（{tether:g}mm と、房を縛る 100mm）", "substituted": True, "original_guess": "糸（図の毛玉の糸）", "reason": "毛玉が遠くへ飛ばないよう弓に繋いでおくため"},
@@ -424,8 +473,8 @@ def materials(p):
     # 行の位置でなく key で引く。形によって部品表の行が違うので、位置で引くと別の行を刷る。
     by = {r["key"]: r for r in bom(p)}
     if p["form"] == "crossbow":
-        return [f"{by['stock']['material']}を 1 枚", "のり、はさみ、定規（溝はカッターで大人が切る）", "穴あけ用の竹串 1 本（穴をあけるだけで、飛ばさない）", by["string"]["material"], "腕の硬さを確かめる 10 円玉 5 枚", f"飛ばすのは紙の玉だけ。{SAFETY}"]
-    return [f"{by['stave']['material']}を 1 枚", "のり、はさみ、定規", "穴あけ用の竹串 1 本（穴をあけるだけで、飛ばさない）", by["string"]["material"], by["tether"]["material"], "弓の硬さを確かめる 10 円玉 5 枚", f"飛ばすのは紙の毛玉だけ。{SAFETY}"]
+        return [f"{by['stock']['material']}を 1 枚", "のり、はさみ、定規（溝はカッターで大人が切る）", "穴あけ用の竹串 1 本（大人が穴をあけたら片づけ、玩具と一緒に置かない）", by["string"]["material"], "腕の硬さを確かめる 10 円玉 5 枚", f"飛ばすのは紙の玉だけ。{SAFETY}"]
+    return [f"{by['stave']['material']}を 1 枚", "のり、はさみ、定規", "穴あけ用の竹串 1 本（大人が穴をあけたら片づけ、玩具と一緒に置かない）", by["string"]["material"], by["tether"]["material"], "弓の硬さを確かめる 10 円玉 5 枚", f"飛ばすのは紙の毛玉だけ。{SAFETY}"]
 
 
 def steps(p):
@@ -434,25 +483,27 @@ def steps(p):
         tx = trigger_x(p)
         out += ["部品を実線で切る。1 台の細い溝と切れ込み、6 玉の物差しの穴はカッターで大人が切る",
                 "2・3 腕を破線で 4 枚に蛇腹に折り重ねる。表の糊代の面と、2 枚目と 3 枚目の裏どうしも貼る（3 つの面を全部貼る）。乾いてから根元を直角に折る",
-                "乾いたら、腕の先の穴を竹串の先で 4 枚とも通してあける（竹串は穴あけだけに使い、飛ばさない）",
-                f"止めの条件: 腕の根元を机の端で押さえ、腕を横にして先の穴に 10 円玉 5 枚（{COIN_G:g}g）を糸で下げる。左右の腕を 1 本ずつ測る。先が {sag_print(p)}mm 以上下がらなければ、紙が硬すぎるので、その腕は使わない（刷った物差しで測る）",
+                "乾いたら、腕の先の穴を大人が竹串の先で 4 枚とも通してあける。あけ終えたら竹串は片づけ、子どもに渡す玩具と一緒に置かない",
+                f"止めの条件: 腕を根元の折り線のところで机の端に押さえ、腕を横にして先の穴に 10 円玉 5 枚（{COIN_G:g}g）を糸で下げる。左右の腕を 1 本ずつ測る。先が {sag_print(p)}mm 以上下がらなければ、紙が硬すぎるので、その腕は使わない（刷った物差しで測る）",
                 "1 台を破線で谷折りして角筒にし、糊代で貼る",
                 "腕の根元を台の左右の壁の印に貼る（腕は横へ出し、先は後ろへ引ける向き）",
                 "糸を右の腕の先の穴に結び、左右の溝を通して筒の中を横切らせ、左の腕の先の穴に結ぶ。張らずに、たるまない程度に結ぶ",
                 "5 玉の紙を丸め、6 物差しの小さい穴を通らず大きい穴を通る大きさにする",
-                "玉を台の前の口から入れ、弦の前まで転がす",
                 f"弦を溝に沿って前の端から {tx:g}mm（溝の端）まで引く。溝の端より先へは引かない（引ける所はここ 1 つで、引く長さは変えない）。4 引き金を上の面と底の切れ込みに差して、前の縁の切れ込みに弦を掛ける",
+                "弦を掛けてから、玉を台の前の口から入れ、台を少し後ろへ傾けて、引いた弦の前まで転がす（弦の休む所より後ろに玉が来るように）",
                 "遠くの壁か床に向け、引き金を真上に引き抜くと弦が外れて玉が出る"]
     else:
         out += ["部品を実線で切る。2 房の切り込みは、はさみで上の帯の手前まで",
                 "1 弓を破線で 4 枚に蛇腹に折り重ねる。表の糊代の面と、2 枚目と 3 枚目の裏どうしも貼る（3 つの面を全部貼る）",
-                "乾いたら、両端の穴と真ん中の穴（真ん中から少し横の毛玉の穴）を竹串の先で 4 枚とも通してあける（竹串は穴あけだけに使い、飛ばさない）",
-                f"止めの条件: 弓の真ん中を机の端で押さえ、端の穴に 10 円玉 5 枚（{COIN_G:g}g）を糸で下げる。両端を 1 つずつ測る。どちらかの端が {sag_print(p)}mm 以上下がらなければ、紙が硬すぎるので、その弓は使わない（刷った物差しで測る）",
+                "乾いたら、両端の穴を大人が竹串の先で 4 枚とも通してあける。あけ終えたら竹串は片づけ、子どもに渡す玩具と一緒に置かない",
+                f"4 持つ所の帯を弓の真ん中（両端から同じ長さ）に巻いて貼る。帯の幅は {GRIP_W}mm",
+                f"止めの条件: 持つ所の帯の端を机の端にそろえ、帯の所だけを押さえて、外へ出た側の端の穴に 10 円玉 5 枚（{COIN_G:g}g）を糸で下げる。両端を 1 つずつ測る。どちらかの端が {sag_print(p)}mm 以上下がらなければ、紙が硬すぎるので、その弓は使わない（刷った物差しで測る）",
                 f"弦の糸を両端の穴に結ぶ。張らずに、たるまない程度に結ぶ（張って結ぶと引く前から力がたまる）",
                 "5 芯の玉の紙を丸め、6 物差しの小さい穴を通らず大きい穴を通る大きさにする",
                 "2 房の上の帯を芯の玉に巻いて貼り、根元を糸で縛る。房を外へ広げて毛玉にする（当たると房はつぶれ、芯の玉が先になる）",
-                f"毛玉の糸を {p['tether']:g}mm に切り、毛玉の根元と弓の毛玉の穴（真ん中の横）に結ぶ",
-                "3 引き止めの帯の糊代を折り、弓の真ん中の裏に貼って、帯を後ろへ出す",
+                "3 引き止めの帯の糊代を折り、持つ所の帯の裏の真ん中に貼って、帯を後ろへ出す",
+                f"毛玉の糸を {p['tether']:g}mm に切り、毛玉の根元に結び、もう一方を持つ所の帯の上から弓に巻いて結ぶ（{TETHER_MAX}mm より長くしない）",
+                "持つ所の帯の内だけを持つ（帯の外を握ると弓が硬くなり、強く飛びすぎる）。弓は顔から離し、腰の高さで、遠くの壁か床に向ける",
                 f"毛玉を弦の真ん中に当て、3 引き止めの帯の黒い線（弓から {p['draw']:g}mm）まで引いて放す。線より後ろへ引かない（強くなりすぎる）。毛玉は糸の長さまでしか飛ばない"]
     if p["form"] == "crossbow":
         out.append("どこまで飛ぶか見る。引く長さは変えない（溝の端の 1 つだけ）")
