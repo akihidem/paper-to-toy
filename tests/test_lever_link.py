@@ -259,7 +259,7 @@ for k in ("karakuri", "saru_take", "saru_sao"):
     glue = next(i for i, x in enumerate(st) if "厚紙に貼" in x)
     cut = next(i for i, x in enumerate(st) if "はさみで切る" in x)
     assert glue < cut, (k, st)
-    assert all(x.startswith(f"{i + 1}. ") for i, x in enumerate(st)), st
+    assert all(x.startswith(f"手順 {i + 1}: ") for i, x in enumerate(st)), st
 
 # 7 回目の見直し 2: からくり台の厚紙の枠は、大人がカッターを下敷きの上で定規に当てて切る
 st = t.steps({**P, "kind": "karakuri"})
@@ -273,6 +273,7 @@ for k in t.KINDS:
     m = t.materials(q)
     assert any("カッター" in x for x in m) == cutter, (k, m)
     assert any("カッター" in x for x in t.steps(q)) == cutter, k
+    assert all("大人" in x for x in t.steps(q) if "カッター" in x and "背" not in x), k  # 刃で切る手順は大人がする（筋を付けるカッターの背は除く）
     if any(x.holes for x in ps):
         assert any("目打ち" in x and "下敷き" in x and "大人" in x for x in m), (k, m)
         assert any("目打ち" in x and "大人" in x for x in t.steps(q)), k
@@ -281,4 +282,28 @@ assert not any("カッター" in x for x in t.materials({**P, "kind": "hashigo"}
 # 7 回目の見直し 4: plate_t の範囲は、使う形（登る板）だけで見る
 assert t.check_range({**P, "kind": "sumo", "plate_t": 0.1}) == []
 assert [f.floor for f in t.check_range({**P, "kind": "saru_take", "plate_t": 0.1})] == ["F5.range"]
+
+# 8 回目の見直し 1: 登る形で、目打ちで丸い穴をあける手順は竹串の穴を除き、竹串の穴は小さくあけて広げる手順の番号を指す
+for k in ("saru_take", "saru_sao"):
+    st = t.steps({**P, "kind": k})
+    awl = next(x for x in st if "目打ちであける" in x)
+    widen = next(i for i, x in enumerate(st) if "少しずつ広げる" in x)
+    assert f"竹串の穴は手順 {widen + 1} で" in awl, (awl, widen)
+
+# 8 回目の見直し 2: 厚紙に貼る部品は、余白を残して粗く切り取ってから貼る
+for k in ("karakuri", "saru_take", "saru_sao"):
+    assert any("余白" in x and "粗く" in x and "厚紙に貼" in x for x in t.steps({**P, "kind": k})), k
+
+# 8 回目の見直し 3: からくり台の門の口を切る手順は 1 つ
+assert sum("門の口" in x and "切" in x for x in t.steps({**P, "kind": "karakuri"})) == 1
+
+# 8 回目の見直し 4: 手順の番号（「手順 n:」）と部品の番号（「部品 n」）を分けて書く。部品の番号は型紙の部品にある
+import re
+for k in t.KINDS:
+    q = {**P, "kind": k}
+    nums = {x.number for x in t.parts(q)}
+    for x in t.steps(q):
+        body = x.split(": ", 1)[1]
+        assert not re.match(r"[0-9]+ ", body), x  # 文の頭に裸の番号を置かない
+        assert {int(n) for n in re.findall(r"部品 ([0-9]+)", body)} <= nums, x
 print("ok")
