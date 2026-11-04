@@ -75,4 +75,16 @@ assert abs(sum(foot_x) / 2 - pj.FIG_AXIS * d["figure_w"]) < 1e-9
 # 足は穴より片側 STOP_LIP 広く、静かな時に箱の上で止まる
 assert max(foot_x) - min(foot_x) == d["strip_width"] + pj.SLIDE_GAP + 2 * pj.STOP_LIP
 
+# 7. 床の式が頼る貼る位置は、型紙の印と組み方の文で示す（貼る位置がずれると、隠れる・出る高さの式が実物と合わない）
+#    帯の上の端から FOOT_TAB の所に、足の下の端を合わせる線を前の半分に刷る
+strip = next(q for q in pj.parts(p) if q.key == "strip")
+marks = [a for a in strip.art if a["kind"] == "line" and all(abs(y - pj.FOOT_TAB) < 1e-9 for _, y in a["pts"])]
+assert marks and all(x <= d["strip_width"] for a in marks for x, _ in a["pts"]), strip.art
+text = "".join(pj.steps(p))
+assert "印の線" in text and "上の端にそろえ" in text, text
+# 壺は上の面の印に、箱は「2 箱」の字の壁を前に（穴が右へずれているので、前後を取り違えると人形が壺の真ん中に来ない）
+assert "印に合わせて" in text and "「2 箱」の字のある壁を前" in text, text
+# 出典は形によらず 22 コマ左の 1 つ（形は同じ玩具の作り分け）
+assert set(pj.SOURCES) == set(pj.FORMS) and set(pj.SOURCES.values()) == {pj.SOURCE}
+
 print("ok")
