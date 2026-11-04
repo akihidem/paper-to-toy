@@ -70,4 +70,15 @@ with tempfile.TemporaryDirectory() as d:
     other = {**source, "holding": source["holding"] + "（別の文）", "modification_note": "改変: 別の注記"}
     assert sorted(f.where for f in check_pdf(pdf, other)) == ["所蔵の文", "改変"]
 
+# 5. 開く糸の長さは、筒の穴（口から THREAD_DEPTH 下）から測る
+from omochae.fan_model import shortest_free_thread
+
+p = {**sf.DEFAULTS, "push_part": "tab", "tube_side": 26, "pusher_side": 22, "base_side": 22, "pivot_above_rim": 2, "push_amount": 69, "fold_height": 38, "fold_count": 10}
+tube = next(q for q in sf.parts(p) if q.key == "tube")
+depth = tube.holes[0][1]
+assert depth == sf.THREAD_DEPTH
+z0 = p["pivot_above_rim"] + depth
+assert abs(sf.thread_mm(p) - shortest_free_thread(p["tube_side"], sf.THREAD_RADIUS, z0 - p["push_amount"], z0)) < 1e-9
+assert abs(sf.thread_mm(p) - 30.3) < 0.1, sf.thread_mm(p)
+
 print("ok")

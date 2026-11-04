@@ -45,6 +45,8 @@ PUSH_PARTS = ("tab", "tube", "stick")
 HUBS = ("axle", "rim")
 # 開く糸を扇の中心からこの距離につなぐ。途中で突っ張らない糸が一番短く、よく開く位置。糸の長さはこの距離から fan_model.shortest_free_thread で出す。
 THREAD_RADIUS = 35
+# 開く糸を結ぶ筒の穴の、口からの深さ。糸の長さの式（thread_mm）も同じ値から測る。
+THREAD_DEPTH = 3
 # 溝が筒の端に近いと紙が裂けやすい。実物で確かめるまでの安全側の見込み。
 SLOT_MARGIN = 5
 
@@ -223,7 +225,7 @@ def parts(p):
     tube.art = _tube_art(A, H, notch)
     if p["hub"] == "axle":
         # 開く糸を試す穴。扇は 1 面目に平行に開くので、その両脇の面につなぐ。
-        tube.holes += [(A * 1.5, 3, 0.6), (A * 3.5, 3, 0.6)]
+        tube.holes += [(A * 1.5, THREAD_DEPTH, 0.6), (A * 3.5, THREAD_DEPTH, 0.6)]
     out.append(tube)
     if p["push_part"] in ("tab", "tube", "stick"):
         # 柄の形の内筒は短い土台（v8）。柄の先を下から差し込んで貼り、台を載せる面にする。
@@ -323,7 +325,9 @@ def bom(p):
 
 
 def thread_mm(p):
-    return shortest_free_thread(p["tube_side"], THREAD_RADIUS, p["pivot_above_rim"] - p["push_amount"], p["pivot_above_rim"])
+    # 高さは筒の穴から測る。穴は口から THREAD_DEPTH 下にあるので、口から測ると糸の長さが最大で約 3mm ずれた。
+    z0 = p["pivot_above_rim"] + THREAD_DEPTH
+    return shortest_free_thread(p["tube_side"], THREAD_RADIUS, z0 - p["push_amount"], z0)
 
 
 RESULTS = ("動いた", "動かない", "わからない")
