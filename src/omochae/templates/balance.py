@@ -191,18 +191,23 @@ def _check_yajirobe(p):
             out.append(Failure("F5.balance", "玉", f"玉の左右が {CLAY_TOL}g 違うだけで {tilt:.0f}° 傾く（{MAX_TILT}° まで）"))
     arms = arm_geometry(p)
     r = ball_r(p["ball_g"])
-    bx, bz = arms[1][2]
-    d = math.hypot(bx, bz)
-    if d <= r:
-        out.append(Failure("F5.balance", "玉", "玉が支点に重なる"))
-    else:
-        # 台の竹串は支点の真下へ伸びる。玉の中心の、真下からの角度から、玉の半径の分を引く。
-        swing = math.degrees(math.atan2(abs(bx), bz)) - math.degrees(math.asin(min(1, (r + SKEWER_R) / d)))
+    low = 0.0
+    # 肩は左右で少し非対称（図の奴の形）なので、玉ごとに見る。
+    for (_, _, (bx, bz)), side in zip(arms, ("左", "右")):
+        d = math.hypot(bx, bz)
+        if d <= r + SKEWER_R:
+            out.append(Failure("F5.balance", f"{side}の玉", "玉が支点の串に重なる"))
+            continue
+        # 台の竹串は支点の真下へ伸びる。玉の中心の、真下からの角度から、玉と串の半径の分を引く。
+        reach = math.asin((r + SKEWER_R) / d)
+        swing = math.degrees(math.atan2(abs(bx), bz) - reach)
         if bz > 0 and swing < MIN_SWING:
-            out.append(Failure("F5.balance", "玉", f"玉が台の竹串に当たるまで {swing:.0f}° しか振れない（{MIN_SWING}° 以上）"))
-    low = max(b[1] for _, _, b in arms) + r
+            out.append(Failure("F5.balance", f"{side}の玉", f"玉が台の竹串に当たるまで {swing:.1f}° しか振れない（{MIN_SWING}° 以上）"))
+        # 机に当たるか。振れる間に玉の中心は支点のまわりの半径 d の円を回り、串に当たる所（真下から reach の角）が一番低い。
+        # 串に届く前に振れが止まる事は見込まない（強く押した時を見る）。休む時の高さより低ければ、そちらを使う。
+        low = max(low, max(bz, d * math.cos(reach)) + r)
     if low > p["stand_h"] - TABLE_CLEAR:
-        out.append(Failure("F5.balance", "台", f"玉の下が支点の {low:.0f}mm 下で、高さ {p['stand_h']}mm の台では机に当たる"))
+        out.append(Failure("F5.balance", "台", f"振れた時の玉の下が支点の {low:.0f}mm 下まで来て、高さ {p['stand_h']}mm の台では机に当たる（余裕 {TABLE_CLEAR}mm）"))
     body = Polygon([_rel(p, q) for q in _YAKKO])
     for (inner, _, _), side in zip(arms, ("左", "右")):
         if not body.contains(Point(inner)) or body.exterior.distance(Point(inner)) < SKEWER_R:
@@ -230,6 +235,8 @@ ARM_MARK = "#9a3b2a"
 
 def _back_part(p):
     """裏の 1 枚。刷った面を内にして表と貼るので、外形は表と同じ向き（鏡にしない）。刷った面に竹串を置く線を刷る。
+    重ね方: 裏を刷った面を上に置き、竹串を載せ、表を刷った面を上にしたまま重ねる。どちらの紙も上から見えるのは刷った面なので、
+    同じ向きの外形がそのまま重なる。鏡にすると、左右が非対称の奴では外形がずれる（表を裏返すと奴の絵が内に隠れる）。
     線は差し込みの奥の端から肩の角の 1mm 手前まで（角まで引くと線の太さが外形の外に出る）。奥の端に四角い印。"""
     outline = _yk(p, _YAKKO)
     tx, ty = _yk(p, [_TIP])[0]
@@ -472,7 +479,7 @@ def steps(p):
                 f"肩の印（端から {p['arm_insert']}mm）と玉の印（端から {p['arm_insert'] + p['arm_length']}mm＝竹串の先）をペンで写す",
                 f"2 体（裏）の刷った面を上にし、竹串を赤い線に沿って置く。竹串の端を四角い印に、肩の印を肩の角に合わせる"
                 f"（差し込み {p['arm_insert']}mm、水平から {p['arm_angle']}° 下）",
-                "3 当て紙を V の先に置き、糊を塗って 1 体（表）の刷っていない面を重ねて貼る。乾いたら当て紙を V の線で切りそろえる",
+                "3 当て紙を V の先に置き、糊を塗って 1 体（表）を、刷った面を上にしたまま（裏返さない）重ねて外形をそろえて貼る。乾いたら当て紙を V の線で切りそろえる",
                 f"竹串の先に油粘土を {p['ball_g']:g}g ずつ丸め、玉の中心が竹串の先（肩から {p['arm_length']}mm）に来るように付ける",
                 "竹串を土台に立て、V の先を竹串の先か指先に乗せる。傾いたら軽い側の粘土を足す"]
     else:
@@ -514,7 +521,8 @@ def diagram(x, y, w, h, p):
     s = min(w / (2 * R), h / (R + H))
     cx, base = x + w / 2, y + (R + H) * s
     dome = [(cx + R * s * math.cos(math.pi * i / 24), base - R * s + R * s * math.sin(math.pi * i / 24)) for i in range(25)]
-    shapes = [{"kind": "poly", "pts": [(cx - R * s, base - R * s), (cx, y), (cx + R * s, base - R * s)] + dome[::-1], "fill": "none", "sw": 0.25}]
+    # 左の赤道 → 先 → 右の赤道 → 底の半円（右から左へ）の 1 本の道。半円を逆に並べると、右から左へ赤道の横の線が余分に入る。
+    shapes = [{"kind": "poly", "pts": [(cx - R * s, base - R * s), (cx, y)] + dome[:-1], "fill": "none", "sw": 0.25}]
     hc = com_height(p)
     shapes.append({"kind": "rect", "x": cx - 1, "y": base - hc * s - 1, "w": 2, "h": 2})
     shapes.append({"kind": "line", "x1": cx - R * s, "y1": base - R * s, "x2": cx + R * s, "y2": base - R * s, "dash": "1,0.6"})

@@ -1,6 +1,8 @@
 """釣り合いの床（F5.balance）の式の要所を数点で確かめる。重心の向き（上か下か）は言葉で決めると間違えやすいので、ここで数える。"""
 import math
 
+from shapely.geometry import Polygon
+
 from omochae.compose import TEMPLATES
 from omochae.pivot_model import center, rest_tilt_deg
 from omochae.templates import balance as t
@@ -98,4 +100,22 @@ assert f"{t.clay_cap(O)[0]:.0f}mm" in " ".join(t.steps(O))
 assert t.SOURCES == {"yajirobe": t.SOURCE, "okiagari": "NDL-1187053-R0000026-L-balance"}
 _, _, fs = compose("balance", O, load_source(t.SOURCE))
 assert [f.floor for f in fs] == ["F1.source"], fs
+# 2 回目の見直し
+# (1) 重ね方: 裏を刷った面を上に置き、竹串を載せ、表を刷った面を上にしたまま（刷っていない面を下に）重ねる。
+#     どちらも上から見えるのは刷った面なので、外形は同じ向きで重なる（鏡にすると左右が逆になってずれる）。
+#     表を裏返さない事を組み方の文に書く（裏返すと、刷った奴の絵が内に隠れる）。
+mirrored = [(Y["body_w"] - x, y) for x, y in front.outline]
+assert back.outline == front.outline and Polygon(mirrored).symmetric_difference(Polygon(back.outline)).area > 1, "奴は左右が非対称で、鏡にすると重ならない"
+assert any("裏返さない" in s_ for s_ in t.steps(Y)), t.steps(Y)
+# (2) 机に当たるか: 振れの途中で玉の中心は支点から d 近くまで下がる。休む時の高さだけでは見逃す
+p2 = {**Y, "stand_h": 110}
+arms = t.arm_geometry(p2)
+assert max(b[1] for _, _, b in arms) + t.ball_r(p2["ball_g"]) < p2["stand_h"] - t.TABLE_CLEAR  # 休む時は当たらない
+assert any(f.where == "台" for f in t.check_physics(p2)), t.check_physics(p2)
+# (3) 肩は左右で非対称なので、台の串に当たるまでの振れは左右とも見る（右 21.9°・左 19.9° の寸法）
+fs = t.check_physics({**Y, "arm_length": 61, "arm_angle": 85})
+assert any(f.where == "左の玉" and "振れない" in f.message for f in fs), fs
+# (4) 起き上がりの図の外形は、自分と交わらない 1 本の道（赤道の横の線を余分に引かない）
+shape = t.diagram(0, 0, 50, 80, O)[0]["pts"]
+assert Polygon(shape).is_valid, "図の外形が自分と交わる"
 print("ok")
