@@ -62,6 +62,12 @@ SKEWER_LEN = 180  # 家にある竹串の長さの見込み（実物を測った
 TOP_OUT = 5  # 柄の先を胴の上へ出す長さ。抜け止めに糸を巻くため（幣の房の無い形）
 
 
+def stick_cut(p):
+    """柄の竹串を切る長さ ＝ 胴の下の柄 ＋ 胴の直径 ＋ 胴の上へ出す長さ。部品表と組み方の文はこの 1 つの式から書く。
+    切らずに 180mm のまま通すと、上を決めた分だけ下が余り、柄の巻き紙（柄より 2mm 短い）と合わなかった。"""
+    return p["handle_length"] + 2 * p["radius"] + top_out(p)
+
+
 def top_out(p):
     """竹串を胴の上へ出す長さ。鳥の面は幣の房の上の帯（STREAMER_TOP）をこの出た所に巻いて貼るので、帯の幅＋2mm 出す。
     5mm のままだと 8mm の帯を巻く所が無く、組めなかった。"""
@@ -197,7 +203,7 @@ def _check_hand(p):
     _, pitch, inset = tab_teeth(p)
     if pitch - 2 * inset < 1:
         out.append(Failure("F5.drum", "糊代の歯", f"歯の先が {pitch - 2 * inset:.1f}mm で、面を貼る所が無い（歯が深すぎる）"))
-    need = p["handle_length"] + 2 * p["radius"] + top_out(p)
+    need = stick_cut(p)
     if need > SKEWER_LEN:
         out.append(Failure("F5.drum", "柄", f"柄に竹串が {need:.0f}mm 要り、{SKEWER_LEN}mm の竹串で足りない"))
     return out
@@ -333,7 +339,7 @@ def _streamer():
 
 def parts(p):
     if p["face"] == "kanko":
-        return [_disc(1, "front", "表の面", p), _disc(2, "back", "裏の面", p), _band(p), _post(p), _base(p), _wheel(p)]
+        return [_disc(1, "front", "表の面", p), _disc(2, "back", "裏の面", p), _band(p), _post(p), _base(p), _wheel(p), _rodtab(p), _gauge(p)]
     out = [_disc(1, "front", "表の面", p), _disc(2, "back", "裏の面", p), _band(p), _wrap(p)]
     if p["face"] == "tori":
         out.append(_streamer())
@@ -373,7 +379,7 @@ def bom(p):
         {"number": 2, "key": "back", "name": "裏の面", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（同じ）", "reason": why},
         {"number": 3, "key": "band", "name": "胴の帯", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（図では塗った胴）", "reason": why},
         {"number": 4, "key": "wrap", "name": "柄の巻き紙", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明", "reason": "竹串の柄を持ちやすく、図の柄の色に近づけるため"},
-        {"number": 7, "key": "stick", "name": "柄", "qty": 1, "material": f"竹串（太さ {p['stick_d']:g}mm・長さ {SKEWER_LEN}mm の見込み）", "substituted": True, "original_guess": "竹か木（図の柄の形からの推定）", "reason": "家にあり、胴に通しやすいため"},
+        {"number": 7, "key": "stick", "name": "柄", "qty": 1, "material": f"竹串（太さ {p['stick_d']:g}mm・{SKEWER_LEN}mm の物を {stick_cut(p):g}mm に切る）", "substituted": True, "original_guess": "竹か木（図の柄の形からの推定）", "reason": "家にあり、胴に通しやすいため"},
         {"number": 8, "key": "cord", "name": "糸", "qty": 2, "material": f"木綿の糸（1 本 {cord:g}mm に切る）", "substituted": True, "original_guess": "糸か紐（図の線による）", "reason": "家にあるため"},
         {"number": 9, "key": "bead", "name": "玉", "qty": 2, "material": f"油粘土の玉（直径 {p['bead_d']:g}mm）かビーズ", "substituted": True, "original_guess": "不明", "reason": "大きさを変えて試しやすいため"},
     ]
@@ -398,6 +404,7 @@ def steps(p):
     out = ["刷った物差しに定規を当て、10cm か確かめる", "部品を実線で切る。3 胴の帯の歯の間も切り込む。帯の穴は竹串の先であける",
            "3 胴の帯を丸め、終わりの糊代を頭の下に入れて貼る（絵が外）", "上下の歯を破線で内へ谷折りする",
            "1 表の面と 2 裏の面を、歯に外から貼る",
+           f"竹串を {stick_cut(p):g}mm に切る（胴の下の柄 {p['handle_length']:g}mm・胴 {2 * p['radius']:g}mm・胴の上 {top_out(p):g}mm）",
            f"竹串を太い 2 つの穴（帯の頭から {pos['stick'][0]:.0f}mm と {pos['stick'][1]:.0f}mm）に通し、上へ {top_out(p):g}mm 出す。穴の所を糊で留める",
            f"糸の端に玉を付け、玉の中心から {p['cord_length']:g}mm の所で、菱形の小さい穴に結ぶ（左右 2 本）",
            "4 柄の巻き紙を胴の下の竹串に巻いて貼る"]
@@ -448,11 +455,41 @@ POST_FIT = 0.4  # 柱の頭を差す帯の四角い穴の遊び。きついと�
 POST_INSERT, POST_TAB, POST_GLUE = 5, 5, 5  # 柱の頭を胴に差す長さ・足の糊代・継ぎ目の糊代
 BASE_TAB = 6  # 台の角の糊代の幅（壁の高さより狭くする）
 WHEEL_PETALS = 10  # 図の花車の花弁の数
+PEG_TOP = 3  # 花車の軸の竹串を、花車の上へ出す長さ
+ROD_NORTH_OUT = 10  # 引く棒を押し込んだ時に、北の壁から出しておく長さ（抜けないように）
+ROD_GRIP = 40  # 引く棒の、南の壁から出して手で持つ長さ
+TAB_W, TAB_FLAG = 5, 7  # 棒の留め具の帯の幅と、糸を結ぶ旗の長さ
 
 
 def wheel_anchor(p):
     """花車で玉の糸を結ぶ穴の、軸からの距離。花弁の先から 1.5mm 内に穴をあける（先に寄せると裂ける）。"""
     return p["wheel_r"] - 1.5
+
+
+def peg_cut(p):
+    """花車の軸の竹串の長さ。下の端を床に着けて台の穴に立てるので、台の高さ＋花車の高さ（台の上の面から）＋上へ出す分。"""
+    return p["base_height"] + p["peg_height"] + PEG_TOP
+
+
+def rodtab_pos(p):
+    """棒の留め具（巻く糸を結ぶ所）の、棒の北の端からの長さ。棒を押し込んだ時に留め具が軸の真横に来る所にする。
+    図の棒の切り欠きの代わり【解釈】。位置を寸法から決めて刷るので、結ぶ所が作る人ごとにずれない。"""
+    return ROD_NORTH_OUT + peg_pos(p)
+
+
+def pull_travel(p):
+    """棒を南へ引ける長さ。留め具が南の壁（の内側の余白 HOLE_MARGIN）に当たるまで。"""
+    return p["base_length"] - peg_pos(p) - HOLE_MARGIN
+
+
+def pull_turns(p):
+    """引き切った時に軸が回る数。糸は竹串の太さの周りから解ける（糸の太さは入れない）。"""
+    return pull_travel(p) / (math.pi * p["stick_d"])
+
+
+def rod_perimeter(p):
+    """竹串 2 本を縦に重ねて束ねた棒の周りの長さ（半円 2 つ＋まっすぐな所 2 つ）。"""
+    return math.pi * p["stick_d"] + 2 * p["stick_d"]
 
 
 def peg_pos(p):
@@ -518,6 +555,9 @@ def check_kanko(p):
     _, pitch, inset = tab_teeth(p)
     if pitch - 2 * inset < 1:
         out.append(Failure("F5.drum", "糊代の歯", f"歯の先が {pitch - 2 * inset:.1f}mm で、面を貼る所が無い（歯が深すぎる）"))
+    # 結ぶ所（留め具）を決めたので、引ける長さで軸が回る数も数えられる。1 回も回らないと玉が振れない。
+    if pull_turns(p) < 1:
+        out.append(Failure("F5.drum", "棒", f"棒を引ける長さ {pull_travel(p):.0f}mm では、軸が 1 回も回らない（{pull_turns(p):.1f} 回）"))
     return out
 
 
@@ -615,6 +655,25 @@ def _wheel(p):
     return part
 
 
+def _rodtab(p):
+    """棒の留め具。帯を棒に巻いて貼り、旗を軸に向けて立て、旗の穴に巻く糸を結ぶ。"""
+    W = rod_perimeter(p) + 3
+    pts = [(0, 0), (W, 0), (W, TAB_W), (7, TAB_W), (7, TAB_W + TAB_FLAG), (1, TAB_W + TAB_FLAG), (1, TAB_W), (0, TAB_W)]
+    part = Part(16, "rodtab", "棒の留め具", pts, label_xy=(W - 6.5, 0.8), label="16")
+    part.glue = [[(W - 3, 0), (W, 0), (W, TAB_W), (W - 3, TAB_W)]]
+    part.valley = [((1, TAB_W), (7, TAB_W))]
+    part.holes = [(4, TAB_W + TAB_FLAG - 2.5, 0.6)]
+    return part
+
+
+def _gauge(p):
+    """花車の高さの物差しの紙。台の上の面に立て、上の端に花車の下の面を合わせる。長さは peg_height そのもの。"""
+    h = p["peg_height"]
+    part = Part(17, "gauge", "花車の高さの紙", [(0, 0), (6, 0), (6, h), (0, h)], label_xy=(1.4, 1.5), label="17")
+    part.art = [{"kind": "poly", "pts": [(0.2, 0.2), (5.8, 0.2), (5.8, 1.0), (0.2, 1.0)], "fill": INK}]  # 上の端の印
+    return part
+
+
 def _place_kanko(by_key, page, y, gap):
     """2 段目に台・面 2 枚（縦）・柱・花車を並べ、説明は 2 段目の下に全幅で置く（台が広く、右に説明の列を取ると物差しが入らない）。"""
     x = page.x0
@@ -628,15 +687,18 @@ def _place_kanko(by_key, page, y, gap):
     post, wheel = by_key["post"], by_key["wheel"]
     post.x, post.y = x, y
     wheel.x, wheel.y = x, y + post.height + gap
-    bottom = max(base.y + base.height, back.y + back.height, wheel.y + wheel.height)
+    tab, gauge = by_key["rodtab"], by_key["gauge"]
+    tab.x, tab.y = x + wheel.width + gap, wheel.y
+    gauge.x, gauge.y = tab.x + tab.width + gap, wheel.y
+    bottom = max(base.y + base.height, back.y + back.height, wheel.y + wheel.height, tab.y + tab.height, gauge.y + gauge.height)
     return bottom + gap, page.x1 - page.x0, page.x0
 
 
 def bom_kanko(p):
     paper = f"紙（厚さ {p['paper_thickness']}mm 前後）"
     why = "家庭のプリンタで刷って作るため"
-    peg = p["peg_height"] + p["base_height"] + 3
-    rod = p["base_length"] + 2 * p["base_height"] + 40  # 台を通して手で持つ分
+    peg = peg_cut(p)
+    rod = ROD_NORTH_OUT + p["base_length"] + ROD_GRIP  # 北の壁から出す分＋台の中＋手で持つ分
     return [
         {"number": 1, "key": "front", "name": "表の面", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（紙張りか革張りかは図から分からない）", "reason": why},
         {"number": 2, "key": "back", "name": "裏の面", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（同じ）", "reason": why},
@@ -647,8 +709,10 @@ def bom_kanko(p):
         {"number": 11, "key": "base", "name": "台", "qty": 1, "material": paper, "substituted": True, "original_guess": "木の板（図の形からの推定）", "reason": why},
         {"number": 12, "key": "wheel", "name": "花車", "qty": 1, "material": paper, "substituted": True, "original_guess": "紙（図の形からの推定）", "reason": why},
         {"number": 13, "key": "peg", "name": "花車の軸", "qty": 1, "material": f"竹串（長さ {peg:g}mm に切る）", "substituted": True, "original_guess": "竹か木（図の形からの推定）", "reason": "家にあり、台の穴で回しやすいため"},
-        {"number": 14, "key": "rod", "name": "引く棒", "qty": 1, "material": f"竹串 2 本（長さ {rod:g}mm、テープで束ねる）", "substituted": True, "original_guess": "竹 2 本（図の形による）【解釈】", "reason": "図の 2 本並びの竹に近く、家にあるため"},
+        {"number": 14, "key": "rod", "name": "引く棒", "qty": 1, "material": f"竹串 2 本（長さ {rod:g}mm、テープで束ねる）", "substituted": True, "original_guess": "竹 2 本（図の形による。図の切り欠きは 16 棒の留め具に置き換えた）【解釈】", "reason": "図の 2 本並びの竹に近く、家にあるため"},
         {"number": 15, "key": "pull", "name": "巻く糸", "qty": 1, "material": "木綿の糸（200mm）", "substituted": True, "original_guess": "不明（図に見えない）【解釈】", "reason": "棒を引いて軸を回すため"},
+        {"number": 16, "key": "rodtab", "name": "棒の留め具", "qty": 1, "material": paper, "substituted": True, "original_guess": "棒の切り欠き（図による）【解釈】", "reason": "竹串に切り欠きを彫るのは難しく、結ぶ所を刷って決めるため"},
+        {"number": 17, "key": "gauge", "name": "花車の高さの紙", "qty": 1, "material": paper, "substituted": True, "original_guess": "無し（作るための道具）", "reason": "花車を台の上の面から決まった高さに貼るため"},
     ]
 
 
@@ -658,9 +722,12 @@ def steps_kanko(p):
             "3 胴の帯を丸めて貼り、歯を内へ折って 1 表の面（巴）と 2 裏の面を貼る",
             "10 柱を四角い筒に貼り、足の糊代を外へ折る。頭を胴の四角い穴に差して貼る",
             "11 台を破線で折り、角の糊代で箱にする（底は無い）。印の四角に柱の足を貼る。表の面を花車の側に向ける",
-            f"竹串 13 を台の丸い穴に通し、12 花車を上から {p['peg_height']:g}mm の所に貼る",
+            f"竹串 13（{peg_cut(p):g}mm）を台の丸い穴に通し、下の端を床に着ける",
+            f"17 花車の高さの紙を軸の横の台の上の面に立て、12 花車を台の上の面から {p['peg_height']:g}mm の所（紙の上の端の印）に貼る。軸の上の端からは {PEG_TOP}mm 下",
             f"花車の小さい穴に糸を結び、玉の中心まで {p['k_cord']:g}mm にする",
-            "【解釈】巻く糸の端を台の中で軸に何回か巻き、もう一方の端を 14 引く棒の切り欠きに結ぶ。棒を南の壁の穴から北の壁の穴へ通す",
+            f"【解釈】14 引く棒を南の壁の穴から北の壁の穴へ通し、北の壁から {ROD_NORTH_OUT}mm 出す",
+            f"【解釈】16 棒の留め具を、棒の北の端から {rodtab_pos(p):g}mm の所（軸の真横）に巻いて貼り、旗を軸に向ける",
+            f"【解釈】巻く糸の端を旗の穴に結び、台の下から軸に {math.ceil(pull_turns(p))} 回巻く（棒を南へ {pull_travel(p):.0f}mm 引くと、約 {pull_turns(p):.1f} 回まわる）",
             "棒を引いて軸を回し、玉が面に当たるか見る"]
 
 

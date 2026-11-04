@@ -76,7 +76,7 @@ assert any(f.where == "花車" for f in t.check_physics({**K, "wheel_r": 16, "fa
 assert any(f.where == "軸" for f in t.check_physics({**K, "base_length": 60}))
 assert any(f.where == "棒の穴" for f in t.check_physics({**K, "base_height": 10}))
 # 諫鼓の部品と部品表（紙でない物も）が合う
-assert {q.key for q in t.parts(K)} == {"front", "back", "band", "post", "base", "wheel"}
+assert {q.key for q in t.parts(K)} == {"front", "back", "band", "post", "base", "wheel", "rodtab", "gauge"}
 assert {r["key"] for r in t.bom(K)} >= {"peg", "rod", "pull", "cord", "bead"}
 from omochae.floors import check_bom
 assert check_bom(t.bom(K), t.parts(K)) == []
@@ -102,4 +102,28 @@ edge = math.sqrt(2) * P["radius"] - P["bead_d"] / 2
 assert any(f.where == "糸" for f in t.check_physics({**P, "cord_length": edge})), "柄にちょうど届く糸を通した"
 # 4. 刷る形ごとの出典。既定の SOURCE は菊の面
 assert t.SOURCES == {"kiku": t.SOURCE, "tori": "NDL-1187053-R0000029-L-twist_drum", "kanko": "NDL-1187053-R0000010-R-twist_drum"}
+# ---- 2 回目のレビューの指摘（2026-11-04）を押さえる行 ----
+def nums(text, pat):
+    return [float(m) for m in re.findall(pat, text)]
+# 5. 花車の高さは、式と見取り図と同じく台の上の面から測る。組み方の文の数・物差しの紙・軸の竹串の長さが同じ基準で合う
+st = " ".join(t.steps(K))
+assert nums(st, r"台の上の面から (\d+(?:\.\d+)?)mm") == [K["peg_height"]], st
+top = nums(st, r"軸の上の端からは (\d+(?:\.\d+)?)mm 下")[0]
+cut = nums(next(r for r in t.bom(K) if r["key"] == "peg")["material"], r"長さ (\d+(?:\.\d+)?)mm")[0]
+assert cut == K["base_height"] + K["peg_height"] + top, (cut, top)
+assert {q.key: q for q in t.parts(K)}["gauge"].height == K["peg_height"]
+# 6. 柄の竹串を切る長さ ＝ 柄 ＋ 胴の直径 ＋ 胴の上。組み方の文と部品表が同じ値で、巻き紙は柄より 2mm 短い
+for face in ("kiku", "tori"):
+    p = {**P, "face": face}
+    c = P["handle_length"] + 2 * P["radius"] + t.top_out(p)
+    assert nums(" ".join(t.steps(p)), r"竹串を (\d+(?:\.\d+)?)mm に切る") == [c], face
+    assert f"{c:g}mm に切る" in next(r for r in t.bom(p) if r["key"] == "stick")["material"]
+    assert t.wrap_size(p)[1] == P["handle_length"] - 2
+# 7. 棒の切り欠きは刷る留め具に置き換え、結ぶ所を棒の北の端からの長さで決める（押し込んだ時に軸の真横）
+assert "切り欠き" not in st
+assert nums(st, r"棒の北の端から (\d+(?:\.\d+)?)mm") == [t.rodtab_pos(K)] and t.rodtab_pos(K) == t.ROD_NORTH_OUT + t.peg_pos(K)
+tab = {q.key: q for q in t.parts(K)}["rodtab"]
+assert abs(tab.width - (t.rod_perimeter(K) + 3)) < 1e-9 and len(tab.holes) == 1
+#    引ける長さで軸が 1 回も回らない寸法は落とす
+assert t.pull_turns(K) >= 1 and any(f.where == "棒" for f in t.check_physics({**K, "base_length": 70}))
 print("ok")
