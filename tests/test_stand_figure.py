@@ -50,6 +50,10 @@ for f in sorted((ROOT / "tests/frozen/scenarios").glob("stand_figure_*.json")):
     sc = json.loads(f.read_text(encoding="utf-8"))
     assert sc["template"] == "stand_figure", f.name
     fig = sc["params"]["figure"]
+    if "F1.source" in sc["expect"]["floors"]:
+        # 組の誤りを落とす負の場面だけは、わざと組でない。組でない事を確かめる
+        assert sc["source_id"] != t.FIGURES[fig]["source"], f.name
+        continue
     assert sc["source_id"] == t.FIGURES[fig]["source"], f"{f.name}: 姿 {fig} と出典 {sc['source_id']} が組でない"
     if sc["expect"]["rc"] == 0:
         scen[fig] = sc
@@ -73,7 +77,7 @@ for fig, f in t.FIGURES.items():
 front, back = t.parts(P)[:2]
 W = t.geometry(P)["W"]
 assert Polygon(back.outline).symmetric_difference(Polygon([(W - x, y) for x, y in front.outline])).area < 1e-6
-assert [q.key for q in t.parts({**P, "back": 0})] == ["front", "tab"]
+assert [q.key for q in t.parts({**P, "back": 0})] == ["front", "tab", "gauge"]
 
 # 脚の三角: 付け根（姿の上、下の縁から s・後ろへ LEAN_DEG 傾く）と脚の先（床の上、奥行き c）の距離は脚の長さ、付け根の角は開きの角
 e = t.easel(P)
@@ -136,4 +140,15 @@ assert Polygon(net.outline).is_valid
 assert [f.floor for f in t.check_range({**P, "back": 0.5})] == ["F5.range"]
 assert [f.floor for f in t.check_range({**P, "figure": "no_such"})] == ["F5.range"]
 assert [f.floor for f in t.check_range({**P, "stand": "hang"})] == ["F5.range"]
+# 形から出典を選ぶ表（SOURCES）は FIGURES の組と同じ。合わない出典は compose が F1.source で落とす
+assert t.SOURCES == {k: f["source"] for k, f in t.FIGURES.items()}
+_, _, fs = compose("stand_figure", {"figure": "uma", "stand": "easel"}, json.loads((ROOT / "data/sources" / f"{t.SOURCE}.json").read_text(encoding="utf-8")))
+assert [f.floor for f in fs] == ["F1.source"], fs
+
+# 倒れないかは脚の開き（足の形の奥行き c）で決まるので、開きの物差し（部品 4）を刷る。印の間は c、組み方の文も c を言う
+gauge = next(q for q in t.parts(P) if q.key == "gauge")
+ticks = sorted(a["pts"][0][1] for a in gauge.art if a["kind"] == "line")
+assert abs((ticks[-1] - ticks[0]) - e["c"]) < 1e-9, ticks
+assert any(f"{e['c']:.0f}mm" in s for s in t.steps(P)) and any("4" in s and "物差し" in s for s in t.steps(P))
+assert "gauge" not in {q.key for q in t.parts(B)}
 print("ok")
