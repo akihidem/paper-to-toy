@@ -109,18 +109,19 @@ fs = t.check_physics({**P, "figure": "hagoita", "tab_length": 90, "tab_glue": 10
 assert any("横へ倒れる" in f.message for f in fs), fs
 
 # 溝: 隙間 = 溝の幅 − 紙の厚み × 重ねた枚数。狭いと差せない、広いと傾きが MAX_WOBBLE を越える
-# 犬張子を台に差す形。既定の溝（30mm）だと舌が前の 2 本の脚にまたがるので、1 つの足（幅 13mm ほど）に収まる溝にする
-B = t.filled({**P, "stand": "base", "slot_length": 12})
-assert t.check_physics(B) == []
+# 台の形は覆面の人形（勧めの値）で見る。犬張子は重心が腹の下（足の無い所）にあり、台では舌が重心の下に来ないので脚で立てる
+B = t.filled({**t.DEFAULTS, "figure": "fukumen"})
+assert B["stand"] == "base" and t.check_physics(B) == []
+assert any("ねじれる" in f.message for f in t.check_physics(t.filled({**P, "stand": "base", "slot_length": 12})))
 # 舌が 2 つの足にまたがると、足の間が舌と胴で囲まれて紙で埋まる。黙って埋めず「またぐ」で落とす。部品は落ちた寸法でも返る（check_bom が呼ぶ）
-fs = t.check_physics({**B, "slot_length": 30})
-assert [f.where for f in fs] == ["舌"] and "またがり" in fs[0].message, fs
-front_web = next(q for q in t.parts({**B, "slot_length": 30}) if q.key == "front")
+fs = t.check_physics(t.filled({**P, "stand": "base", "slot_length": 30}))
+assert any(f.where == "舌" and "またがり" in f.message for f in fs), fs
+front_web = next(q for q in t.parts(t.filled({**P, "stand": "base", "slot_length": 30})) if q.key == "front")
 assert Polygon(front_web.outline).is_valid and not Polygon(front_web.outline).interiors
 th, tp = 2 * B["paper_thickness"], B["paper_thickness"]
+# 差せるかは狭く切れた側で見る: 隙間が MIN_CLEAR（毛羽 0.1mm ＋ 狭い側のずれ 2·CUT_TOL）に足りないと差せない
+assert abs(t.MIN_CLEAR - (0.1 + 2 * t.CUT_TOL)) < 1e-9
 assert t.wobble_deg({**B, "slot_width": th + t.MIN_CLEAR - 0.01}) is None
-# 溝は手で帯を切り取れる幅（1mm 以上）で、隙間の下限は切るずれを含む。組み方は「帯を切り取る」と言う
-assert t.RANGES["slot_width"][0] >= 1.0 and t.MIN_CLEAR >= 0.4
 assert any("帯" in s and "切り取る" in s and "1 本の切れ目にしない" in s for s in t.steps(B))
 # 表だけ（back 0）なら紙 1 枚なので、2 枚では差せない溝にも入る
 narrow = th + t.MIN_CLEAR - 0.1
@@ -136,35 +137,41 @@ Y2, Y3 = g0 + D, g0 + D + Hb
 (tx, ty, tw_, th_), (bx, by, bw, bh_) = sorted(net.cuts, key=lambda c: c[1])
 # 閉じると、上の面（後ろの壁の上の縁 Y2 で倒す）の奥行きは Y2 − y、底の面（後ろの壁の下の縁 Y3 から）の奥行きは y − Y3。上下の溝がそろう
 assert abs((Y2 - (ty + th_ / 2)) - ((by + bh_ / 2) - Y3)) < 1e-9 and abs(tx - bx) < 1e-9 and (tw_, th_) == (bw, bh_)
-# 舌は上の面から机まで届く（下の縁は上の面の上、舌の先は底の溝を抜けて机の上）
-x, w, depth = t.tongue(B)
-assert depth == Hb
+
+# 舌の先が底の溝を抜けて机に届く条件を、刷る外形から見る: 箱が BOX_TOL 高くも低くも折れて、
+# 舌の先は机に着き（姿の下の縁から舌の先まで ＞ 箱の高さ）、姿の下の縁は上の面より上にあり、舌は上下 2 つの溝の紙を両方通る
 front = next(q for q in t.parts(B) if q.key == "front")
-assert abs(max(y for _, y in front.outline) - (t.geometry(B)["H"] + Hb)) < 1e-9
-# 傾きの上限を、紙の厚み th の板が 2 枚の紙（真ん中の高さ tp/2 と Hb − tp/2）の溝を通る形から数で解き、式と比べる
-def max_tilt(z1, z2, sw, thick):
-    lo, hi = 0.0, math.pi / 2 - 1e-6
-    for _ in range(60):  # 板の両の面が、2 つの溝の縁の内に収まる一番大きい傾き
-        a = (lo + hi) / 2
-        span = thick / math.cos(a) + (z2 - z1) * math.tan(a)
-        lo, hi = (a, hi) if span <= sw else (lo, a)
-    return math.degrees(lo)
-sw = B["slot_width"]
-assert abs(max_tilt(tp / 2, Hb - tp / 2, sw, th) - t.wobble_deg(B)) < 0.1, (max_tilt(tp / 2, Hb - tp / 2, sw, th), t.wobble_deg(B))
-# 上の溝 1 つだけ（紙 1 枚の厚みの間で挟む）では、ほぼ倒れる。底の溝が要る理由
-assert max_tilt(0, tp, sw, th) > 45
-loose = th + (Hb - tp) * math.tan(math.radians(t.MAX_WOBBLE)) + 0.05
-assert any("ぐらつく" in f.message for f in t.check_physics({**B, "slot_width": loose}))
+H = t.geometry(B)["H"]
+reach = max(y for _, y in front.outline) - H  # 刷った舌の、姿の下の縁から下の長さ
+for hb in (Hb - t.BOX_TOL, Hb, Hb + t.BOX_TOL):
+    float_up = reach - hb  # 舌の先が机に着いた時、姿の下の縁が上の面から浮く高さ
+    assert float_up > 0, hb  # 先は机に着き、縁は上の面に乗らない（乗ると先が浮いて、上の溝 1 つの形になる）
+    assert reach > hb - tp / 2 and reach - float_up <= tp / 2 + hb  # 舌は底の紙の真ん中（tp/2）と上の紙の真ん中（hb − tp/2）を両方通る
+    assert abs(t.tip_clear(B, hb) - float_up) < 1e-9
+# 傾きは広く切れた側（溝 + 2·CUT_TOL）と低く折れた箱で見るので、狭い側でだけ見ると通る溝でも落ちる
+gap_ok = (Hb - tp) * math.tan(math.radians(t.MAX_WOBBLE)) - 0.05  # 切るずれ・折るずれを見ない時の上限の少し内
+assert any("ぐらつく" in f.message for f in t.check_physics({**B, "slot_width": th + gap_ok}))
+# 姿だけを変えた既定（勧めの値）は、どの台の姿も、溝が広く切れて箱が低く折れた側で通る（compose の試験で 35 とも通る）
+for fig, f in t.FIGURES.items():
+    if f["stand"] == "base":
+        q = t.filled({**t.DEFAULTS, "figure": fig})
+        assert t.wobble_deg(q) <= t.MAX_WOBBLE and t.tip_clear(q, q["base_height"] + t.BOX_TOL) > 0, fig
 # 倒れるかは、軸（舌の先・机の上）から測る。低い亀でも、高い箱で奥行きが浅いと落ちる（姿の下の縁から測ると通っていた）
 K = t.filled({**P, "figure": "tsuchi_kame", "stand": "base", "base_depth": 15, "base_height": 30, "slot_width": 2.9})
 assert any(f.where == "台" for f in t.check_physics(K)), t.check_physics(K)
-assert t.margin(t.geometry(K), 30) > t.margin(t.geometry(K))
-# 横: 重心が床に触れる所と舌の幅の外だと、舌の付け根がねじれる（舌出し面の柄に短い溝）。勧めの溝なら舌が重心の側へ寄って通る
-assert any("ねじれる" in f.message for f in t.check_physics(t.filled({**t.DEFAULTS, "figure": "shitadashi", "slot_length": 7})))
+# 横: 姿の下の縁は浮くので、横に支えるのは舌の幅だけ。重心が余白 MIN_MARGIN を持って舌の幅に入らないとねじれる
+# 犬張子を台に: 舌は前の足の下までしか寄れず、重心（腹の下）が舌の幅の外
+S = t.filled({**P, "stand": "base", "slot_length": 12})
+xs, ws, _ = t.tongue(S)
+assert not (xs - ws / 2 + t.MIN_MARGIN <= t.geometry(S)["cx"] <= xs + ws / 2 - t.MIN_MARGIN)
 assert t.check_physics(t.filled({**t.DEFAULTS, "figure": "shitadashi"})) == []
+# 余白の境: 重心がちょうど舌の端にある（余白 0）と落ちる。千木箱の既定では、重心は舌の幅の内に余白を持つ
+C = t.filled({**t.DEFAULTS, "figure": "chigibako"})
+xc, wc, _ = t.tongue(C)
+assert xc - wc / 2 + t.MIN_MARGIN <= t.geometry(C)["cx"] <= xc + wc / 2 - t.MIN_MARGIN
 # 舌は姿の下の縁と半分以上つながる。羽子板の柄（約 8.5mm）に既定の長い溝の舌は折れ、短い溝なら通る
 assert any(f.where == "舌" for f in t.check_physics({**B, "figure": "hagoita", "slot_length": 30}))
-assert t.check_physics({**B, "figure": "hagoita", "slot_length": 10, "base_depth": 40}) == []
+assert t.check_physics(t.filled({**t.DEFAULTS, "figure": "hagoita"})) == []
 # 溝は箱の縁から SLOT_EDGE 内に収まる
 assert any("縁まで" in f.message for f in t.check_physics({**B, "slot_length": B["base_length"] - 2 * t.SLOT_EDGE + 1}))
 # 台が小さいと、重心が台の縁に近く倒れる
@@ -179,9 +186,10 @@ assert t.check_range({**P, "back": 0}) == [] and t.check_range({**P, "back": 1})
 assert [f.floor for f in t.check_range({**P, "stand": "hang"})] == ["F5.range"]
 # 知らない姿は、埋まらなかった既定（stand の None）を重ねて落とさず、姿の名の誤り 1 つだけで落とす（埋める前の DEFAULTS で見る）
 assert [f.where for f in t.check_range({**t.DEFAULTS, "figure": "no_such"})] == ["figure"]
-# 台の糊代は壁の高さ − 1mm まで（高いと展開図で隣の糊代と重なる）。溝の傾きが通る高さ 9 で、糊代だけを変えて見る
-assert any(f.where == "台" and "収まらない" in f.message for f in t.check_physics({**B, "base_height": 9, "base_glue": 10}))
-assert t.check_physics({**B, "base_height": 9, "base_glue": 8}) == []
+# 台の糊代は壁の高さ − 1mm まで（高いと展開図で隣の糊代と重なる）。溝の傾きが通る高さ 12（紙 0.25mm で隙間を詰める）で、糊代だけを変えて見る
+G = {**B, "base_height": 12, "paper_thickness": 0.25}
+assert any(f.where == "台" and "収まらない" in f.message for f in t.check_physics({**G, "base_glue": 12}))
+assert t.check_physics({**G, "base_glue": 11}) == [], t.check_physics({**G, "base_glue": 11})
 # 狭い脚（RANGES の下限 6mm）では札を番号だけにし、札が脚からはみ出して別の検査で落ちない
 narrow_src = json.loads((ROOT / "data/sources" / f"{t.SOURCE}.json").read_text(encoding="utf-8"))
 _, _, fs = compose("stand_figure", {"figure": "inu", "tab_width": t.RANGES["tab_width"][0]}, narrow_src)
@@ -208,7 +216,7 @@ for fig, f in t.FIGURES.items():
     assert t.filled(p)["stand"] == f["stand"] and all(t.filled(p)[k] == v for k, v in f.get("suggest", {}).items()), fig
 assert t.filled({**P, "figure": "hagoita", "slot_length": 30})["slot_length"] == 30
 assert t.filled({**P, "figure": "hagoita", "stand": "easel"})["stand"] == "easel"
-assert t.spec()["figures"]["hagoita"]["stand"] == "base" and t.spec()["figures"]["hagoita"]["slot_length"] == 10
+assert t.spec()["figures"]["hagoita"]["stand"] == "base" and t.spec()["figures"]["hagoita"]["slot_length"] == t.FIGURES["hagoita"]["suggest"]["slot_length"]
 
 # 姿の形の覚えは上限つき（高さは連続の値なので、上限が無いと場面を回すほど増える）
 assert t._shape.cache_info().maxsize is not None

@@ -5,7 +5,7 @@
     "figure": "shitadashi",
     "stand": "base",
     "base_depth": 40,
-    "slot_length": 11
+    "slot_length": 17
   },
   "inject": {},
   "expect": {

@@ -5,7 +5,7 @@
     "figure": "hebi",
     "stand": "base",
     "base_depth": 40,
-    "slot_length": 5
+    "slot_length": 10
   },
   "inject": {},
   "expect": {

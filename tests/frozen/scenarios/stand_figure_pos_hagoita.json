@@ -5,7 +5,7 @@
     "figure": "hagoita",
     "stand": "base",
     "base_depth": 40,
-    "slot_length": 10
+    "slot_length": 17
   },
   "inject": {},
   "expect": {

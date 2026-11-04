@@ -4,7 +4,8 @@
   "params": {
     "figure": "torisao",
     "stand": "base",
-    "slot_length": 5
+    "base_depth": 40,
+    "slot_length": 8
   },
   "inject": {},
   "expect": {

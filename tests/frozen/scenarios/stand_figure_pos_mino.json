@@ -4,7 +4,7 @@
   "params": {
     "figure": "mino",
     "stand": "base",
-    "slot_length": 7
+    "slot_length": 11
   },
   "inject": {},
   "expect": {

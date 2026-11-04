@@ -4,10 +4,9 @@
   "params": {
     "figure": "hagoita",
     "stand": "base",
-    "base_depth": 40,
-    "slot_length": 10,
-    "base_height": 9,
-    "base_glue": 10
+    "base_height": 12,
+    "paper_thickness": 0.25,
+    "base_glue": 12
   },
   "inject": {},
   "expect": {
