@@ -152,7 +152,8 @@ CHECKS4 = {
  "M 弓の向けと構え・糸の長さの上限": lambda: (any("遠くの壁か床" in s for s in t.steps(B)) and any("顔から離し" in s for s in t.steps(B))
      and any(f.where == "毛玉の糸" for f in t.check_physics({**B, "tether": t.TETHER_MAX + 1})) and t.check_physics({**B, "tether": t.TETHER_MAX}) == []),
  "L 腕は根元の折り線で押さえる": lambda: any("止めの条件" in s and "根元の折り線" in s for s in t.steps(P)),
- "L δ と x の余裕を書く": lambda: "δ ≒ x/2" in t.__doc__ and "上限" in t.__doc__,
+ # 7 回目で δ ≒ x/2 の見込みを δ ≒ x − slack_takeup に改めた（糸は伸びないので）。上限との書き分けがあるかを見る
+ "L δ と x の余裕を書く": lambda: "δ ≒ x − slack_takeup" in t.__doc__ and "上限" in t.__doc__,
 }
 for name, check in CHECKS4.items():
     assert check(), name
@@ -223,5 +224,28 @@ CHECKS6 = {
  "L 糸の印の間と肩のはみ出し": lambda: marks_ok(P) and marks_ok(B) and shoulders_ok(P),
 }
 for name, check in CHECKS6.items():
+    assert check(), name
+# 7 回目の指摘の行: 動く床は玉の後ろ（draw）で見る（切れ込みの深さを数えない反例を含む）、たるみの引きを式を写さず
+# 糸の長さの幾何から解いて合わせる、δ ≒ x − たるみの引き と書く
+def takeup_direct(p):
+    """式を写さず、糸の長さの幾何から二分法で解く: 両端 (±a, 0) に結んだ長さ 2a + s の糸の真ん中を、ぴんと張るまで y 引く。"""
+    a = (t.string_len(p) - t.STRING_SLACK) / 2
+    s = t.STRING_SLACK + t.STRING_TOL
+    lo, hi = 0.0, a
+    for _ in range(200):
+        y = (lo + hi) / 2
+        if 2 * (a * a + y * y) ** 0.5 < 2 * a + s:
+            lo = y
+        else:
+            hi = y
+    return (lo + hi) / 2
+CHECKS7 = {
+ "H 動く床は玉の後ろ（引き金の前の縁＝draw）で見る": lambda: (
+     any(f.where == "弦" for f in t.check_physics({**P, "draw": 10, "notch_depth": 8, "trigger_w": 12}))
+     and "13.45mm" in t.__doc__ and "17.4mm" not in t.__doc__ and t.check_physics(P) == [] and t.check_physics(B) == []),
+ "L たるみの引きを幾何で別に解いて合わせる": lambda: all(abs(t.slack_takeup(p) - takeup_direct(p)) < 1e-6 for p in (P, B, {**P, "arm_len": 30}, {**B, "bow_span": 100})),
+ "L δ ≒ x − たるみの引き と書く": lambda: "δ ≒ x − slack_takeup" in t.__doc__ and "δ ≒ x/2" not in t.__doc__,
+}
+for name, check in CHECKS7.items():
     assert check(), name
 print("ok")
