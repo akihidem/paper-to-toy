@@ -15,7 +15,7 @@ from omochae.floors import check_bom
 from omochae.templates import stand_figure as t
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-P = dict(t.DEFAULTS)
+P = t.filled(dict(t.DEFAULTS))
 assert TEMPLATES["stand_figure"] is t, "templates/ に置けば登録される"
 assert t.check_physics(P) == [] and not t.check_range(P)
 
@@ -151,4 +151,24 @@ ticks = sorted(a["pts"][0][1] for a in gauge.art if a["kind"] == "line")
 assert abs((ticks[-1] - ticks[0]) - e["c"]) < 1e-9, ticks
 assert any(f"{e['c']:.0f}mm" in s for s in t.steps(P)) and any("4" in s and "物差し" in s for s in t.steps(P))
 assert "gauge" not in {q.key for q in t.parts(B)}
+
+# 姿だけを変えた入口（--params {"figure": X}）でも、その姿に勧める立て方と寸法が既定になって通る。書いた寸法は勝つ
+for fig, f in t.FIGURES.items():
+    src = json.loads((ROOT / "data/sources" / f"{f['source']}.json").read_text(encoding="utf-8"))
+    p, _, fails = compose("stand_figure", {"figure": fig}, src)
+    assert fails == [], (fig, [x.line() for x in fails])
+    assert t.filled(p)["stand"] == f["stand"] and all(t.filled(p)[k] == v for k, v in f.get("suggest", {}).items()), fig
+assert t.filled({**P, "figure": "hagoita", "slot_length": 30})["slot_length"] == 30
+assert t.filled({**P, "figure": "hagoita", "stand": "easel"})["stand"] == "easel"
+assert t.spec()["figures"]["hagoita"]["stand"] == "base" and t.spec()["figures"]["hagoita"]["slot_length"] == 10
+
+# 舌の先は箱の底の紙の上に届く（溝の縁と底の 2 点で支える前提のとおり）: 舌の長さ ＝ 箱の高さ − 底の紙の厚み
+for th in (0.1, 0.3):
+    Q = t.filled({**P, "stand": "base", "paper_thickness": th})
+    assert abs(t.tongue(Q)[2] - (Q["base_height"] - th)) < 1e-9
+    front = next(q for q in t.parts(Q) if q.key == "front")
+    assert abs(max(y for _, y in front.outline) - (t.geometry(Q)["H"] + Q["base_height"] - th)) < 1e-9
+
+# 姿の形の覚えは上限つき（高さは連続の値なので、上限が無いと場面を回すほど増える）
+assert t._shape.cache_info().maxsize is not None
 print("ok")
