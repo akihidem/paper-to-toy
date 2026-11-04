@@ -227,9 +227,18 @@ for name, check in CHECKS6.items():
     assert check(), name
 # 7 回目の指摘の行: 動く床は玉の後ろ（draw）で見る（切れ込みの深さを数えない反例を含む）、たるみの引きを式を写さず
 # 糸の長さの幾何から解いて合わせる、δ ≒ x − たるみの引き と書く
+def half_from_holes(p):
+    """刷った穴の位置から、両端の穴の間の半分 a を出す（string_len を使わない）。"""
+    if p["form"] == "bow":
+        xs = [x for x, _, _ in next(q for q in t.parts(p) if q.key == "stave").holes]
+        return (max(xs) - min(xs)) / 2
+    arm = next(q for q in t.parts(p) if q.key == "arma")
+    return p["stock_w"] / 2 + (arm.holes[0][0] - t.ROOT)  # 台の外の面（腕の根元の折り線）から先の穴まで
+
+
 def takeup_direct(p):
     """式を写さず、糸の長さの幾何から二分法で解く: 両端 (±a, 0) に結んだ長さ 2a + s の糸の真ん中を、ぴんと張るまで y 引く。"""
-    a = (t.string_len(p) - t.STRING_SLACK) / 2
+    a = half_from_holes(p)  # 8 回目: string_len を使わず、刷った穴の位置から出す
     s = t.STRING_SLACK + t.STRING_TOL
     lo, hi = 0.0, a
     for _ in range(200):
@@ -247,5 +256,15 @@ CHECKS7 = {
  "L δ ≒ x − たるみの引き と書く": lambda: "δ ≒ x − slack_takeup" in t.__doc__ and "δ ≒ x/2" not in t.__doc__,
 }
 for name, check in CHECKS7.items():
+    assert check(), name
+# 8 回目の指摘の行: 弓の物差しの穴も大人がカッターで切る、玉と弦の間を式の値で刷る、弩も顔から離し腰の高さで飛ばす、
+# 半分の長さ a を刷った穴から別に出す
+CHECKS8 = {
+ "M 弓の物差しの穴も大人がカッターで切る": lambda: any("物差しの穴" in s and "カッター" in s and "大人" in s for s in t.steps(B)) and any("カッター" in m and "大人" in m for m in t.materials(B)),
+ "L 玉と弦の間を式の値で刷る": lambda: all(any(f"玉の {pp['notch_depth'] - t.POCKET_W / 2:g}mm 後ろ" in s for s in t.steps(pp)) for pp in (P, {**P, "notch_depth": 6})),
+ "L 弩も顔から離し腰の高さで飛ばす": lambda: any("引き金を真上" in s and "顔から離し" in s and "腰の高さ" in s for s in t.steps(P)),
+ "L 半分の長さ a を刷った穴から別に出す": lambda: all(abs(half_from_holes(p) - (t.string_len(p) - t.STRING_SLACK) / 2) < 1e-9 for p in (P, B, {**P, "arm_len": 30}, {**B, "bow_span": 100})),
+}
+for name, check in CHECKS8.items():
     assert check(), name
 print("ok")
