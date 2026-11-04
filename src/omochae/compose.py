@@ -4,7 +4,7 @@ import pkgutil
 
 from .floors import check_art, check_bom, check_holes, check_layout
 from .marks import mark_lines
-from .model import TextBox
+from .model import Failure, TextBox
 from .page import PAGES
 from .textfit import text_width, wrap
 
@@ -49,6 +49,10 @@ def compose(template_id, params, source, page_name="A4", version=1, title=None, 
     if failures:  # 範囲の外の値で先を計算すると、別の検査が連鎖して狙いが読めなくなる。
         return p, None, failures
     failures += tpl.check_physics(p)
+    # 刷る形ごとに出典が違う雛形では、形と合わない出典の印を刷らない（絵と出典が別の玩具になる）。形の値が SOURCES に無ければ見ない。
+    want = getattr(tpl, "SOURCES", {}).get(p.get(tpl.FORM))
+    if want and source.get("source_id") != want:
+        failures.append(Failure("F1.source", "出典", f"{tpl.FORM} {p[tpl.FORM]} の出典は {want} だが、{source.get('source_id')} が渡された"))
     rows = tpl.bom(p)
     # 負の対照のためだけ。寸法の入力からは部品表を壊せない。
     for r in rows:
