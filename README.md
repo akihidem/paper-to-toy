@@ -99,6 +99,17 @@ print(check_params("slider_fan", {"push_part": "tab", "fold_count": 40}, source)
 - 同じ吊る形で、軸の穴から頭の上までを式では 8mm と見込んでいる。前提は、頭を帯の下の端に 4mm 重ねて貼る事（型紙の帯は長さ 18mm・穴は端から 6mm なので、重ねずに貼ると 12mm になり、式の見込みと合わない）。
 - 出力の SVG・PDF・PNG は、その回だけの仮の置き場で作って検査してから正しい名前へ移す。ただし 3 つは 1 つずつ移すので、移す途中で止まる（機械が落ちる等）と、新旧が混ざって残りうる。
 
+## 折れる様子を Origami Simulator で見る
+
+型紙の折りのある部品を、[Origami Simulator](https://origamisimulator.org)（ブラウザーで折り線図を折って見せる道具）が読める SVG に書き出す。入口は型紙と同じ（`--scenario`、または `--template` と `--params`）で、書き出す前に型紙と同じ検査を通す（落ちれば 3）。
+
+```bash
+PYTHONPATH=src .venv/bin/python -m omochae.foldsim --scenario examples/fan_tab.json --out out/foldsim
+# → out/foldsim/slider_fan_tube_foldsim.svg ・ _pusher_ ・ _base_ ・ _fan_（部品ごとに 1 つ）
+```
+
+書いた SVG を Origami Simulator の「File → Import」で開く。線の色は Origami Simulator の約束に合わせた（外形 黒 `#000000`・山折り 赤 `#ff0000`・谷折り 青 `#0000ff`）。線の濃さは付けないので、どの折りも折り切った角度（180°）として扱われる。紙の厚みと摩擦は模擬しないので、実物の動きとは違う。部品を選ぶ時は `--parts fan,tube`。
+
 ## 終了の番号
 
 | exit | 意味 |
@@ -113,19 +124,21 @@ print(check_params("slider_fan", {"push_part": "tab", "fold_count": 40}, source)
 
 - `src/omochae/` エンジン（`compose.py` 配置と検査の流れ・`floors.py` 描く前の検査・`marks.py` 印と刷った後の検査・`render.py` 描画・`textfit.py` 文字の幅・`fan_model.py` / `pivot_model.py` 扇と振り子の式・`metrics.py` 寸法から出る値）
 - `src/omochae/templates/` 雛形
+- `src/omochae/foldsim.py` Origami Simulator への書き出し
 - `data/sources/` 出典の記録（国立国会図書館の書誌の値）
 - `tests/frozen/` 凍結した場面と合格の基準 / `tests/test_*.py` 式と検査の守りの試験
 - `examples/` 最小の例
 
 ## 実装で参考にした物
 
-雛形の形・寸法・色・部品表を起こす時に、実際に参考にした物だけを挙げる（図や本文はこの repo に入れていない。寸法は図を測った比、色は図から測った値、部品表は解説の要約だけを使った）。
+雛形の形・寸法・色・部品表と、折りの書き出しを作る時に、実際に参考にした物だけを挙げる（図や本文はこの repo に入れていない。寸法は図を測った比、色は図から測った値、部品表は解説の要約だけを使った）。
 
 | 参考にした物 | 使った所 |
 |---|---|
 | 『江都二色』（国立国会図書館デジタルコレクション info:ndljp/pid/1187053、米山堂・1931 年の複製）のコマ 5（御来迎）・コマ 14（張子の首振り虎）の図 | 両方の雛形の形と寸法の比（拡大して目測）、描き直しの絵の色（図から中央値で測った値。経年の紙の色を含む）と輪郭 |
 | 『江都二色』の複製と翻刻（『絵本西川東童』日本〈子どもの歴史〉叢書 7、上笙一郎 編、久山社、1997、207 頁から。解説 加藤康子）の図（頁 215 の御来迎・頁 232 の虎） | 寸法の比の基準（`slider_fan` の筒の高さ・扇の幅・像の大きさ、`pivot_counterweight` の胴と頭の比） |
 | 有坂与太郎『日本玩具史 後編』建設社、1932、第五篇「江都二色に収錄されたる玩具」（『還魂紙料』を引く解説） | `slider_fan` の部品表の「元の素材（推定）」（外筒は竹、扇は紙、像は紙の張貫か木）。『還魂紙料』の原典には当たっていない |
+| Origami Simulator（Amanda Ghassaei・Erik Demaine・Neil Gershenfeld、https://origamisimulator.org ） | `omochae.foldsim` の書き出しの形（線の色の約束: 外形 黒・山折り 赤・谷折り 青。2026-11-04 に同サイトの説明で確かめた）。元の repo の foldsim を写した |
 
 式（扇の開き・振り子・糸の長さ）は初等の幾何と力学で、この repo で書いた。
 描画と検査に使ったライブラリと外の命令は、下の「ライセンスと出典」の依存に挙げた。

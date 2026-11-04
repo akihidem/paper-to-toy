@@ -27,13 +27,32 @@ def _drop(stem):
         old.unlink(missing_ok=True)
 
 
-def generate(template, params, source_id, out, page="A4", version=1, title=None, inject=None):
-    """型紙を 1 枚作る共通の流れ。検査に落ちれば 3 を返す。"""
+def load_source(source_id):
+    """data/sources の出典の記録を読む。型紙の書き出し（omochae.foldsim）と同じ物を使う。"""
     src = ROOT / "data/sources" / f"{source_id}.json"
     if not src.exists():
         # 出典の記録を作る道具（元の repo の omochae.ingest）はこの repo に無いので、置き場だけを言う。
         raise ToolMissing(f"出典の記録が無い: {src}（data/sources に出典の記録の JSON を置く）")
-    source = json.loads(src.read_text(encoding="utf-8"))
+    return json.loads(src.read_text(encoding="utf-8"))
+
+
+def scenario_from_args(args):
+    """--scenario か、--template・--source・--params から場面を作る。型紙の書き出し（omochae.foldsim）も同じ入口を使う。"""
+    if args.scenario:
+        return json.loads(pathlib.Path(args.scenario).read_text(encoding="utf-8"))
+    # 寸法を直に渡す入口。刷る形を決める寸法（雛形の FORM）は仮説の違いそのものなので、必ず書かせる（既定の答えを作らない）。
+    if args.template not in TEMPLATES:
+        raise ToolMissing(f"知らない雛形: {args.template}（{'・'.join(TEMPLATES)} のどれか）")
+    tpl = TEMPLATES[args.template]
+    params = json.loads(pathlib.Path(args.params).read_text(encoding="utf-8")) if args.params else {}
+    if tpl.FORM not in params:
+        raise ToolMissing(f"寸法の JSON に {tpl.FORM} が要る（雛形 {args.template} の刷る形。{tpl.FORM} の値は README の「雛形」の表）")
+    return {"template": args.template, "source_id": args.source or tpl.SOURCE, "params": params, "inject": {}}
+
+
+def generate(template, params, source_id, out, page="A4", version=1, title=None, inject=None):
+    """型紙を 1 枚作る共通の流れ。検査に落ちれば 3 を返す。"""
+    source = load_source(source_id)
     stem = pathlib.Path(out)
     _, layout, failures = compose(template, params, source, page, version, title, inject or {})
     if failures:
@@ -73,17 +92,7 @@ def generate(template, params, source_id, out, page="A4", version=1, title=None,
 
 
 def run(args):
-    if args.scenario:
-        sc = json.loads(pathlib.Path(args.scenario).read_text(encoding="utf-8"))
-    else:
-        # 寸法を直に渡す入口。刷る形を決める寸法（雛形の FORM）は仮説の違いそのものなので、必ず書かせる（既定の答えを作らない）。
-        if args.template not in TEMPLATES:
-            raise ToolMissing(f"知らない雛形: {args.template}（{'・'.join(TEMPLATES)} のどれか）")
-        tpl = TEMPLATES[args.template]
-        params = json.loads(pathlib.Path(args.params).read_text(encoding="utf-8")) if args.params else {}
-        if tpl.FORM not in params:
-            raise ToolMissing(f"寸法の JSON に {tpl.FORM} が要る（雛形 {args.template} の刷る形。{tpl.FORM} の値は README の「雛形」の表）")
-        sc = {"template": args.template, "source_id": args.source or tpl.SOURCE, "params": params, "inject": {}}
+    sc = scenario_from_args(args)
     out = args.out or f"out/templates/{sc['template']}_v{args.version}"
     return generate(sc["template"], sc["params"], sc["source_id"], out, args.page, args.version, sc.get("title"), sc["inject"])
 

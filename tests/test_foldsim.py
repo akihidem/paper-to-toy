@@ -1,0 +1,67 @@
+"""Origami Simulator への書き出し（omochae.foldsim）。山は赤・谷は青・外形は黒で、線の数が部品と合う。
+
+元の repo の tests/test_foldsim.py を、仮説でなく雛形と寸法から書き出す入口に合わせて写した。
+足した事: 検査に落ちる寸法は書き出さず 3、刷る形の寸法が無ければ 4（python -m omochae と同じ入口の決まり）。
+"""
+import json
+import os
+import pathlib
+import subprocess
+import sys
+import tempfile
+
+from omochae.__main__ import load_source
+from omochae.foldsim import export
+from omochae.templates import pivot_counterweight, slider_fan
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+ENV = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
+
+
+def check(out, tpl, params, head):
+    """書いた SVG の線の数が、部品の外形・山折り・谷折りの数と合う事を見る。"""
+    by_key = {q.key: q for q in tpl.parts({**tpl.DEFAULTS, **params})}
+    for f in out:
+        key = f.name[len(head) + 1:-len("_foldsim.svg")]
+        q, svg = by_key[key], f.read_text(encoding="utf-8")
+        assert svg.count("#ff0000") == len(q.mountain) and svg.count("#0000ff") == len(q.valley), key
+        assert svg.count("#000000") == len(q.outline), key
+    return sorted(f.name for f in out)
+
+
+# 1. 御来迎（つまみの形）。色の境で折る外筒と扇（hide_folds）も、折り線のデータで書き出す
+tab = {"push_part": "tab"}
+out, failures = export("slider_fan", tab, load_source(slider_fan.SOURCE), tempfile.mkdtemp())
+assert not failures
+assert check(out, slider_fan, tab, "slider_fan") == ["slider_fan_base_foldsim.svg", "slider_fan_fan_foldsim.svg", "slider_fan_pusher_foldsim.svg", "slider_fan_tube_foldsim.svg"]
+
+# 2. 虎（首の形）と、名前の頭・部品の選び
+neck = {"mount": "neck"}
+out, failures = export("pivot_counterweight", neck, load_source(pivot_counterweight.SOURCE), tempfile.mkdtemp(), name="tiger")
+assert not failures
+assert check(out, pivot_counterweight, neck, "tiger") == ["tiger_body_foldsim.svg", "tiger_strip_foldsim.svg"]
+out, _ = export("slider_fan", tab, load_source(slider_fan.SOURCE), tempfile.mkdtemp(), parts={"fan"})
+assert [f.name for f in out] == ["slider_fan_fan_foldsim.svg"]
+
+# 3. 検査に落ちる寸法は書き出さない
+d = tempfile.mkdtemp()
+out, failures = export("slider_fan", {"push_part": "tab", "fold_height": 50}, load_source(slider_fan.SOURCE), d)
+assert out == [] and [f.floor for f in failures] == ["F5.fan_height"] and not any(pathlib.Path(d).iterdir())
+
+# 4. 入口（python -m omochae.foldsim）の終了の番号: 0 書き出した / 3 検査に落ちた / 4 書き出せない
+with tempfile.TemporaryDirectory() as d:
+    def cli(*args):
+        return subprocess.run([sys.executable, "-m", "omochae.foldsim", *args, "--out", str(pathlib.Path(d) / "fs")], cwd=d, env=ENV, capture_output=True, text=True)
+
+    assert cli("--scenario", str(ROOT / "examples/tiger_hang.json")).returncode == 0
+    bad = pathlib.Path(d) / "bad.json"
+    bad.write_text(json.dumps({"push_part": "tab", "fold_height": 50}), encoding="utf-8")
+    r = cli("--params", str(bad))
+    assert r.returncode == 3 and "F5.fan_height" in r.stderr, r.stderr
+    noform = pathlib.Path(d) / "noform.json"
+    noform.write_text(json.dumps({"axle_height": 50}), encoding="utf-8")
+    r = cli("--template", "pivot_counterweight", "--params", str(noform))
+    assert r.returncode == 4 and "mount が要る" in r.stderr, r.stderr
+    r = cli("--scenario", str(ROOT / "examples/fan_tab.json"), "--parts", "nothing")
+    assert r.returncode == 4 and "折りのある部品が無い" in r.stderr, r.stderr
+print("ok")
