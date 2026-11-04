@@ -40,6 +40,18 @@ with tempfile.TemporaryDirectory() as d:
     assert gen(broken, out).returncode == 4
     left = sorted(p.name for p in pathlib.Path(d).glob("x.*"))
     assert left == ["x.pdf", "x.png", "x.svg"], f"検査できない時に前の紙が消えた: {left}"
+    # 描いた後（PNG にする所）で検査できなくなっても、前の回の紙はそのまま、仮の名前の物も残さない
+    import shutil
+    before = {p.name: p.read_bytes() for p in pathlib.Path(d).glob("x.*")}
+    fake = pathlib.Path(d) / "bin"
+    fake.mkdir()
+    (fake / "pdftoppm").write_text("#!/bin/sh\nexit 1\n")
+    (fake / "pdftoppm").chmod(0o755)
+    r = subprocess.run([PY, "-m", "omochae", "--scenario", str(scenario(d, "stick", {"push_part": "stick", "pusher_height": 84})), "--out", str(out)],
+                       cwd=ROOT, env={**ENV, "PATH": f"{fake}:{os.environ['PATH']}"}, capture_output=True, text=True)
+    assert r.returncode == 4, r.stderr
+    after = {p.name: p.read_bytes() for p in pathlib.Path(d).glob("x*")}
+    assert after == before, f"検査できない時に紙が変わった・増えた: {sorted(after)}"
 
 # 2. 線の絵が糊代を横切ったら落とす（面積でなく長さで見る）
 sys.path.insert(0, str(ROOT / "src"))

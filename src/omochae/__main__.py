@@ -42,18 +42,26 @@ def generate(template, params, source_id, out, page="A4", version=1, title=None,
             print(f.line(), file=sys.stderr)
         return 3
     from .render import to_png, write_all  # 描く前の検査だけの時に重い読み込みをしない
-    pdf = write_all(layout, stem)
-    failures = check_pdf(pdf, source) + check_image_count(pdf)
-    if failures:
-        rejected = stem.with_suffix(".rejected.pdf")
-        pdf.replace(rejected)  # 印の無い紙を正しい名前で残さない。
-        _drop(stem)  # 今回の SVG と、前の回の PNG も正しい名前で残さない。
-        for f in failures:
-            print(f.line(), file=sys.stderr)
-        print(f"退けた: {rejected}", file=sys.stderr)
-        return 3
-    to_png(pdf, stem)
-    print(pdf)
+    # 描く・刷った後の検査・PNG は仮の名前で作り、全部済んでから正しい名前へ移す。途中で検査できなくなった（例外・exit 4）時に、
+    # 前の回の紙と今回の紙が混ざって残らないようにするため（前の回の紙には触らない）。
+    tmp = stem.with_name(stem.name + "-partial")  # 点を入れない（with_suffix で正しい名前に化けないように）
+    try:
+        pdf = write_all(layout, tmp)
+        failures = check_pdf(pdf, source) + check_image_count(pdf)
+        if failures:
+            rejected = stem.with_suffix(".rejected.pdf")
+            pdf.replace(rejected)  # 印の無い紙を正しい名前で残さない。
+            _drop(stem)  # 前の回の紙も正しい名前で残さない（今回の物と取り違えるため）。
+            for f in failures:
+                print(f.line(), file=sys.stderr)
+            print(f"退けた: {rejected}", file=sys.stderr)
+            return 3
+        to_png(pdf, tmp)
+        for x in (".svg", ".pdf", ".png"):
+            tmp.with_suffix(x).replace(stem.with_suffix(x))
+    finally:
+        _drop(tmp)
+    print(stem.with_suffix(".pdf"))
     return 0
 
 
