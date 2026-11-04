@@ -173,4 +173,10 @@ from omochae.compose import TEMPLATES
 for tpl in TEMPLATES.values():
     assert (ROOT / "data/sources" / f"{tpl.SOURCE}.json").exists(), tpl.ID
 
+# 8. 虎の吊る形の組み方の文は、頭を帯に重ねて貼る長さを刷る。重ねた後の軸から頭の上までが、式の見込み（axle_to_head_top）と合う
+hang = {**pc.DEFAULTS, "mount": "hang"}
+assert any(f"2 頭を {pc.HEAD_OVERLAP}mm 重ねて貼る" in s for s in pc.steps(hang))
+strip = next(q for q in pc.parts(hang) if q.key == "strip")
+assert strip.height - strip.holes[0][1] - pc.HEAD_OVERLAP == pc.axle_to_head_top(hang)
+
 print("ok")
