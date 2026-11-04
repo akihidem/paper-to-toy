@@ -84,8 +84,11 @@ from omochae.compose import check_params
 import json
 source = json.load(open("data/sources/NDL-1187053-R0000005-L.json", encoding="utf-8"))
 print(check_params("slider_fan", {"push_part": "tab", "fold_count": 40}, source))
-# {'passed': False, 'errors': ['FAIL F5.fan_clearance [蛇腹の扇] 帯の長さでは 406° 開くが、筒の口の角に当たって 289° までしか開けない',
-#                              'FAIL F5.print_area [蛇腹の扇] 印字域の外に出ている (152.0, 36.2, 200.0, 376.2)']}
+# {'passed': False, 'errors': [
+#     'FAIL F5.fan_clearance [蛇腹の扇] 帯の長さでは 406° 開くが、筒の口の角に当たって 289° までしか開けない',
+#     'FAIL F5.print_area [蛇腹の扇] 印字域の外に出ている (127.0, 36.2, 200.0, 376.2)',
+#     'FAIL F5.text_overlap [糊代] 文字が部品「蛇腹の扇」と重なっている',
+# ]}
 ```
 
 ## 分かっている事

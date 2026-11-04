@@ -32,6 +32,8 @@ RANGES = {
 MOUNTS = ("neck", "hang")
 # 刷る形を決める寸法（頭の支え方）。仮説の違いそのものなので、寸法を直に渡す入口（python -m omochae --params）では既定に頼らず必ず書かせる。
 FORM = "mount"
+# 既定の出典（data/sources/ の名前）。--source を書かない時に、雛形と合わない出典の印を刷らないため。
+SOURCE = "NDL-1187053-R0000014-R"
 HOLE_MARGIN = 4  # 穴から紙の端までの見込み。これより狭いと裂けやすい
 MIN_SWING = 10
 MAX_TILT = 15

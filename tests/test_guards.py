@@ -163,5 +163,14 @@ with tempfile.TemporaryDirectory() as d:
     r = params_run(d, "slider_fan", {"fold_count": 20})
     assert r.returncode == 4 and "push_part が要る" in r.stderr, r.stderr
     assert "omochae.hypotheses" not in r.stderr  # この repo に無い道具を案内しない
+    # --scenario の時は --template を使わないので、併記された知らない名前で止めない。--params の時は知らない名前を落とす
+    r = subprocess.run([PY, "-m", "omochae", "--scenario", str(ROOT / "examples/fan_tab.json"), "--template", "no_such", "--out", str(pathlib.Path(d) / "sc")], cwd=d, env=ENV, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    r = params_run(d, "no_such", {"push_part": "tab"})
+    assert r.returncode == 4 and "知らない雛形" in r.stderr, r.stderr
+# 雛形ごとの既定の出典は雛形が持つ（雛形を足した時に出典を足し忘れると、雛形の SOURCE が無くて試験で落ちる）
+from omochae.compose import TEMPLATES
+for tpl in TEMPLATES.values():
+    assert (ROOT / "data/sources" / f"{tpl.SOURCE}.json").exists(), tpl.ID
 
 print("ok")
