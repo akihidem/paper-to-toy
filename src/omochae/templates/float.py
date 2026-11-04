@@ -55,6 +55,8 @@ FORM = "vane"
 FORMS = VANES
 # 既定の出典（data/sources/ の名前）。--source を書かない時に、雛形と合わない出典の印を刷らないため。
 SOURCE = "NDL-1187053-R0000028-R-float"
+# 2 つの形は同じ玩具（コマ 28 右）の作り分けなので、どちらも同じ出典。形ごとに書くのは、別の玩具の出典を渡した時に F1.source で落とすため。
+SOURCES = {v: SOURCE for v in VANES}
 WATER = 1000.0  # 水 1g が押しのける体積（mm³）
 FREEBOARD_MIN = 5  # 乾舷の下限（mm）。見込み
 MIN_HEEL = 12  # ふちが水に着くまでに傾ける角の下限（°）。息を吹いた時の傾きの見込み
@@ -62,6 +64,9 @@ GM_MIN = 3  # 戻る力の余裕（mm）。紙の歪み・人形の貼り位置�
 BALLAST_Z = 3  # 粘土を底の四隅に平たく押し付けた時の重心の高さ（mm）の見込み
 TAB = 7  # 人形と風受けの足の糊代の高さ（mm）
 CUP_ABOVE = 5  # 風受けが壁の上に出る長さの下限（mm）。壁の陰では息を受けない
+# 貼る所の印の色と太さ。破線は谷折り、黒の実線は切る線と読まれるので、印は茶の細い実線にする。
+MARK, MARK_SW = "#8a4f2e", 0.35
+CLAY_MARK = 6  # 粘土の印の四角の辺（mm）。四隅の折り線から 3mm 内に置く
 TITLES = {"none": "浮かべる", "cups": "息で回す風受けつき"}
 HULL, HULL_DARK, LEAF, VEIN, ROBE, HAKAMA, INK, SKIN, CUP = "#b9c2a4", "#8d9878", "#7d8a5a", "#4d5638", "#c9b46a", "#e6e0cf", "#2f2c27", "#ece6d6", "#d9cfae"
 
@@ -157,7 +162,8 @@ def _tray(p):
     pts = [(h, 0), (h + L, 0), (h + L + g, c), (h + L + g, h - g), (h + L, h), (2 * h + L, h), (2 * h + L, h + W), (h + L, h + W),
            (h + L + g, h + W + g), (h + L + g, 2 * h + W - c), (h + L, 2 * h + W), (h, 2 * h + W), (h - g, 2 * h + W - c), (h - g, h + W + g),
            (h, h + W), (0, h + W), (0, h), (h, h), (h - g, h - g), (h - g, c)]
-    part = Part(1, "tray", "舟", pts, label_xy=(h + 2, h + 2), label="1 舟")
+    # ラベルは左上の粘土の印の右に置く（印と重ねると読めない）。
+    part = Part(1, "tray", "舟", pts, label_xy=(h + 5 + CLAY_MARK, h + 2), label="1 舟")
     part.valley = [((h, h), (h + L, h)), ((h, h + W), (h + L, h + W)), ((h, h), (h, h + W)), ((h + L, h), (h + L, h + W)),
                    ((h, 0), (h, h)), ((h + L, 0), (h + L, h)), ((h, h + W), (h, 2 * h + W)), ((h + L, h + W), (h + L, 2 * h + W))]
     part.glue = [[(h + L, 0), (h + L + g, c), (h + L + g, h - g), (h + L, h)], [(h + L, h + W), (h + L + g, h + W + g), (h + L + g, 2 * h + W - c), (h + L, 2 * h + W)],
@@ -175,6 +181,19 @@ def _tray(p):
         while x + 8 < h + L - 3:
             part.art.append({"kind": "line", "pts": [(x, y0 + hh), (x, y0), (x + 6, y0), (x + 6, y0 + hh), (x + 2.5, y0 + hh), (x + 2.5, y0 + hh * 0.45)], "stroke": INK, "sw": 0.35})
             x += 9
+    # 貼る所の印。式（mass_points）は葉と人形が底の真ん中、粘土が四隅に同じだけ、と見るので、その所を刷って組み方の文で言う。
+    cx, cy = h + L / 2, h + W / 2
+    ring = _circle(cx, cy, p["leaf_radius"])
+    part.art.append({"kind": "line", "pts": ring + [ring[0]], "stroke": MARK, "sw": MARK_SW, "mark": "leaf"})
+    if p["ballast_g"] > 0:
+        for x0, y0 in ((h + 3, h + 3), (h + L - 3 - CLAY_MARK, h + 3), (h + 3, h + W - 3 - CLAY_MARK), (h + L - 3 - CLAY_MARK, h + W - 3 - CLAY_MARK)):
+            part.art.append({"kind": "poly", "pts": [(x0, y0), (x0 + CLAY_MARK, y0), (x0 + CLAY_MARK, y0 + CLAY_MARK), (x0, y0 + CLAY_MARK)], "fill": "none", "stroke": MARK, "sw": MARK_SW, "mark": "ballast"})
+    if p["vane"] == "cups":
+        # 風受けは長い向きの両端に、丸い口を逆の向きにして立てる。半円の印をその向きで刷る。
+        rho = cup_radius(p)
+        for ex, sign in ((h + 1 + rho, -1), (h + L - 1 - rho, 1)):
+            arc = [(ex + rho * math.cos(math.pi * i / 24), cy + sign * rho * math.sin(math.pi * i / 24)) for i in range(25)]
+            part.art.append({"kind": "line", "pts": arc, "stroke": MARK, "sw": MARK_SW, "mark": "cups"})
     return part
 
 
@@ -189,6 +208,9 @@ def _leaf(p):
     for i, k in enumerate((0.8, 0.55, 0.75, 0.6, 0.8, 0.5, 0.7)):
         a = 2 * math.pi * i / 7 + 0.3
         art.append({"kind": "line", "pts": [(r + 0.08 * r * math.cos(a), r + 0.08 * r * math.sin(a)), (r + k * r * math.cos(a), r + k * r * math.sin(a))], "stroke": VEIN, "sw": 0.4})
+    # 人形の足の印。式は人形が葉の真ん中（＝舟の真ん中）に立つと見る。
+    fw = foot_width(p)
+    art.append({"kind": "line", "pts": [(r - fw / 2, r), (r + fw / 2, r)], "stroke": MARK, "sw": 0.6, "mark": "figure"})
     return Part(2, "leaf", "葉", _circle(r, r, r), label_xy=(r - 1.5, 1.4 * r), label="2", art=art)
 
 
@@ -329,11 +351,11 @@ def steps(p):
            "刷った物差しに定規を当て、10cm か確かめる", "部品を実線で切る。舟の角の糊代の脇も切り込む",
            "1 舟を破線で谷折りして壁を立て、角の糊代を短い壁の内側に貼って箱にする",
            "舟の外側の底と壁を透明テープですき間なく覆う（ふちは内へ折り返す）。紙は水を吸うので、すき間があると重くなって沈む",
-           "2 葉を舟の底の真ん中に貼る", "3 人形の足の糊代を破線で折り、葉の真ん中に立てて貼る"]
+           "2 葉を舟の底の茶の丸い葉の印に合わせて貼る", "3 人形の足の糊代を破線で折り、折り目を葉の茶の足の印に合わせて立てて貼る"]
     if p["vane"] == "cups":
-        out.append("4・5 風受けを半円に丸め、足の糊代を折って、舟の長い向きの両端に、丸い口が逆の向きを向くように貼る")
+        out.append("4・5 風受けを半円に丸め、足の糊代を折って、舟の両端の茶の半円の風受けの印に沿わせて貼る（丸い口が逆の向きになる）")
     if p["ballast_g"] > 0:
-        out.append(f"油粘土 {p['ballast_g']:g}g を 4 つに分け、舟の底の四隅に平たく押し付ける")
+        out.append(f"油粘土 {p['ballast_g']:g}g を同じ重さの 4 つに分け、舟の底の四隅の印の四角に平たく押し付ける（片寄ると傾く）")
     out.append("水に浮かべ、傾きと沈んだ深さを見る。濡れた紙は乾かすまで触らない")
     if p["vane"] == "cups":
         out.append("横から風受けに息を吹き、回るか見る")

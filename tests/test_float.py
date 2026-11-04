@@ -62,4 +62,30 @@ assert all(rows[q.number] == q.key for q in t.parts(C)) and {"tape", "ballast"} 
 # 組み方の文は水の注意を先に言い、紙が濡れると弱る事を言う
 assert t.steps(P)[0] == "水を使う時は大人と一緒に・紙は濡れると弱る"
 assert "吸水を入れない" in t.__doc__
+
+# 式は人形が舟の真ん中に立ち、粘土が四隅に同じだけ載る（G が舟の真ん中の上にある）と見る。貼る所を紙に刷らないと、
+# 作る人がずらして貼り、式の見込みと違う物ができる。印は舟と葉の絵に刷り、組み方の文で言う。
+def marks(q, kind):
+    return [a for a in q.art if a.get("mark") == kind]
+
+
+tray, leaf = by["tray"], by["leaf"]
+cx, cy = h + L / 2, h + W / 2  # 舟の展開図の底の真ん中
+(ring,) = marks(tray, "leaf")
+xs, ys = [x for x, _ in ring["pts"]], [y for _, y in ring["pts"]]
+assert abs((min(xs) + max(xs)) / 2 - cx) < 0.1 and abs((min(ys) + max(ys)) / 2 - cy) < 0.1 and abs((max(xs) - min(xs)) / 2 - P["leaf_radius"]) < 0.1
+clay = marks(tray, "ballast")
+assert len(clay) == 4
+# 四隅の印の重心の平均は底の真ん中（粘土の重心を真ん中に置く）
+mx = sum(Polygon(a["pts"]).centroid.x for a in clay) / 4
+my = sum(Polygon(a["pts"]).centroid.y for a in clay) / 4
+assert abs(mx - cx) < 1e-6 and abs(my - cy) < 1e-6
+assert not marks(t.parts({**P, "ballast_g": 0})[0], "ballast")  # 粘土を使わない時は刷らない
+(foot,) = marks(leaf, "figure")
+fx = [x for x, _ in foot["pts"]]
+assert abs((min(fx) + max(fx)) / 2 - P["leaf_radius"]) < 1e-6 and abs(max(fx) - min(fx) - t.foot_width(P)) < 1e-6
+cups = marks(t.parts(C)[0], "cups")
+assert len(cups) == 2
+st = " ".join(t.steps(C))
+assert "葉の印" in st and "足の印" in st and "四隅の印" in st and "風受けの印" in st
 print("ok")
