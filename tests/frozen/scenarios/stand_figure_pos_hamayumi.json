@@ -4,7 +4,8 @@
   "params": {
     "figure": "hamayumi",
     "stand": "base",
-    "slot_length": 11
+    "base_depth": 40,
+    "slot_length": 22
   },
   "inject": {},
   "expect": {
