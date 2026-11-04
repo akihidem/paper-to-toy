@@ -58,7 +58,8 @@ def to_svg(layout):
         d.append(dw.Lines(*pts, close=True, stroke_width=0.25, **STROKE))
         for lines, dash in ((q.valley, VALLEY), (q.mountain, MOUNTAIN)):
             if q.hide_folds:
-                break  # 色の境で折る部品は、折り線を刷らない（v9）。
+                # 色の境で折る部品は、折り線を刷らない（v9）。ただし print_folds の線（扇の足の糊代の境など）だけは刷る。
+                lines = [ln for ln in lines if ln in q.print_folds]
             for (x1, y1), (x2, y2) in lines:
                 d.append(dw.Line(q.x + x1, q.y + y1, q.x + x2, q.y + y2, stroke="black", stroke_width=0.18, stroke_dasharray=dash))
         for x, y, w, h in q.cuts:

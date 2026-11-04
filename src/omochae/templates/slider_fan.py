@@ -278,6 +278,10 @@ def parts(p):
         m, leg = n // 2, leg_length(p)
         fan.art.append({"kind": "poly", "pts": [(-leg + LEG_GLUE, m * w), (0, m * w), (0, (m + 1) * w), (-leg + LEG_GLUE, (m + 1) * w)], "fill": FAN_A if m % 2 == 0 else FAN_B})
     fan.hide_folds = True
+    # 足の糊代の境は台に貼る時に折る所で、隣も同じ色なので色の境が無い。組み方の文が「糊代の境の破線で折り」と言うので、
+    # この線だけは刷る（作り手の判断。足は台に貼ると隠れるので見た目に効かない）。
+    # 足は扇の本体（x ≧ 0）より左にあるので、x < 0 の折り線が足の線。板の折り線は x = 0〜h なので混ざらない。
+    fan.print_folds = [v for v in fan.valley if v[0][0] < 0]
     if p["hub"] == "axle":
         # 中心の穴に糸を通して束ねる。扇の要と同じ形。端の 2 枚の穴は開く糸を試すため。
         r_hole = 2

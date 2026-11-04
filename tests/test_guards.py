@@ -126,4 +126,22 @@ z0 = p["pivot_above_rim"] + depth
 assert abs(sf.thread_mm(p) - shortest_free_thread(p["tube_side"], sf.THREAD_RADIUS, z0 - p["push_amount"], z0)) < 1e-9
 assert abs(sf.thread_mm(p) - 30.3) < 0.1, sf.thread_mm(p)
 
+# 6. 色の境で折る扇でも、足の糊代の境の谷折り線だけは刷る（組み方の文が「糊代の境の破線で折り」と言うため）
+import re
+from omochae.compose import compose
+from omochae.render import to_svg
+
+for form in ({"push_part": "tab"}, {"push_part": "stick", "pusher_height": 84}):
+    _, layout, failures = compose("slider_fan", form, source)
+    assert not failures
+    fan = next(q for q in layout["parts"] if q.key == "fan")
+    assert len(fan.print_folds) == 1 and fan.print_folds[0][0][0] < 0, fan.print_folds
+    dashed = re.findall(r'<path d="M([-\d.]+),([-\d.]+) L([-\d.]+),([-\d.]+)" [^>]*stroke-dasharray="2,1"', to_svg(layout))
+    on_fan = [d for d in dashed if fan.x - 30 < float(d[0]) < fan.x + fan.width and fan.y <= float(d[1]) <= fan.y + fan.height]
+    (x1, y1), (x2, y2) = fan.print_folds[0]
+    assert [tuple(float(v) for v in d) for d in on_fan] == [(fan.x + x1, fan.y + y1, fan.x + x2, fan.y + y2)], on_fan
+# 口の台の形は足が無いので、刷る折り線も無い
+_, layout, _ = compose("slider_fan", {"hub": "rim", "push_amount": 36, "pusher_height": 40, "fold_count": 14, "fold_width": 8, "fold_height": 36}, source)
+assert next(q for q in layout["parts"] if q.key == "fan").print_folds == []
+
 print("ok")

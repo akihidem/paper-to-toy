@@ -34,6 +34,8 @@ class Part:
     art: list = field(default_factory=list)
     # 見える面の折り線を刷らず、絵の色の境で折る部品（v9）。折り線のデータは検査のために持ち続ける。
     hide_folds: bool = False
+    # hide_folds でも刷る折り線。隠れる所（糊代の境など）で、色の境が無く、線が無いと折る所が分からない物だけ。
+    print_folds: list = field(default_factory=list)
     x: float = 0.0
     y: float = 0.0
 
