@@ -30,10 +30,12 @@ assert t.hydro({**P, "figure_height": 90})["KG"] > hy["KG"]
 assert t.hydro({**P, "ballast_g": 0})["KG"] > hy["KG"]
 
 # 重りを積むと沈み、壁が低いと余裕が足りず落ちる
-fs = t.check_physics({**P, "wall_height": 10, "ballast_g": 30})
+# 粘土は四隅の四角を広げて 8mm より薄く載せる（厚さの床が先に鳴らないように）
+heavy = {**P, "glue": 5, "ballast_g": 20, "clay_side": 20, "leaf_radius": 20}
+fs = t.check_physics({**heavy, "wall_height": 8})
 assert [(f.floor, f.where) for f in fs] == [("F5.float", "舟の壁")], fs
 # 余裕が下限を越えても、狭い舟では少し傾いただけでふちが水に着く
-q = {**P, "wall_height": 12, "ballast_g": 32}
+q = {**heavy, "wall_height": 10}
 assert t.hydro(q)["f"] >= t.FREEBOARD_MIN and t.hydro(q)["heel"] < t.MIN_HEEL
 assert [f.where for f in t.check_physics(q)] == ["舟の壁"]
 
@@ -53,7 +55,7 @@ assert any(f.where == "舟の糊代" for f in t.check_physics({**P, "wall_height
 C = {**P, "vane": "cups"}
 assert abs(t.cup_radius(C) * math.pi - C["cup_width"]) < 1e-9
 assert any(f.where == "風受け" and "壁の上" in f.message for f in t.check_physics({**C, "cup_height": 25}))
-assert any(f.where == "風受け" and "底に入らない" in f.message for f in t.check_physics({**C, "cup_width": 40}))
+assert any(f.where == "風受け" and "入らない" in f.message for f in t.check_physics({**C, "cup_width": 40}))
 # 風受けは cups の形だけにあり、部品表にも載る。部品表の番号と key が刷る部品と合う
 assert {"cupa", "cupb"} <= set(by_c := {q.key for q in t.parts(C)}) and "cupa" not in by
 rows = {r["number"]: r["key"] for r in t.bom(C)}
@@ -88,4 +90,20 @@ cups = marks(t.parts(C)[0], "cups")
 assert len(cups) == 2
 st = " ".join(t.steps(C))
 assert "葉の印" in st and "足の印" in st and "四隅の印" in st and "風受けの印" in st
+
+# 二度目の検品の指摘 1: 粘土の重心の高さは、重さ・密度・四隅の四角の面積から出す厚みの半分。重い粘土を小さな四角に積むと
+# 厚く高くなり、低い重心と見込んで通してはいけない
+clay_t = P["ballast_g"] * 1000 / t.CLAY_DENSITY / (4 * P["clay_side"] ** 2)
+assert abs(t.clay_thickness(P) - clay_t) < 1e-9 and (P["ballast_g"], clay_t / 2) in t.mass_points(P)
+fs = t.check_physics({**P, "ballast_g": 30})
+assert [(f.floor, f.where) for f in fs] == [("F5.float", "重り")], fs
+# 指摘 2: 風受けの足の糊代は、半円に丸めても底に平らに貼れるよう、切り込みで歯に分ける
+cup = next(q for q in t.parts(C) if q.key == "cupa")
+assert len(cup.glue) >= 3 and all(Polygon(g).area < C["cup_width"] * t.TAB / 2 for g in cup.glue), cup.glue
+assert any("切り込み" in s for s in t.steps(C))
+# 指摘 3: 風受けの印は端から 1mm 内なので、使える長さは L − 2。葉・風受け・粘土の四角は底で重ならない
+assert any(f.where == "風受け" for f in t.check_physics({**C, "tray_length": 79}))  # 2r + 4ρ = 78 ≦ 79 でも、端の 1mm で葉に重なる
+assert any(f.where == "粘土の印" for f in t.check_physics({**P, "tray_length": 60, "tray_width": 60, "leaf_radius": 29}))
+# 指摘 4: 水よけ（テープかろう）は必ず貼るので、面密度 0 は範囲の外
+assert [f.floor for f in t.check_range({**P, "tape_gsm": 0})] == ["F5.range"]
 print("ok")
