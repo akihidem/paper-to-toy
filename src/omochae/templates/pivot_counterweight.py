@@ -75,7 +75,8 @@ def mass_points(p):
     return [head, strip, (p["weight_g"], -p["weight_behind"], p["weight_below_axle"])]
 
 
-# 吊る形で、頭を帯の下の端に重ねて貼る長さ（mm）。組み方の文にこの値を刷る。
+# 吊る形で、頭を帯の下の端に重ねて貼る長さ（mm）。組み方の文（steps）にこの値を書く。この repo の型紙は組み方を刷らない
+# （steps は雛形が返す文。刷るのは元の repo の手順の紙）。前提は README の「分かっている事」にも書いた。
 # 帯は長さ axle_to_head_top + 10 = 18mm、穴は端から 6mm なので、穴から帯の下の端までは 12mm。そこへ 4mm 重ねて貼ると、
 # 軸から頭の上までが axle_to_head_top の 8mm になる（式は変えず、前提を組み方の文に出す）。
 HEAD_OVERLAP = 4
