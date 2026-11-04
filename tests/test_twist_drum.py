@@ -20,7 +20,7 @@ assert abs(n * pitch - c) < 1e-9 and pitch - 2 * inset > 1
 low, high = t.cord_window(P)
 assert abs(t.strike_offset({**P, "cord_length": low}) - t.STRIKE_ZONE * P["radius"]) < 1e-9
 # 既定の寸法では、上限は柄に絡む側（√2·R − 玉の半径）で決まる
-assert abs(high - (math.sqrt(2) * P["radius"] - P["bead_d"] / 2)) < 1e-9
+assert abs(high - (math.sqrt(2) * P["radius"] - P["stick_d"] / 2 - P["bead_d"] / 2)) < 1e-9
 # 窓の内は通り、外は F5.drum の糸で落ちる
 assert t.check_physics({**P, "cord_length": (low + high) / 2}) == []
 for bad in (low - 0.5, high + 0.5):
@@ -98,7 +98,7 @@ assert out_mm and out_mm[0] >= t.STREAMER_TOP, (out_mm, t.STREAMER_TOP)
 need = P["handle_length"] + 2 * P["radius"] + out_mm[0]
 assert any(f.where == "柄" for f in t.check_physics({**tori, "handle_length": math.floor(t.SKEWER_LEN - 2 * P["radius"] - out_mm[0]) + 1}))
 # 3. 柄に絡まない条件は厳密に L + 玉の半径 < √2·R。等しい糸（柄にちょうど届く）は落とす
-edge = math.sqrt(2) * P["radius"] - P["bead_d"] / 2
+edge = math.sqrt(2) * P["radius"] - P["stick_d"] / 2 - P["bead_d"] / 2
 assert any(f.where == "糸" for f in t.check_physics({**P, "cord_length": edge})), "柄にちょうど届く糸を通した"
 # 4. 刷る形ごとの出典。既定の SOURCE は菊の面
 assert t.SOURCES == {"kiku": t.SOURCE, "tori": "NDL-1187053-R0000029-L-twist_drum", "kanko": "NDL-1187053-R0000010-R-twist_drum"}
@@ -121,9 +121,24 @@ for face in ("kiku", "tori"):
     assert t.wrap_size(p)[1] == P["handle_length"] - 2
 # 7. 棒の切り欠きは刷る留め具に置き換え、結ぶ所を棒の北の端からの長さで決める（押し込んだ時に軸の真横）
 assert "切り欠き" not in st
-assert nums(st, r"棒の北の端から (\d+(?:\.\d+)?)mm") == [t.rodtab_pos(K)] and t.rodtab_pos(K) == t.ROD_NORTH_OUT + t.peg_pos(K)
+assert nums(st, r"棒の北の端から (\d+(?:\.\d+)?)mm") == [t.rodtab_pos(K)] and t.rodtab_pos(K) == t.rod_north_out(K) + t.peg_pos(K)
 tab = {q.key: q for q in t.parts(K)}["rodtab"]
 assert abs(tab.width - (t.rod_perimeter(K) + 3)) < 1e-9 and len(tab.holes) == 1
 #    引ける長さで軸が 1 回も回らない寸法は落とす
 assert t.pull_turns(K) >= 1 and any(f.where == "棒" for f in t.check_physics({**K, "base_length": 70}))
+# ---- 3 回目のレビューの指摘（2026-11-04）を押さえる行 ----
+# 8. 諫鼓で、糸が玉の半径より短いと玉が花車に重なる（窓の式だけでは通っていた寸法）
+bad = {**K, "k_radius": 24, "face_gap": 10, "wheel_r": 8, "bead_d": 14, "k_cord": 3}
+assert [f.where for f in t.check_physics(bad)] == ["糸"], [f.line() for f in t.check_physics(bad)]
+# 9. 引き切っても棒の北の端が北の壁の穴に HOLE_MARGIN 残る。回る数はこの引ける長さで数える
+assert t.rod_north_out(K) - t.pull_travel(K) >= t.HOLE_MARGIN
+assert abs(t.pull_turns(K) - t.pull_travel(K) / (math.pi * K["stick_d"])) < 1e-9
+assert nums(" ".join(t.steps(K)), r"北の壁から (\d+(?:\.\d+)?)mm 出す") == [round(t.rod_north_out(K))]
+# 10. 柄の太さの分、絡む長さは短い（柄の表まで √2·R − 柄の半径）
+assert any(f.where == "糸" for f in t.check_physics({**P, "cord_length": math.sqrt(2) * P["radius"] - P["bead_d"] / 2 - P["stick_d"] / 2 + 0.5}))
+# 11. 諫鼓の窓は両端を含む。花車の高さのずれが kR ちょうどでも、下限＝上限の 1 点の糸は通る
+edge = {**K, "peg_height": 47}
+lo, hi, dz = t.kanko_window(edge)
+assert dz == t.STRIKE_ZONE * K["k_radius"] and hi is not None and abs(hi - lo) < 1e-9
+assert t.check_physics({**edge, "k_cord": lo}) == []
 print("ok")
