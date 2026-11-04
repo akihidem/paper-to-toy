@@ -5,7 +5,9 @@
 import argparse
 import json
 import pathlib
+import shutil
 import sys
+import tempfile
 
 from .compose import compose
 from .marks import check_image_count, check_pdf
@@ -42,9 +44,14 @@ def generate(template, params, source_id, out, page="A4", version=1, title=None,
             print(f.line(), file=sys.stderr)
         return 3
     from .render import to_png, write_all  # 描く前の検査だけの時に重い読み込みをしない
-    # 描く・刷った後の検査・PNG は仮の名前で作り、全部済んでから正しい名前へ移す。途中で検査できなくなった（例外・exit 4）時に、
-    # 前の回の紙と今回の紙が混ざって残らないようにするため（前の回の紙には触らない）。
-    tmp = stem.with_name(stem.name + "-partial")  # 点を入れない（with_suffix で正しい名前に化けないように）
+    # 描く・刷った後の検査・PNG は、その回だけの仮の置き場で作り、全部済んでから正しい名前へ移す。途中で検査できなくなった
+    # （例外・exit 4）時に、前の回の紙と今回の紙が混ざって残らないようにするため（前の回の紙には触らない）。
+    # 置き場は出力と同じ所に毎回別の名前で作る。決まった仮の名前だと、点のある --out や、たまたま同じ名前の別の出力と重なった。
+    # 同じ所に置くのは、移す（replace）が同じ機械の中の名前の付け替えで済むようにするため。
+    # 限り: 3 つの紙は 1 つずつ移すので、移す途中で止まると新旧が混ざりうる（全部を一度に替える手段が無い。移すのは名前の付け替えだけ）。
+    stem.parent.mkdir(parents=True, exist_ok=True)
+    work = pathlib.Path(tempfile.mkdtemp(prefix=".omochae-", dir=stem.parent))
+    tmp = work / "page"
     try:
         pdf = write_all(layout, tmp)
         failures = check_pdf(pdf, source) + check_image_count(pdf)
@@ -60,7 +67,7 @@ def generate(template, params, source_id, out, page="A4", version=1, title=None,
         for x in (".svg", ".pdf", ".png"):
             tmp.with_suffix(x).replace(stem.with_suffix(x))
     finally:
-        _drop(tmp)
+        shutil.rmtree(work, ignore_errors=True)
     print(stem.with_suffix(".pdf"))
     return 0
 

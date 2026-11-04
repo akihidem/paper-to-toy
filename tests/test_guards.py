@@ -53,6 +53,16 @@ with tempfile.TemporaryDirectory() as d:
     after = {p.name: p.read_bytes() for p in pathlib.Path(d).glob("x*")}
     assert after == before, f"検査できない時に紙が変わった・増えた: {sorted(after)}"
 
+# 1b. 仮の置き場は毎回別の名前。点のある --out でも揃い、たまたま同じ名前の別の出力（x-partial）を壊さない
+with tempfile.TemporaryDirectory() as d:
+    assert gen(scenario(d, "ok", {"push_part": "tab"}), pathlib.Path(d) / "x.v1").returncode == 0
+    assert {"x.svg", "x.pdf", "x.png"} <= {p.name for p in pathlib.Path(d).iterdir()}
+    assert gen(scenario(d, "ok", {"push_part": "tab"}), pathlib.Path(d) / "y-partial").returncode == 0
+    keep = {p.name: p.read_bytes() for p in pathlib.Path(d).glob("y-partial.*")}
+    assert gen(scenario(d, "stick", {"push_part": "stick", "pusher_height": 84}), pathlib.Path(d) / "y").returncode == 0
+    assert {p.name: p.read_bytes() for p in pathlib.Path(d).glob("y-partial.*")} == keep
+    assert not [p for p in pathlib.Path(d).iterdir() if p.name.startswith(".omochae-")], "仮の置き場が残った"
+
 # 2. 線の絵が糊代を横切ったら落とす（面積でなく長さで見る）
 sys.path.insert(0, str(ROOT / "src"))
 from omochae.floors import check_art
