@@ -72,9 +72,10 @@ assert any(f.where == "止め" and "抜ける" in f.message for f in t.check_phy
 
 # 組み上がりの絵は、渡した枠の中に収まる（動いた中箱を枠の左の外に描いていた）
 for q in (P, S):
-    for sh in t.diagram(10, 20, 80, 40, q):
+    left, top, width, height = 10, 20, 80, 40  # 絵の枠
+    for sh in t.diagram(left, top, width, height, q):
         xs = [sh["x"], sh["x"] + sh["w"]] if sh["kind"] == "rect" else [sh["x1"], sh["x2"]]
-        assert 10 - 1e-9 <= min(xs) and max(xs) <= 90 + 1e-9, (q["form"], sh)
+        assert left - 1e-9 <= min(xs) and max(xs) <= left + width + 1e-9, (q["form"], sh)
 
 # 部品の外形は左上を原点にする（低い前の壁の中箱で、左の端が 0 でなかった）
 for q in (P, S, {**S, "front_h": 5}):
