@@ -26,7 +26,7 @@
 どの値も実物では未確認。Claude が変えてよいのは RANGES の名前の値と、figure・stand・back の値だけ。
 """
 import math
-from functools import lru_cache
+from functools import lru_cache, wraps
 
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.polygon import orient
@@ -35,20 +35,27 @@ from shapely.ops import polylabel, unary_union
 from ..model import Failure, Part
 
 ID = "stand_figure"
+# 立て方と脚・台の寸法の出発点。姿ごとの勧め（FIGURES の stand と suggest）がこれに重なる（filled）。
+BASE_DEFAULTS = {
+    "stand": "easel",
+    # 脚。帯の幅・脚の長さ・糊代・姿と脚の開きの角。
+    "tab_width": 14, "tab_length": 40, "tab_glue": 14, "tab_angle": 30,
+    # 台の箱。横の長さ・奥行き・高さ・糊代、溝の長さと幅。
+    "base_length": 60, "base_depth": 30, "base_height": 10, "base_glue": 6,
+    "slot_length": 30, "slot_width": 0.6,
+}
+# 立て方と脚・台の寸法の既定は None（＝その姿の勧めの値）。compose は DEFAULTS に場面の値を重ねるだけなので、
+# 数で既定を置くと、姿だけを変えた時に犬張子の立て方と寸法のまま刷られ、細い姿は落ちた。None にして、
+# 書いた値だけが姿の勧めに勝つようにする（書いた値と既定が同じ数でも見分けられる）。
 DEFAULTS = {
     "figure": "inu",
-    "stand": "easel",
     # 裏の姿（左右を返した物）を刷って、表と背中合わせに貼るか。1 = 刷る、0 = 表だけ。
     "back": 1,
     # 姿の高さの倍率。1 で、その玩具の既定の高さ（FIGURES の height）。
     "scale": 1.0,
     # 0.15mm はふつうの厚めの紙の見込み。実物の紙を測ったら置き換える。
     "paper_thickness": 0.15,
-    # 脚。帯の幅・脚の長さ・糊代・姿と脚の開きの角。
-    "tab_width": 14, "tab_length": 40, "tab_glue": 14, "tab_angle": 30,
-    # 台の箱。横の長さ・奥行き・高さ・糊代、溝の長さと幅。
-    "base_length": 60, "base_depth": 30, "base_height": 10, "base_glue": 6,
-    "slot_length": 30, "slot_width": 0.6,
+    **{k: None for k in BASE_DEFAULTS},
 }
 RANGES = {
     "scale": (0.5, 1.5),
@@ -610,14 +617,40 @@ FORMS = tuple(FIGURES)
 SOURCES = {k: f["source"] for k, f in FIGURES.items()}
 
 
+def figure_defaults(figure):
+    """その姿の既定: 共通の出発点に、姿に勧める立て方と寸法を重ねた物。"""
+    f = FIGURES[figure]
+    return {**BASE_DEFAULTS, "stand": f["stand"], **f.get("suggest", {})}
+
+
+def filled(p):
+    """None（＝姿の勧め）の値を、その姿の既定で埋める。書いた値はそのまま勝つ。姿が一覧に無ければ埋めない（範囲の検査が落とす）。"""
+    if p.get("figure") not in FIGURES:
+        return dict(p)
+    base = figure_defaults(p["figure"])
+    return {**p, **{k: base[k] for k in base if p.get(k) is None}}
+
+
+def _filling(fn):
+    """外から p を受ける関数の入口で filled を通す。中の関数どうしで呼んでも、もう埋まっているので変わらない。"""
+    @wraps(fn)
+    def run(p, *a):
+        return fn(filled(p), *a)
+    return run
+
+
+@_filling
 def title(p):
     return f"{FIGURES[p['figure']]['title']}・{'脚で立てる' if p['stand'] == 'easel' else '箱の台に差す'}"
 
 
 def spec():
-    return {"template_id": ID, "defaults": DEFAULTS, "ranges": RANGES, "figure": FORMS, "stand": STANDS, "back": (0, 1)}
+    # 姿ごとの既定も見せる（立て方と寸法は姿で変わる。None の既定だけでは何で刷られるか分からない）。
+    return {"template_id": ID, "defaults": DEFAULTS, "ranges": RANGES, "figure": FORMS, "stand": STANDS, "back": (0, 1),
+            "figures": {k: figure_defaults(k) for k in FIGURES}}
 
 
+@_filling
 def check_range(p):
     out = []
     for k, v in p.items():
@@ -633,6 +666,8 @@ def check_range(p):
                 out.append(Failure("F5.range", k, f"{v} は 0 か 1 でない"))
         elif k not in RANGES:
             out.append(Failure("F5.range", k, "知らない寸法の名前"))
+        elif v is None:
+            continue  # 姿が一覧に無くて埋まらなかった既定。姿の名の誤りとして上で 1 つだけ落とす
         elif not isinstance(v, (int, float)) or isinstance(v, bool) or not RANGES[k][0] <= v <= RANGES[k][1]:
             out.append(Failure("F5.range", k, f"{v} は範囲 {RANGES[k]} の外"))
     return out
@@ -648,7 +683,8 @@ def _turn(f):
     return lambda pts: [(bx + (x - bx) * c - (y - by) * n, by + (x - bx) * n + (y - by) * c) for x, y in pts]
 
 
-@lru_cache(maxsize=None)
+# 高さは連続の値なので、上限を置く（場面を回し続けても覚えが増え続けないように）。1 枚の型紙で使う高さは 1 つ。
+@lru_cache(maxsize=64)
 def _shape(figure, height):
     """姿の外形（mm・左上が原点・下の縁が y = height）と、絵（姿の中に切った物）。玩具と高さが同じなら毎回同じなので覚えておく。
     "clip" のある姿は、回した後の下の端をその割合だけ切り落として、床に触れる平らな縁を作る（尖った下の端では立たない）。"""
@@ -686,10 +722,12 @@ def _shape(figure, height):
     return body, art
 
 
+@_filling
 def figure_height(p):
     return FIGURES[p["figure"]]["height"] * p["scale"]
 
 
+@_filling
 def geometry(p):
     """姿の外形・重心・床に触れる所。式と型紙が同じ形を使うよう、ここ 1 つから出す。"""
     H = figure_height(p)
@@ -705,6 +743,7 @@ def margin(g):
     return max(MIN_MARGIN, g["zc"] * math.tan(math.radians(TILT_TOL)))
 
 
+@_filling
 def easel(p):
     """脚の三角（前提は module の docstring）。付け根の高さ s と、足の形の奥行き c と、重心の奥行き。"""
     phi = math.radians(90 - LEAN_DEG)
@@ -714,6 +753,7 @@ def easel(p):
             "com": g["zc"] * math.sin(math.radians(LEAN_DEG))}
 
 
+@_filling
 def tongue(p):
     """台に差す舌の位置と大きさ: (中心の x, 幅, 長さ)。重心に一番近い床に触れる所の上に置く（重心の真下で差すと台が小さくて済む）。"""
     g = geometry(p)
@@ -721,13 +761,17 @@ def tongue(p):
     best = min(g["contacts"], key=lambda ab: 0 if ab[0] <= g["cx"] <= ab[1] else min(abs(g["cx"] - ab[0]), abs(g["cx"] - ab[1])))
     a, b = best
     x = (a + b) / 2 if b - a < w else min(max(g["cx"], a + w / 2), b - w / 2)
-    return x, w, p["base_height"] - 0.5
+    # 舌の先は箱の底の紙の上に当てる（溝の縁と底の 2 点で支える前提）。姿の下の縁は上の面の上に乗るので、
+    # 舌の長さは箱の外の高さから底の紙 1 枚の厚みを引いた物。上の面の紙は舌が通り抜けるので引かない。
+    return x, w, p["base_height"] - p["paper_thickness"]
 
 
+@_filling
 def layers(p):
     return 2 if p["back"] else 1
 
 
+@_filling
 def wobble_deg(p):
     """溝の隙間で姿が傾ける角度。隙間が無い（差せない）時は None。"""
     gap = p["slot_width"] - layers(p) * p["paper_thickness"]
@@ -736,6 +780,7 @@ def wobble_deg(p):
     return math.degrees(math.atan(gap / p["base_height"]))
 
 
+@_filling
 def check_physics(p):
     """F5.stand: 姿が倒れない（重心が足の形の内に余白つきで入る）・脚が背に貼れる・溝が紙に合う、を見る。"""
     out = []
@@ -783,6 +828,7 @@ def _mirror(pts, W):
 
 
 def _figure_part(number, key, name, p, mirror):
+    p = filled(p)
     g = geometry(p)
     W, H = g["W"], g["H"]
     shape = g["body"]
@@ -819,6 +865,7 @@ def _figure_part(number, key, name, p, mirror):
 GAUGE_W, GAUGE_END = 8, 4  # 開きの物差しの幅と、印の外の持ち手の長さ
 
 
+@_filling
 def _gauge(p):
     """開きの物差し: 上の印を姿の下の縁に当て、下の印に脚の先を置くと、開きが式の c になる。"""
     c = easel(p)["c"]
@@ -829,6 +876,7 @@ def _gauge(p):
     return part
 
 
+@_filling
 def _tab(p):
     tw, L, gl = p["tab_width"], p["tab_length"], p["tab_glue"]
     part = Part(3, "tab", "脚", [(0, 0), (tw, 0), (tw, gl + L), (0, gl + L)], label_xy=(1, gl + 2), label="3 脚")
@@ -838,6 +886,7 @@ def _tab(p):
     return part
 
 
+@_filling
 def base_net(p):
     """台の箱の展開図: 上の面・後ろの壁・底・前の壁を縦に、左右の壁を底の横に。上の面に溝を切る。
     上の面は後ろの壁から倒して閉じ、前の糊代と左右の糊代を壁の内に貼る。左右の壁の糊代は前後の壁の内に貼る。"""
@@ -866,6 +915,7 @@ def base_net(p):
     return part
 
 
+@_filling
 def parts(p):
     out = [_figure_part(1, "front", "表の姿", p, False)]
     if p["back"]:
@@ -894,6 +944,7 @@ def place(by_key, page, top, gap):
     return bottom + gap, page.x1 - page.x0, page.x0
 
 
+@_filling
 def bom(p):
     paper = f"紙（厚さ {p['paper_thickness']}mm 前後）"
     why = "家庭のプリンタで刷って作るため"
@@ -914,11 +965,13 @@ def bom(p):
     return rows
 
 
+@_filling
 def materials(p):
     by = {r["key"]: r for r in bom(p)}
     return [f"{by['front']['material']}を 1 枚", "のり、はさみ、定規" + ("、カッター（溝を切る。大人がする）" if p["stand"] == "base" else "")]
 
 
+@_filling
 def steps(p):
     out = ["刷った物差しに定規を当て、10cm か確かめる", "部品を実線で切る"]
     if p["back"]:
@@ -939,12 +992,14 @@ def steps(p):
 RESULTS = ("立った", "倒れた")
 
 
+@_filling
 def measures(p):
     """立つかの二択でなく、どうすると倒れそうかを言葉か絵で予想する（ほかの雛形と同じ形）。"""
     return {"predict": "どちらへ、どうすると倒れると思いますか（言葉か絵で）", "rows": [[("試した事（叩く・息・傾ける）", 40)]]}
 
 
 def diagram(x, y, w, h, p):
+    p = filled(p)
     """横から見た組み上がり。寸法の図ではなく、姿・脚・台の並びを見せるだけ。"""
     H = figure_height(p)
     shapes = []
