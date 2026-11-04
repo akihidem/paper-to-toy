@@ -3,7 +3,10 @@
 形（kind）は玩具の違いなので描き分ける。
 - bow: 米搗き人形（推定）。台の上の 2 本の柱に腰の軸を通し、体の前を糸で下へ引くと礼をして臼をつく。尾の粘土で起き上がる。
 - jaw: 振り獅子（獅子頭）。棒の上の頭に下顎を軸で留め、顎の後ろの舌を糸で引くと口が閉じる。顎の先の粘土で口が開く。
-どちらも図から読んだ仕掛けで【解釈】。寸法は手元の複写の図の比と A4 の紙面から出し、どの値も実物では未確認。
+- peck: 藁苞の鶏（推定）。図は藁苞に鶏が 2 羽載り、苞の先から細い糸が上へ伸びる。動く仕掛けは図に描かれていない。
+  【解釈】ここでは、2 羽の脚を苞の上の面の溝に差して苞の中の竹串で留め、胸に結んだ糸を苞の中から下へ出し、引くと 2 羽が前へ傾いて
+  苞をついばむ、と読む。尾の粘土で起き上がり、尾の先が苞に載って止まる。図の上へ伸びる糸は吊るす糸と見て、型紙には作らない。
+どれも図から読んだ仕掛けで【解釈】。寸法は手元の複写の図の比と A4 の紙面から出し、どの値も実物では未確認。
 Claude が変えてよいのは RANGES の名前の値だけ。
 
 動きの見込み（check_physics の式）の前提:
@@ -11,7 +14,9 @@ Claude が変えてよいのは RANGES の名前の値だけ。
 - 戻る向きの力のモーメント（g·mm）は、重りと紙の質量 × 軸からの水平の距離。静かな時は止め（bow は尾の下の柱、jaw は舌の上のこぶ）に
   押し付けられている前提で、戻る向きのモーメントが軸の摩擦の SAFETY 倍を超える事を見る。振り切った所では cos(角度) 倍に減るので、そこでも見る。
 - 軸の摩擦のモーメントは 摩擦係数 MU × 全質量 × 軸の半径。竹串と紙の MU は見込み（量っていない）。
-- 振れる角度は、止めに当たるまでの幾何だけで出す（bow は頭が臼の上に当たるまで、jaw は舌がこぶに当たるまで）。
+- 振れる角度は、止めに当たるまでの幾何だけで出す（bow は頭が臼の上に当たるまで、jaw は舌がこぶに当たるまで、
+  peck は鶏の輪郭の頂点のどれかが苞の上の面に届くまで。辺の途中が先に当たる事は見ていない＝頂点で近似）。
+- peck の鶏の紙は 1 枚（裏は無地）。2 羽は同じ形で、手前の鶏は HEN 倍に縮める。重り（weight_g）は 1 羽ずつに付ける。
 """
 import math
 
@@ -29,6 +34,8 @@ DEFAULTS = {
     # jaw（振り獅子）の寸法。jaw_len は軸から顎の先まで、tab_len は軸から舌の端まで。
     "head_w": 50, "head_h": 46, "jaw_len": 34, "jaw_h": 14, "tab_len": 14, "stop_gap": 6,
     "stick_len": 120, "stick_w": 10,
+    # peck（藁苞の鶏）の寸法。cock_h は苞の上の面から鶏の頭の上まで、leg_h は苞の上の面から腹まで、axle_depth は上の面から軸まで。
+    "straw_len": 120, "straw_w": 24, "straw_h": 26, "cock_w": 50, "cock_h": 44, "leg_h": 10, "axle_depth": 6, "peck_arm": 6,
     "weight_g": 2.0, "glue": 8,
     # 紙の面密度は見込み。実物の紙を量ったら置き換える。
     "paper_gsm": 150,
@@ -39,13 +46,15 @@ RANGES = {
     "stop_height": (5, 60), "mortar_round": (40, 70),
     "head_w": (30, 70), "head_h": (30, 70), "jaw_len": (20, 60), "jaw_h": (8, 24), "tab_len": (6, 30), "stop_gap": (1, 20),
     "stick_len": (60, 160), "stick_w": (6, 16),
+    "straw_len": (80, 160), "straw_w": (14, 40), "straw_h": (14, 40), "cock_w": (30, 60), "cock_h": (30, 56), "leg_h": (1, 20),
+    "axle_depth": (4, 20), "peck_arm": (4, 20),
     "weight_g": (0.1, 15), "glue": (5, 12), "paper_gsm": (40, 400),
 }
-KINDS = ("bow", "jaw")
+KINDS = ("bow", "jaw", "peck")
 # 刷る形を決める寸法（玩具の形）。--params では既定に頼らず必ず書かせる（compose の決まり）。
 FORM = "kind"
 FORMS = KINDS
-# 既定の出典。米搗き人形を既定にする（族の先頭の玩具）。獅子は場面で --source を R0000030-L に替える。
+# 既定の出典。米搗き人形を既定にする（族の先頭の玩具）。獅子は R0000030-L、鶏は R0000016-R の出典に場面（--source）で替える。
 SOURCE = "NDL-1187053-R0000006-L-pull_nod"
 HOLE_MARGIN = 4  # 穴の縁から紙の端・隣の穴の縁までの見込み。虎の雛形と同じ値（これより狭いと裂けやすい）
 AXLE_R, STRING_R = 1.2, 1.0  # 竹串の穴と糸の穴の半径（mm）
@@ -56,7 +65,11 @@ POST_GAP = 6  # 2 本の柱の間。体の紙（2 枚重ね）が擦れずに入
 CLAY_IN = 3  # 粘土の中心を紙の端からこれだけ内側に付ける
 WOOD, LINE, SKIN, CLOTH, ROUGE = "#c9b48a", "#3c3424", "#d9c2a0", "#6b4a2e", "#c9826b"
 GOLD, FACE, MOUTH, STICK = "#c8a845", "#d4b49a", "#9a4a3a", "#cdb066"
-TITLES = {"bow": "糸を引くと腰で礼をする", "jaw": "糸を引くと顎が閉じる"}
+TITLES = {"bow": "糸を引くと腰で礼をする", "jaw": "糸を引くと顎が閉じる", "peck": "糸を引くと鶏がついばむ"}
+COCK, COMB, STRAW, BAND = "#a0482c", "#f2efe6", "#d8c08a", "#5a4630"
+HEN = 0.8  # 手前の鶏の縮み。図で手前の鶏が奥の鶏の約 0.8 の大きさに描かれているため
+TAB_W = 12  # 鶏の脚の帯の幅。軸の穴の縁に HOLE_MARGIN を取れる幅
+TAB_BELOW = 6  # 脚の帯が軸の穴の下に伸びる長さ
 
 
 def title(p):
@@ -129,7 +142,15 @@ def swing_deg(p):
 
 
 def pull_gf(p):
-    """引き切る時に糸に要る力（gf）。戻るモーメントと摩擦を糸の腕で割る。組み方の文に見当として書くだけで、床にはしない。"""
+    """引き切る時に糸に要る力（gf）。戻るモーメントと摩擦を糸の腕で割る。組み方の文に見当として書くだけで、床にはしない。
+    peck は 2 羽を 1 本の糸で引くので、2 羽の分を足す。"""
+    if p["kind"] == "peck":
+        total = 0.0
+        for which in ("cock", "hen"):
+            m, friction = bird_moment(p, which)
+            b = bird(p, which)
+            total += (m + friction) / (b["pivot"][0] - b["string"][0])
+        return total
     m, friction = return_moment(p)
     _, arm = lever(p)
     return (m + friction) / arm if arm > 0 else math.inf
@@ -148,6 +169,8 @@ def hole_margins(parts):
 
 
 def check_physics(p):
+    if p["kind"] == "peck":
+        return _check_peck(p)
     out = []
     m, friction = return_moment(p)
     sw = swing_deg(p)
@@ -175,6 +198,147 @@ def check_physics(p):
         if p["tab_len"] + 2 > p["head_w"] - 8:
             out.append(Failure("F5.pull_nod", "舌", "舌が頭の幅に収まらず、こぶを貼る所が無い"))
     return out
+
+
+# ---- peck（藁苞の鶏） ----
+# 鶏の輪郭。R0000016 右頁（表示の 1205 幅の座標）の奥の鶏を見て手で取った点を、外接の箱で 0〜1 に直した物。原図の画素は使っていない。
+# u は左（くちばし）から右（尾）、v は上（とさか）から下。v = 0.74 が腹、v = 1 が尾の先（苞の上の面に載る所）。
+_BIRD = [(0.0, 0.12), (0.05, 0.09), (0.06, 0.0), (0.2, 0.0), (0.24, 0.06), (0.2, 0.12), (0.17, 0.2), (0.3, 0.36), (0.6, 0.42),
+         (0.78, 0.3), (0.95, 0.32), (1.0, 0.42), (0.9, 0.48), (0.98, 0.68), (0.9, 0.82), (0.82, 1.0), (0.74, 0.86), (0.6, 0.74),
+         (0.4, 0.74), (0.22, 0.62), (0.12, 0.42), (0.06, 0.24), (0.02, 0.18)]
+_COMB = [(0.06, 0.0), (0.2, 0.0), (0.24, 0.06), (0.2, 0.1), (0.07, 0.08)]
+_FEATHERS = [[(0.5, 0.5), (0.7, 0.62)], [(0.62, 0.48), (0.85, 0.7)], [(0.8, 0.4), (0.92, 0.62)], [(0.78, 0.56), (0.86, 0.9)], [(0.3, 0.45), (0.45, 0.6)]]
+BELLY_V, CLAY_UV = 0.74, (0.86, 0.5)
+
+
+def _bird_y(v, H, leg):
+    """v を紙の y へ写す。腹より上は鶏の体の高さ（H − 脚の高さ）に、腹から尾の先までは脚の高さに縮める。
+    腹の高さ（leg_h）を寸法で動かしても、尾の先が苞の上の面に載る形を保つため。"""
+    if v <= BELLY_V:
+        return v / BELLY_V * (H - leg)
+    return (H - leg) + (v - BELLY_V) / (1 - BELLY_V) * leg
+
+
+def bird(p, which):
+    """鶏 1 羽の紙の形と、軸・糸・粘土の位置（紙の座標。苞の上の面は y = H）。"""
+    k = 1.0 if which == "cock" else HEN
+    w, H, leg, d = p["cock_w"] * k, p["cock_h"] * k, p["leg_h"], p["axle_depth"]
+    uv = lambda ps: [(u * w, _bird_y(v, H, leg)) for u, v in ps]
+    body = Polygon(uv(_BIRD))
+    xp = 0.5 * w
+    tab = Polygon([(xp - TAB_W / 2, H - leg - 1), (xp + TAB_W / 2, H - leg - 1), (xp + TAB_W / 2, H + d + TAB_BELOW), (xp - TAB_W / 2, H + d + TAB_BELOW)])
+    shape = body.union(tab)
+    outline = [(round(x, 4), round(y, 4)) for x, y in list(shape.exterior.coords)[:-1]]
+    sx = xp - p["peck_arm"] * k
+    # 糸の穴は、その x での体の下の縁から HOLE_MARGIN + 半径 + 1.5 だけ上。下の縁は縦の線と体の交わりの下の端。
+    # 胸の下の縁は斜めなので、縦に測った余白より縁までの距離が短い。その分 1.5mm（0.5 では斜めの縁まで 4mm に届かなかった）。
+    cut = LineString([(sx, -1), (sx, H + 1)]).intersection(body)
+    ys = [y for g in getattr(cut, "geoms", [cut]) for _, y in g.coords] or [H / 2]
+    sy = max(ys) - (HOLE_MARGIN + STRING_R + 1.5)
+    clay = (CLAY_UV[0] * w, _bird_y(CLAY_UV[1], H, leg))
+    return {"w": w, "H": H, "d": d, "body": body, "outline": outline, "pivot": (xp, H + d), "string": (sx, sy), "clay": clay, "k": k}
+
+
+def bird_moment(p, which):
+    """鶏 1 羽の戻るモーメント（後ろ向きが正、g·mm）と軸の摩擦（g·mm）。紙の重心は輪郭の重心。"""
+    b = bird(p, which)
+    shape = Polygon(b["outline"])
+    card = paper_mass(shape.area, p["paper_gsm"])
+    xp = b["pivot"][0]
+    m = p["weight_g"] * (b["clay"][0] - xp) + card * (shape.centroid.x - xp)
+    return m, MU * (card + p["weight_g"]) * AXLE_R
+
+
+def bird_swing(p, which):
+    """前へ傾けて、輪郭の頂点のどれかが苞の上の面（軸の d 上）に届くまでの角度。
+    頂点を軸のまわりの極座標 (ρ, φ)（φ は前向きから上へ）に置くと、前へ θ 傾けた高さは ρ sin(φ − θ)。d に届く θ = φ − asin(d/ρ)。
+    静かな時に上の面より上にある頂点だけを見る（上の面より下は溝の中を通る脚の帯）。尾の先は静かな時に面の上にあり、θ = 0 で後ろの止めになる。"""
+    b = bird(p, which)
+    xp, zp = b["pivot"]
+    d = b["d"]
+    best = 90.0
+    for x, y in b["outline"]:
+        f, z = xp - x, zp - y
+        if z < d - 1e-9 or f <= 0:
+            continue
+        rho, phi = math.hypot(f, z), math.atan2(z, f)
+        best = min(best, math.degrees(phi - math.asin(min(1.0, d / rho))))
+    return best
+
+
+def _check_peck(p):
+    out = []
+    for which, name in (("cock", "奥の鶏"), ("hen", "手前の鶏")):
+        m, friction = bird_moment(p, which)
+        sw = bird_swing(p, which)
+        if m <= SAFETY * friction:
+            out.append(Failure("F5.pull_nod", f"{name}の尾の粘土", f"戻るモーメント {m:.1f}g·mm が摩擦 {friction:.1f}g·mm の {SAFETY} 倍以下で、離しても戻らない"))
+        elif m * math.cos(math.radians(sw)) <= SAFETY * friction:
+            out.append(Failure("F5.pull_nod", f"{name}の尾の粘土", f"{sw:.0f}° 傾いた所で戻るモーメントが摩擦の {SAFETY} 倍以下になる"))
+        if sw < MIN_SWING:
+            out.append(Failure("F5.pull_nod", name, f"苞に当たるまで {sw:.1f}° しか傾かない（{MIN_SWING}° 要る）"))
+    for name, (x, y), gap in hole_margins(parts(p)):
+        if gap < HOLE_MARGIN:
+            out.append(Failure("F5.pull_nod", name, f"穴 ({x:.1f}, {y:.1f}) の縁から端か隣の穴まで {gap:.1f}mm で、{HOLE_MARGIN}mm 取れない"))
+    # 脚の帯の下の端が苞の底に当たると、傾けない。
+    if p["axle_depth"] + TAB_BELOW + 3 > p["straw_h"]:
+        out.append(Failure("F5.pull_nod", "藁苞", f"苞の高さ {p['straw_h']}mm に、軸の深さと脚の帯の下の端が収まらない"))
+    # 2 羽の溝が重ならない。
+    a, b = _slots(p)
+    if a[0] + a[1] + 3 > b[0]:
+        out.append(Failure("F5.pull_nod", "藁苞", "2 羽の溝が近すぎる"))
+    return out
+
+
+def _slots(p):
+    """苞の上の面の溝 (x の始め, 長さ)。手前の鶏が前（左）。前へ傾くと、脚の帯が上の面を通る所は前へ d·tanθ ずれ、幅は 1/cosθ 倍になる。"""
+    out = []
+    for which, at in (("hen", 0.3), ("cock", 0.64)):
+        sw = math.radians(bird_swing(p, which))
+        front = TAB_W / 2 / math.cos(sw) + p["axle_depth"] * math.tan(sw) + 1
+        cx = p["straw_len"] * at
+        out.append((cx - front, front + TAB_W / 2 + 1))
+    return out
+
+
+def _bird_part(p, which, number, key, name):
+    b = bird(p, which)
+    w, H, leg = b["w"], b["H"], p["leg_h"]
+    uv = lambda ps: [(u * w, _bird_y(v, H, leg)) for u, v in ps]
+    body = list(b["body"].exterior.coords)[:-1]
+    inner = b["body"].buffer(-0.15)
+    art = [{"kind": "poly", "pts": body, "fill": COCK, "stroke": LINE, "sw": 0.2}]
+    comb = Polygon(uv(_COMB)).intersection(inner)
+    art.append({"kind": "poly", "pts": list(comb.exterior.coords)[:-1], "fill": COMB})
+    art += _clip_lines([uv(ln) for ln in _FEATHERS], inner, LINE, 0.3)
+    ex, ey = 0.12 * w, _bird_y(0.13, H, leg)
+    art.append({"kind": "poly", "pts": [(ex - 0.6, ey), (ex, ey - 0.6), (ex + 0.6, ey), (ex, ey + 0.6)], "fill": LINE})
+    (px, py), (sx, sy) = b["pivot"], b["string"]
+    return Part(number, key, name, b["outline"], label_xy=(px - 2, py - 1.7 - 3.5 - 1.5), label=str(number), art=art,
+                holes=[(px, py, AXLE_R), (sx, sy, STRING_R)])
+
+
+def _peck_parts(p):
+    L, W, Hs, g, d = p["straw_len"], p["straw_w"], p["straw_h"], p["glue"], p["axle_depth"]
+    # 1 藁苞: 上の面・横・底・横・糊代の順に並べた箱。両端は開けたまま（藁の束の切り口に見立てる）。
+    rows = [0, W, W + Hs, 2 * W + Hs, 2 * W + 2 * Hs, 2 * W + 2 * Hs + g]
+    straw = Part(1, "straw", "藁苞", [(0, 0), (L, 0), (L, rows[5]), (0, rows[5])], label_xy=(2, 1), label="1",
+                 valley=[((0, y), (L, y)) for y in rows[1:5]], glue=[[(0, rows[4]), (L, rows[4]), (L, rows[5]), (0, rows[5])]])
+    holes, cuts = [], []
+    for (x0, ln), which in zip(_slots(p), ("hen", "cock")):
+        cx = x0 + ln - TAB_W / 2 - 1
+        cuts.append((x0, W / 2 - 1, ln, 2))
+        holes += [(cx, W + d, AXLE_R), (cx, rows[4] - d, AXLE_R)]
+        # 糸は溝を通って苞の中へ入り、底の穴から出す。底の穴は胸の糸の穴の真下。
+        holes.append((cx - p["peck_arm"] * (1.0 if which == "cock" else HEN), W + Hs + W / 2, STRING_R))
+    straw.holes, straw.cuts = holes, cuts
+    straw.art = []
+    for y0, y1 in zip(rows[:4], rows[1:5]):
+        straw.art.append(_panel(6, y0 + 0.3, L - 0.3, y1 - 0.3, STRAW))
+        straw.art += [{"kind": "line", "pts": [(8, y), (L - 2, y)], "stroke": BAND, "sw": 0.2} for y in [y0 + (y1 - y0) * f for f in (0.25, 0.5, 0.75)]]
+        # 苞の左の端を縛った帯（図の結び目）。
+        straw.art.append(_panel(10, y0 + 0.3, 14, y1 - 0.3, BAND))
+    return [straw, _bird_part(p, "cock", 2, "cock", "奥の鶏"), _bird_part(p, "hen", 3, "hen", "手前の鶏")]
 
 
 def _panel(x0, y0, x1, y1, fill):
@@ -324,7 +488,7 @@ def _jaw_parts(p):
 
 
 def parts(p):
-    return _bow_parts(p) if p["kind"] == "bow" else _jaw_parts(p)
+    return {"bow": _bow_parts, "jaw": _jaw_parts, "peck": _peck_parts}[p["kind"]](p)
 
 
 def place(by_key, page, top, gap):
@@ -339,6 +503,13 @@ def place(by_key, page, top, gap):
         stop.x, stop.y = x0 + posts.width + gap, y
         y += max(posts.height, stop.height) + gap
         # 文字の列は部品の下に頁の幅いっぱいで置く（10cm の物差しが入る幅が要る）。
+        return y, page.x1 - x0, x0
+    if "straw" in by_key:
+        straw, cock, hen = by_key["straw"], by_key["cock"], by_key["hen"]
+        straw.x, straw.y = x0, top
+        cock.x, cock.y = x0 + straw.width + gap, top
+        hen.x, hen.y = cock.x, top + cock.height + gap
+        y = top + max(straw.height, cock.height + gap + hen.height) + gap
         return y, page.x1 - x0, x0
     stick, jaw, head, bump = (by_key[k] for k in ("stick", "jaw", "head", "bump"))
     stick.x, stick.y = x0, top
@@ -363,6 +534,14 @@ def bom(p):
         ]
         axle_len = 2 * p["post_width"] + POST_GAP + 14
         thread = p["post_height"] + 150
+    elif p["kind"] == "peck":
+        rows = [
+            {"number": 1, "key": "straw", "name": "藁苞", "qty": 1, "material": paper, "substituted": True, "original_guess": "藁（図の形による推定）", "reason": why},
+            {"number": 2, "key": "cock", "name": "奥の鶏", "qty": 1, "material": paper, "substituted": True, "original_guess": "張子か土（不明）", "reason": why},
+            {"number": 3, "key": "hen", "name": "手前の鶏", "qty": 1, "material": paper, "substituted": True, "original_guess": "張子か土（不明）", "reason": why},
+        ]
+        axle_len = p["straw_w"] + 10
+        thread = p["straw_h"] + 150
     else:
         rows = [
             {"number": 1, "key": "head", "name": "頭", "qty": 1, "material": paper, "substituted": True, "original_guess": "張子か木（不明）", "reason": why},
@@ -373,8 +552,8 @@ def bom(p):
         axle_len = 10
         thread = p["stick_len"] + 80
     rows += [
-        {"number": 7, "key": "axle", "name": "軸", "qty": 1, "material": f"竹串（長さ約 {axle_len}mm に切り、先を落とす）", "substituted": True, "original_guess": "不明", "reason": "家にあり、穴に通しやすいため"},
-        {"number": 8, "key": "weight", "name": "重り", "qty": 1, "material": f"油粘土 {p['weight_g']:g}g", "substituted": True, "original_guess": "不明", "reason": "量を変えて戻り方を試しやすいため"},
+        {"number": 7, "key": "axle", "name": "軸", "qty": 2 if p["kind"] == "peck" else 1, "material": f"竹串（長さ約 {axle_len}mm に切り、先を落とす）", "substituted": True, "original_guess": "不明", "reason": "家にあり、穴に通しやすいため"},
+        {"number": 8, "key": "weight", "name": "重り", "qty": 2 if p["kind"] == "peck" else 1, "material": f"油粘土 {p['weight_g']:g}g", "substituted": True, "original_guess": "不明", "reason": "量を変えて戻り方を試しやすいため"},
         {"number": 9, "key": "string", "name": "糸", "qty": 1, "material": f"木綿の糸（長さ約 {thread}mm）", "substituted": True, "original_guess": "糸（図に描かれている）", "reason": "家にあるため"},
     ]
     return rows
@@ -382,7 +561,12 @@ def bom(p):
 
 def materials(p):
     by = {r["key"]: r for r in bom(p)}
-    return [f"{by['plank' if p['kind'] == 'bow' else 'head']['material']}を 1 枚", "のり、はさみ、定規", by["axle"]["material"], by["weight"]["material"], by["string"]["material"]]
+    first = {"bow": "plank", "jaw": "head", "peck": "straw"}[p["kind"]]
+    # 鶏は 2 羽なので、竹串と粘土は 2 つずつ（部品表の qty）。
+    n = by["axle"]["qty"]
+    if n > 1:
+        return [f"{by[first]['material']}を 1 枚", "のり、はさみ、定規", f"{by['axle']['material']}を {n} 本", f"{by['weight']['material']}を {n} つ", by["string"]["material"]]
+    return [f"{by[first]['material']}を 1 枚", "のり、はさみ、定規", by["axle"]["material"], by["weight"]["material"], by["string"]["material"]]
 
 
 def steps(p):
@@ -396,6 +580,14 @@ def steps(p):
                 f"5 臼を丸めて筒にし、台の前の大きい四角（軸から {p['torso_len'] - 5}mm 前）に立てて貼る",
                 "尾の端に粘土を付ける。体が水平で止めの柱に載るか見る",
                 f"糸を体の糸の穴に結び、台の穴から下へ通す。引くと約 {pull_gf(p):.0f}gf（見込み）で礼をして臼に当たる"]
+    elif p["kind"] == "peck":
+        out += ["1 藁苞の上の面の 2 本の溝を切る（カッターは大人がする）",
+                "1 藁苞を破線で谷折りし、糊代で貼って角の筒にする。両端は開けたまま",
+                "2 奥の鶏と 3 手前の鶏の胸の小さい穴に糸を 1 本ずつ結ぶ",
+                "鶏の脚の帯を溝に差し、糸は溝から苞の中へ入れて底の穴から出す",
+                "竹串を苞の横の穴と脚の帯の穴に通す。鶏が真ん中に来るよう、串の両側に粘土の小粒を付ける",
+                f"尾の裏に粘土を {p['weight_g']:g}g ずつ付ける。尾の先が苞に載って鶏が起きているか見る",
+                f"底から出た 2 本の糸を 1 本に結ぶ。引くと約 {pull_gf(p):.0f}gf（見込み）で 2 羽がついばむ"]
     else:
         out += ["3 棒を破線で谷折りして貼り合わせる",
                 "1 頭の裏の下を 3 棒の上の端に貼る",
@@ -427,6 +619,17 @@ def diagram(x, y, w, h, p):
                   {"kind": "rect", "x": px - p["torso_len"] * s, "y": py - p["torso_w"] * s / 2, "w": (p["torso_len"] + p["tail_len"]) * s, "h": p["torso_w"] * s},
                   {"kind": "rect", "x": px - p["torso_len"] * s, "y": base - p["stop_height"] * s, "w": 10 * s, "h": p["stop_height"] * s},
                   {"kind": "line", "x1": px - p["string_arm"] * s, "y1": py, "x2": px - p["string_arm"] * s, "y2": base + 2, "dash": "1,0.6"}]
+        return shapes
+    if p["kind"] == "peck":
+        s = min(w / p["straw_len"], h / (p["straw_h"] + p["cock_h"] + 4))
+        top = y + p["cock_h"] * s
+        shapes = [{"kind": "rect", "x": x, "y": top, "w": p["straw_len"] * s, "h": p["straw_h"] * s}]
+        for (x0, ln), which in zip(_slots(p), ("hen", "cock")):
+            b = bird(p, which)
+            cx = x + (x0 + ln - TAB_W / 2 - 1) * s
+            shapes.append({"kind": "rect", "x": cx - b["pivot"][0] * s, "y": top - b["H"] * s, "w": b["w"] * s, "h": b["H"] * s})
+            sx = cx - p["peck_arm"] * b["k"] * s
+            shapes.append({"kind": "line", "x1": sx, "y1": top - 4 * s, "x2": sx, "y2": y + h, "dash": "1,0.6"})
         return shapes
     s = min(w / (p["head_w"] + 4), h / (p["head_h"] + 20))
     px, py = x + jaw_pivot(p)[0] * s, y + jaw_pivot(p)[1] * s

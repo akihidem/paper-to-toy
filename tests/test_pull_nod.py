@@ -10,6 +10,7 @@ from omochae.templates import pull_nod as pn
 
 bow = {**pn.DEFAULTS, "kind": "bow"}
 jaw = {**pn.DEFAULTS, "kind": "jaw"}
+peck = {**pn.DEFAULTS, "kind": "peck"}
 
 
 def floors(p):
@@ -17,7 +18,7 @@ def floors(p):
 
 
 # 既定はどちらの形も通り、部品表と部品が合う
-for p in (bow, jaw):
+for p in (bow, jaw, peck):
     assert pn.check_range(p) == [] and pn.check_physics(p) == [], (p["kind"], pn.check_physics(p))
     assert check_bom(pn.bom(p), pn.parts(p)) == [], p["kind"]
 
@@ -54,9 +55,25 @@ assert any(f.where == "下顎" for f in floors({**jaw, "tab_len": 8}))
 assert pn.jaw_string_arm(jaw) == jaw["tab_len"] - (pn.HOLE_MARGIN + pn.STRING_R + 0.5)
 assert pn.pull_gf({**bow, "string_arm": 30}) < pn.pull_gf(bow)
 
+# 4. peck（藁苞の鶏）: 傾く角度は、輪郭の頂点が苞の上の面に届く角度の最小。腹が低い（leg_h が小さい）ほど浅い
+sw = [pn.bird_swing({**peck, "leg_h": h}, "cock") for h in (1, 2, 4, 10)]
+assert sw == sorted(sw) and sw[0] < pn.MIN_SWING <= sw[1], sw
+assert [f.where for f in floors({**peck, "leg_h": 1})] == ["奥の鶏"]  # 手前の鶏は縮めた分だけ深く傾ける（16.3°）
+# 尾の先が苞の上の面にあり（静かな時の後ろの止め）、粘土は軸より後ろ＝戻る向き
+b = pn.bird(peck, "cock")
+assert abs(max(y for x, y in b["body"].exterior.coords) - b["H"]) < 1e-9 and b["clay"][0] > b["pivot"][0]
+assert pn.bird_moment(peck, "cock")[0] > pn.bird_moment({**peck, "weight_g": 1.0}, "cock")[0] > 0
+# 胸の糸の穴を前へ出しすぎると、斜めの胸の縁に近づいて落ちる
+assert {f.where for f in floors({**peck, "peck_arm": 12})} == {"奥の鶏", "手前の鶏"}
+# 苞が浅いと脚の帯が底に当たる
+assert [f.where for f in floors({**peck, "straw_h": 14, "axle_depth": 8})] == ["藁苞"]
+# 溝は傾く分だけ前へ長い。2 羽の溝は重ならない
+(a0, al), (b0, bl) = pn._slots(peck)
+assert al > pn.TAB_W + 2 and a0 + al < b0
+
 # 形ごとの部品の key は英小文字だけ、部品表の番号と合う
-for p in (bow, jaw):
+for p in (bow, jaw, peck):
     assert {q.number: q.key for q in pn.parts(p)} == {r["number"]: r["key"] for r in pn.bom(p) if r["number"] < 7}
 
-print(round(pn.swing_deg(bow), 1), round(pn.swing_deg(jaw), 1), round(pn.pull_gf(bow)), round(pn.pull_gf(jaw)))
+print(round(pn.swing_deg(bow), 1), round(pn.swing_deg(jaw), 1), round(pn.bird_swing(peck, 'cock'), 1), round(pn.pull_gf(bow)), round(pn.pull_gf(jaw)), round(pn.pull_gf(peck)))
 print("ok")
