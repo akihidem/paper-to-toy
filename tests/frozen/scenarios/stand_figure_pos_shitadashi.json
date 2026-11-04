@@ -4,7 +4,8 @@
   "params": {
     "figure": "shitadashi",
     "stand": "base",
-    "slot_length": 7
+    "base_depth": 40,
+    "slot_length": 11
   },
   "inject": {},
   "expect": {

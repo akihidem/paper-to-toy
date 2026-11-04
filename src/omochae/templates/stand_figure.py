@@ -19,9 +19,16 @@
   開きの角は折り目の硬さで保つと見込む（実物で確かめていない。開きすぎる紙なら糸で脚と姿をつなぐ）。
   倒れないかは開き具合で決まるので、開きの物差し（部品 4。印の間が c）を刷り、脚の先を印に合わせて置かせる。
   台の形は、舌が溝をほぼ埋める（溝の長さ − 1mm）ので、姿の置き場は溝で決まり、印は要らない。
-- 台（base）: 箱（底つき）の上の面の真ん中に溝を切り、姿の下に足した差し込み（舌）を差して、舌の先を箱の底に当てる。
-  舌は溝の縁と底の 2 点で支えるので、溝の隙間（溝の幅 − 紙の厚み × 重ねた枚数）だけ傾く: 傾き = atan(隙間 / 箱の高さ)。
-  隙間が MIN_CLEAR より狭いと差せない。傾きが MAX_WOBBLE を越えると、ぐらついて立たない。傾いた分も重心をずらして見る。
+- 台（base）: 箱（底つき）の上の面と底の面の真ん中に、同じ溝を切る（閉じると上下にそろう）。姿の下に足した差し込み（舌）は
+  箱の高さと同じ長さで、上の溝と底の溝を通り、先が机に着く。姿の重さは下の縁から上の面に乗る。
+  舌は高さの違う 2 つの溝（上の面と底の面の紙の真ん中。間は 箱の高さ − 紙の厚み）で挟まれるので、溝の隙間
+  （溝の幅 − 紙の厚み × 重ねた枚数）だけ傾く: 傾き = atan(隙間 / (箱の高さ − 紙の厚み))。上の溝 1 つだけだと、軸は溝で
+  舌の先は浮くので、上の面の紙の厚み（0.15mm）でしか止まらず、ほぼ倒れる（そのため底にも溝を切る）。
+  隙間が MIN_CLEAR より狭いと差せない。MIN_CLEAR は、幅 1mm ほどの溝を手で切る時のずれ（両の縁で ±0.2mm 程の見込み）を含めた値。
+  溝は 1 本の切れ目でなく、2 本の線の間の細い帯を切り取る。傾きが MAX_WOBBLE を越えると、ぐらついて立たない。
+  倒れるかは、傾きの軸（舌の先・机の上）から測った重心の高さ（姿の重心の高さ ＋ 箱の高さ）で、重心のずれと余白を出す。
+  横（姿の面の向き）は、溝の長さが舌をほぼ埋めるので箱と一体と見るが、重心が「床に触れる所と舌」の幅の外にあると、
+  姿の重さが舌の付け根をねじって折れると見て落とす。舌は付け根が半分以上姿とつながる範囲で、重心の側へ寄せる。
   舌の付け根は姿の下の縁と半分以上つながっていないと、差した所で折れる（姿の下が細い棒の物は、溝を短くする）。
 どの値も実物では未確認。Claude が変えてよいのは RANGES の名前の値と、figure・stand・back の値だけ。
 """
@@ -41,8 +48,9 @@ BASE_DEFAULTS = {
     # 脚。帯の幅・脚の長さ・糊代・姿と脚の開きの角。
     "tab_width": 14, "tab_length": 40, "tab_glue": 14, "tab_angle": 30,
     # 台の箱。横の長さ・奥行き・高さ・糊代、溝の長さと幅。
-    "base_length": 60, "base_depth": 30, "base_height": 10, "base_glue": 6,
-    "slot_length": 30, "slot_width": 0.6,
+    # 溝の幅 1mm は、カッターで 2 本の線の間の帯を切り取れる幅の見込み。箱の高さ 12mm は、その隙間で傾きが MAX_WOBBLE に収まる高さ。
+    "base_length": 60, "base_depth": 30, "base_height": 12, "base_glue": 6,
+    "slot_length": 30, "slot_width": 1.0,
 }
 # 立て方と脚・台の寸法の既定は None（＝その姿の勧めの値）。compose は DEFAULTS に場面の値を重ねるだけなので、
 # 数で既定を置くと、姿だけを変えた時に犬張子の立て方と寸法のまま刷られ、細い姿は落ちた。None にして、
@@ -62,7 +70,7 @@ RANGES = {
     "paper_thickness": (0.05, 0.5),
     "tab_width": (6, 30), "tab_length": (10, 120), "tab_glue": (6, 40), "tab_angle": (10, 60),
     "base_length": (30, 150), "base_depth": (15, 80), "base_height": (6, 30), "base_glue": (4, 12),
-    "slot_length": (5, 80), "slot_width": (0.2, 3.0),
+    "slot_length": (5, 80), "slot_width": (1.0, 3.0),
 }
 STANDS = ("easel", "base")
 # 刷る形を決める寸法（どの玩具の姿か）。姿ごとに輪郭も絵も違うので、寸法を直に渡す入口では必ず書かせる。
@@ -72,7 +80,7 @@ SOURCE = "NDL-1187053-R0000016-L-stand_figure"
 LEAN_DEG = 12  # 脚で立てた姿の後ろへの傾き（見込み）。立て掛ける写真立てと同じくらい
 TILT_TOL = 8  # この角度まで傾けても倒れない余白を取る（机の揺れ・息の見込み）
 MIN_MARGIN = 2  # 余白の下限（mm）
-MIN_CLEAR = 0.1  # 溝の隙間がこれより狭いと、紙の毛羽で差せない（見込み）
+MIN_CLEAR = 0.5  # 溝の隙間の下限。紙の毛羽の 0.1mm に、手で切る溝の縁のずれ（両側で ±0.2mm 程）を足した見込み
 MAX_WOBBLE = 5  # 溝の隙間で傾いてよい角度の上限
 SLOT_EDGE = 5  # 溝の端から箱の縁までの紙。これより狭いと溝の端が裂ける
 SLOT_END = 0.5  # 舌の左右と溝の端の隙間
@@ -181,7 +189,7 @@ FIGURES = {
         ],
     },
     "hagoita": {
-        "title": "羽子板", "source": _src(23, "L"), "height": 120, "stand": "base", "suggest": {"slot_length": 10},
+        "title": "羽子板", "source": _src(23, "L"), "height": 120, "stand": "base", "suggest": {"base_depth": 40, "slot_length": 10},
         "frame": "コマ 23 左頁の縮図の座標", "fill": "#d7d6c8",
         "body": [[(90, 310), (340, 297), (335, 520), (330, 690), (305, 750), (262, 785), (268, 978), (220, 978), (213, 785), (175, 760), (150, 700),
                   (120, 520)]],
@@ -256,7 +264,7 @@ FIGURES = {
         ],
     },
     "shitadashi": {
-        "title": "舌出し面", "source": _src(8, "R"), "height": 115, "stand": "base", "suggest": {"slot_length": 7},
+        "title": "舌出し面", "source": _src(8, "R"), "height": 115, "stand": "base", "suggest": {"base_depth": 40, "slot_length": 11},
         "frame": "コマ 8 右頁の縮図の座標。柄は図より太くした（【解釈】）", "fill": "#efe3cc",
         "body": [[(130, 490), (170, 465), (260, 455), (345, 465), (385, 487), (385, 597), (395, 622), (380, 700), (360, 750), (330, 780), (305, 790),
                   (282, 790), (245, 785), (200, 760), (170, 720), (150, 680), (140, 600), (132, 597)],
@@ -275,7 +283,7 @@ FIGURES = {
         ],
     },
     "kubi": {
-        "title": "棒付きの首人形（2 つ）", "source": _src(17, "R"), "height": 115, "stand": "base", "suggest": {"slot_length": 5},
+        "title": "棒付きの首人形（2 つ）", "source": _src(17, "R"), "height": 115, "stand": "base", "suggest": {"base_depth": 40, "slot_length": 5},
         "frame": "コマ 17 右頁の縮図の座標。竿は図より太くした（【解釈】）", "fill": "#e2c78e",
         "body": [[(255, 515), (290, 467), (345, 470), (383, 525), (365, 560), (338, 600), (322, 640), (318, 678), (268, 678), (268, 650), (232, 628),
                   (220, 610), (222, 590), (240, 560)],
@@ -488,7 +496,7 @@ FIGURES = {
         ],
     },
     "hebi": {
-        "title": "蛇の竿", "source": _src(20, "L"), "height": 125, "stand": "base", "suggest": {"slot_length": 5},
+        "title": "蛇の竿", "source": _src(20, "L"), "height": 125, "stand": "base", "suggest": {"base_depth": 40, "slot_length": 5},
         "frame": "コマ 20 左頁の縮図の座標。藁の蛇と竿だけ（前の黒い物は別の玩具）。竿を真上に向けて回し、図より太くした",
         "axis": ((558, 1025), (190, 260)), "clip": 0.01, "fill": "#d9c48a",
         "body": [[(180, 262), (200, 255), (568, 1018), (548, 1030)],
@@ -518,7 +526,7 @@ FIGURES = {
         ],
     },
     "sakana": {
-        "title": "魚の体の人形", "source": _src(12, "R"), "height": 120, "stand": "base", "suggest": {"slot_length": 9},
+        "title": "魚の体の人形", "source": _src(12, "R"), "height": 120, "stand": "base", "suggest": {"base_depth": 40, "slot_length": 9},
         "frame": "コマ 12 右頁の縮図の座標。斜めの魚を、尾から頭が真上を向くよう回し、尾の端を切って平らにした",
         "axis": ((90, 935), (432, 632)), "clip": 0.05, "fill": "#e8dfc6",
         "body": [[(320, 598), (345, 645), (390, 690), (480, 710), (485, 725), (410, 775), (290, 870), (200, 935), (180, 960), (178, 1040), (145, 970),
@@ -739,8 +747,9 @@ def geometry(p):
     return {"body": body, "art": art, "H": H, "W": body.bounds[2], "cx": c.x, "zc": H - c.y, "contacts": contacts}
 
 
-def margin(g):
-    return max(MIN_MARGIN, g["zc"] * math.tan(math.radians(TILT_TOL)))
+def margin(g, above=0.0):
+    """余白。above は傾きの軸から姿の下の縁までの高さ（台では箱の高さ。重心の高さはそこから測る）。"""
+    return max(MIN_MARGIN, (g["zc"] + above) * math.tan(math.radians(TILT_TOL)))
 
 
 @_filling
@@ -758,12 +767,18 @@ def tongue(p):
     """台に差す舌の位置と大きさ: (中心の x, 幅, 長さ)。重心に一番近い床に触れる所の上に置く（重心の真下で差すと台が小さくて済む）。"""
     g = geometry(p)
     w = p["slot_length"] - 2 * SLOT_END
-    best = min(g["contacts"], key=lambda ab: 0 if ab[0] <= g["cx"] <= ab[1] else min(abs(g["cx"] - ab[0]), abs(g["cx"] - ab[1])))
-    a, b = best
-    x = (a + b) / 2 if b - a < w else min(max(g["cx"], a + w / 2), b - w / 2)
-    # 舌の先は箱の底の紙の上に当てる（溝の縁と底の 2 点で支える前提）。姿の下の縁は上の面の上に乗るので、
-    # 舌の長さは箱の外の高さから底の紙 1 枚の厚みを引いた物。上の面の紙は舌が通り抜けるので引かない。
-    return x, w, p["base_height"] - p["paper_thickness"]
+    cx = g["cx"]
+    # 床に触れる所ごとに、付け根が TONGUE_ATTACH 以上つながる舌の中心の範囲を出し、重心に一番近い所に置く。
+    # 重心の側へ寄せるのは、重心が舌と床に触れる所の幅の外にあると、重さが舌の付け根をねじるため。
+    best = None
+    for a, b in g["contacts"]:
+        k = TONGUE_ATTACH * w
+        lo, hi = (a + k - w / 2, b - k + w / 2) if b - a >= k else ((a + b) / 2, (a + b) / 2)
+        x = min(max(cx, lo), hi)
+        if best is None or abs(x - cx) < abs(best - cx):
+            best = x
+    # 舌は箱の高さと同じ長さ: 上の溝と底の溝を通り、先が机に着く（2 つの高さで挟む前提）。
+    return best, w, p["base_height"]
 
 
 @_filling
@@ -777,7 +792,8 @@ def wobble_deg(p):
     gap = p["slot_width"] - layers(p) * p["paper_thickness"]
     if gap < MIN_CLEAR:
         return None
-    return math.degrees(math.atan(gap / p["base_height"]))
+    # 2 つの溝は上の面と底の面の紙の真ん中にあり、その間は 箱の高さ − 紙の厚み。
+    return math.degrees(math.atan(gap / (p["base_height"] - p["paper_thickness"])))
 
 
 @_filling
@@ -816,10 +832,17 @@ def check_physics(p):
         edge = LineString([(x - w / 2, H - CONTACT_UP), (x + w / 2, H - CONTACT_UP)]).intersection(g["body"]).length
         if edge < TONGUE_ATTACH * w:
             out.append(Failure("F5.stand", "舌", f"差し込みの舌が姿と {edge:.1f}mm しかつながらず、差すと折れる（溝を短く）"))
-        lean = g["zc"] * math.tan(math.radians(wob or 0))
+        # 傾く軸は舌の先（机の上）なので、重心の高さは箱の高さを足して測る。余白も同じ高さから。
+        hb = p["base_height"]
+        mb = margin(g, hb)
+        lean = (g["zc"] + hb) * math.tan(math.radians(wob or 0))
         foot = box(x - p["base_length"] / 2, -p["base_depth"] / 2, x + p["base_length"] / 2, p["base_depth"] / 2)
-        if not foot.buffer(-m).contains(Point(cx, lean)):
-            out.append(Failure("F5.stand", "台", f"重心が台の縁に近く、倒れる（重心は舌から横へ {cx - x:.1f}mm、余白 {m:.1f}mm 要る）"))
+        if not foot.buffer(-mb).contains(Point(cx, lean)):
+            out.append(Failure("F5.stand", "台", f"重心が台の縁に近く、倒れる（重心は舌から横へ {cx - x:.1f}mm・奥へ {lean:.1f}mm、余白 {mb:.1f}mm 要る）"))
+        lo = min([a for a, _ in g["contacts"]] + [x - w / 2])
+        hi = max([b for _, b in g["contacts"]] + [x + w / 2])
+        if not lo <= cx <= hi:
+            out.append(Failure("F5.stand", "舌", f"重心（左の端から {cx:.1f}mm）が床に触れる所と舌の幅（{lo:.1f}〜{hi:.1f}mm）の外で、舌の付け根がねじれる"))
     return out
 
 
@@ -909,7 +932,8 @@ def base_net(p):
                    ((X0, Y3), (X1, Y3)), ((X2, Y3), (X3, Y3)), ((X0, Y4), (X1, Y4)), ((X2, Y4), (X3, Y4))]
     part.glue = glue
     sl, sw = p["slot_length"], p["slot_width"]
-    part.cuts = [(X1 + L / 2 - sl / 2, Y1 + D / 2 - sw / 2, sl, sw)]
+    # 上の面と底の面の真ん中に同じ溝。上の面は後ろの壁から倒して閉じるので、どちらも面の真ん中なら閉じた時に上下にそろう。
+    part.cuts = [(X1 + L / 2 - sl / 2, Y1 + D / 2 - sw / 2, sl, sw), (X1 + L / 2 - sl / 2, Y3 + D / 2 - sw / 2, sl, sw)]
     panel = lambda a, b, c, d: {"kind": "poly", "pts": [(a + 0.2, b + 0.2), (c - 0.2, b + 0.2), (c - 0.2, d - 0.2), (a + 0.2, d - 0.2)], "fill": STAND_FILL}
     part.art = [panel(X1, Y1, X2, Y2), panel(X1, Y2, X2, Y3), panel(X1, Y4, X2, Y5), panel(X0, Y3, X1, Y4), panel(X2, Y3, X3, Y4)]
     return part
@@ -978,13 +1002,17 @@ def steps(p):
         out.append("1 表の姿と 2 裏の姿を、絵を外にして背中合わせに貼る")
     if p["stand"] == "easel":
         e = easel(p)
-        where = "2 裏の姿の四角い印" if p["back"] else f"姿の背の、下の縁から {e['s']:.0f}mm の高さ"
+        cx = geometry(p)["cx"]
+        # 脚は重心の真後ろに置く（横へずれると足の形が片寄り、横へ倒れる）。裏の印が無い時は、横の位置も高さも言う。
+        where = ("2 裏の姿の四角い印（重心の真後ろ）" if p["back"]
+                 else f"姿の背の、表から見て左の端から {cx:.0f}mm（重心の真後ろ）を真ん中に、下の縁から {e['s']:.0f}mm の高さ")
         out += [f"3 脚の糊代を、{where}に貼る（折り線が下）",
                 f"脚を破線で後ろへ折り、4 開きの物差しの上の線を姿の下の縁に当て、下の線（{e['c']:.0f}mm 後ろ）に脚の先を置いて立てる"
                 f"（開き約 {p['tab_angle']:g}°）"]
     else:
-        out += ["3 台の箱の上の面の溝を切る（カッターは大人がする）", "3 台の箱を破線で谷折りし、糊代を内に貼って箱にする",
-                "姿の下の舌を溝に差し、舌の先を箱の底に当てる（舌は溝をほぼ埋めるので、姿の置き場は溝で決まる）"]
+        out += [f"3 台の箱の上の面と底の面の溝（幅 {p['slot_width']:g}mm）を、2 本の線の間の細い帯ごと切り取る（1 本の切れ目にしない。カッターは大人がする）",
+                "3 台の箱を破線で谷折りし、糊代を内に貼って箱にする（上の溝と底の溝が上下にそろう）",
+                "姿の下の舌を上の溝から底の溝まで通し、舌の先を机に着ける（舌は溝をほぼ埋めるので、姿の置き場は溝で決まる）"]
     out.append("机を軽く叩いて、倒れないか見る")
     return out
 

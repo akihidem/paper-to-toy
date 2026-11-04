@@ -4,6 +4,7 @@
   "params": {
     "figure": "hebi",
     "stand": "base",
+    "base_depth": 40,
     "slot_length": 5
   },
   "inject": {},
