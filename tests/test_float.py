@@ -1,7 +1,7 @@
 """浮き人形の床（F5.float）の式の要所を数点で確かめる。浮心・重心・BM は言葉で決めると間違えやすいので、ここで数える。"""
 import math
 
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, box
 
 from omochae.compose import TEMPLATES
 from omochae.templates import float as t  # module の名が float なので、組み込みの float を隠さないよう別名で読む
@@ -39,15 +39,19 @@ q = {**heavy, "wall_height": 10}
 assert t.hydro(q)["f"] >= t.FREEBOARD_MIN and t.hydro(q)["heel"] < t.MIN_HEEL
 assert [f.where for f in t.check_physics(q)] == ["舟の壁"]
 
-# 狭く深い厚紙の舟は G が高く戻らない。粘土で G を下げると GM は上がる
-deep = {**P, "tray_length": 40, "tray_width": 20, "wall_height": 35, "figure_height": 34, "leaf_radius": 9, "ballast_g": 0, "paper_gsm": 300}
+# 狭く深い厚紙の舟は G が高く戻らない
+deep = {**P, "tray_length": 40, "tray_width": 22, "wall_height": 35, "figure_height": 30, "leaf_radius": 10, "ballast_g": 0, "paper_gsm": 300}
 fs = t.check_physics(deep)
 assert [(f.floor, f.where) for f in fs] == [("F5.float", "重心")], fs
-assert t.hydro({**deep, "ballast_g": 4})["GM"] > t.hydro(deep)["GM"]
+# 粘土は G を下げるが、重くなって V が増え BM ＝ I/V も下がる。粘土の厚みを実の面積から出すと、この狭い舟では GM は上がらない
+# （前は粘土の重心を 3mm に決め打ちし、GM が上がると見ていた）。粘土で直すより、舟を広くする方が効く
+light = {**deep, "ballast_g": 1, "clay_side": 6}
+assert t.hydro(light)["KG"] < t.hydro(deep)["KG"] and t.hydro(light)["GM"] < t.hydro(deep)["GM"]
+assert t.hydro({**deep, "tray_width": 30})["GM"] > t.hydro(deep)["GM"]
 
 # 葉は底に入り、人形の足の台は葉に乗る
 assert any(f.where == "葉" for f in t.check_physics({**P, "leaf_radius": 30}))
-assert any(f.where == "人形" for f in t.check_physics({**P, "leaf_radius": 15}))
+assert any(f.where == "人形" for f in t.check_physics({**P, "leaf_radius": 14}))
 # 糊代が壁より広いと角が閉じない
 assert any(f.where == "舟の糊代" for f in t.check_physics({**P, "wall_height": 9, "glue": 8}))
 
@@ -102,8 +106,34 @@ cup = next(q for q in t.parts(C) if q.key == "cupa")
 assert len(cup.glue) >= 3 and all(Polygon(g).area < C["cup_width"] * t.TAB / 2 for g in cup.glue), cup.glue
 assert any("切り込み" in s for s in t.steps(C))
 # 指摘 3: 風受けの印は端から 1mm 内なので、使える長さは L − 2。葉・風受け・粘土の四角は底で重ならない
-assert any(f.where == "風受け" for f in t.check_physics({**C, "tray_length": 79}))  # 2r + 4ρ = 78 ≦ 79 でも、端の 1mm で葉に重なる
+assert any(f.where == "風受け" for f in t.check_physics({**C, "tray_length": 79}))  # 端の 1mm と外へ折る歯の分で、葉に重なる
 assert any(f.where == "粘土の印" for f in t.check_physics({**P, "tray_length": 60, "tray_width": 60, "leaf_radius": 29}))
 # 指摘 4: 水よけ（テープかろう）は必ず貼るので、面密度 0 は範囲の外
 assert [f.floor for f in t.check_range({**P, "tape_gsm": 0})] == ["F5.range"]
+
+# 三度目の検品の指摘 1: 粘土の四角が重なるか底から出ると、実の面積は 4 × 辺² より狭く、粘土は厚くなる。重なりと収まりを見て、
+# 厚みは実の面積（四角を合わせた面）から出す
+narrow = {**P, "tray_width": 28, "tray_length": 100, "clay_side": 15, "leaf_radius": 12, "ballast_g": 12, "figure_height": 40}
+sq = t.floor_marks(narrow)["ballast"]
+real = sq[0].union(sq[1]).union(sq[2]).union(sq[3]).area
+assert abs(t.clay_thickness(narrow) - narrow["ballast_g"] * 1000 / t.CLAY_DENSITY / real) < 1e-9
+fs = t.check_physics(narrow)
+assert {f.where for f in fs} >= {"粘土の印", "重り"}, fs
+# 指摘 2: 風受けの足の歯は外へ折るので、足跡は半円の外へ歯の長さだけ広がる。広がった足跡で底・葉・粘土を見る
+for c in t.floor_marks(C)["cups"]:
+    assert c.area > math.pi * (t.cup_radius(C) + t.CUP_TAB) ** 2 / 2 * 0.98
+    assert box(0, 0, C["tray_length"], C["tray_width"]).contains(c) and not c.intersects(t.floor_marks(C)["leaf"])
+# 既定の葉では、歯の分の足跡が葉に重なる（半円だけ見ると通っていた）
+assert any(f.where == "風受け" for f in t.check_physics({**C, "leaf_radius": 25}))
+# 指摘 3: 人形の足の糊代（台形）は、葉の上に寝かせて貼るので、角まで葉の内に入る
+assert t.foot_footprint(P).within(Polygon(t._circle(0, 0, P["leaf_radius"])))
+fw = t.foot_width(P)
+r_min = max(fw / 2, math.hypot(fw / 2 - 1.5, t.TAB))  # 台形の角のうち、葉の中心から一番遠い所
+assert any(f.where == "人形" for f in t.check_physics({**P, "leaf_radius": math.floor(r_min * 10) / 10}))
+# 小さな人形では糊代の奥行きが効く。足の幅だけ（幅 ≦ 葉の直径の 9 割）で見ると、この寸法は通っていた
+small = {**P, "figure_height": 30, "leaf_radius": 8, "tray_width": 24, "tray_length": 60, "ballast_g": 0}
+assert t.foot_width(small) <= 2 * 8 * 0.9 and [f.where for f in t.check_physics(small)] == ["人形"]
+# 指摘 4: 水の注意は守れる形で言う（こぼしたら拭く・使った水は捨てる・中の刷った色がにじむ・出したら乾かす）
+st = " ".join(t.steps(P))
+assert all(k in st for k in ("拭く", "水を捨てる", "にじむ", "乾かす")) and "触らない" not in st
 print("ok")
