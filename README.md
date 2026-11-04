@@ -33,7 +33,15 @@ A papercraft template engine: generates printable PDF patterns from dimensions a
 
 Python のパッケージ名は `omochae`（元の repo と同じ名前のまま）。
 
-要る物: [uv](https://docs.astral.sh/uv/)、poppler-utils（`pdftotext`・`pdfimages`・`pdftoppm`）、fontconfig（`fc-match`）、字 Noto Serif CJK JP。
+要る物: Python 3.10 以上、[uv](https://docs.astral.sh/uv/)、poppler-utils（`pdftotext`・`pdfimages`・`pdftoppm`）、fontconfig（`fc-match`・`fc-list`）、字 Noto Serif CJK JP。
+
+Ubuntu 24.04 では、まっさらな環境からこれで揃う（Docker の `ubuntu:24.04` で確かめた）:
+
+```bash
+sudo apt-get install -y python3 python3-pip poppler-utils fontconfig fonts-noto-cjk
+pip install --user uv   # uv の入れ方は https://docs.astral.sh/uv/ の物でもよい
+```
+
 
 ```bash
 ./init.sh     # .venv を作り、依存を入れる。足りない物があれば名指しして exit 4
