@@ -63,6 +63,13 @@ tube = next(q for q in w.parts(T) if q.key == "tube")
 circ = w.wrap_circ(T["tube_d"], T["paper_thickness"])
 xs = sorted({y for x, y in tube.outline if x == T["notch_depth"]})
 assert abs(sum(xs) / 2 - circ / 2) < 1e-9 and abs(xs[1] - xs[0] - T["notch_width"]) < 1e-9
+# 閉管の長さを決める粘土の栓は、詰める深さの印を竹筒に刷り、組み方の文でも言う（印が無いと詰める量で高さがずれる）
+marks = [a for a in tube.art if a.get("stroke") == w.MARK]
+assert [a["pts"][0][0] for a in marks] == [T["tube_length"] - T["plug_depth"]], marks
+assert any("印" in s and f"{T['plug_depth']:g}mm" in s for s in w.steps(T))
+# 舌の根元を挟む長さも、舌に刷った線（窓の端に合わせる）と組み方の文で言う
+assert [a["pts"][0][0] for a in tongue.art if a.get("stroke") == w.MARK] == [w.reed_root(H)]
+assert any("線を窓の端" in s for s in w.steps(H))
 # 面は別の部品
 assert {"tube", "mask", "handle"} == {q.key for q in w.parts(T)}
 

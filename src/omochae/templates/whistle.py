@@ -83,6 +83,8 @@ JOINT_W, JOINT_TAIL = 8, 12  # 継ぎの帯の幅と、竹筒 B に貼る尾の�
 
 IVORY, INK, BAMBOO, BAMBOO_DARK, HORN, HORN_RIM, MASK, TEETH, FEATHER, BELL, CORD = (
     "#e8dcb8", "#2f2d29", "#d8c48e", "#8f7440", "#dcc387", "#a88a4f", "#34312c", "#e6dcc0", "#6d675c", "#c4a96a", "#5b4a33")
+# 床の式が頼る位置（粘土を詰める深さ・舌の根元を挟む境）の印の色。節の筋と見分けられるよう、絵の色に無い赤茶にする。
+MARK = "#9b3b2a"
 
 
 def title(p):
@@ -251,7 +253,7 @@ def _horn(p):
     return _norm(part)
 
 
-def _wrap(number, key, name, length, circ, p, label, rings=(), notch=None, fill=BAMBOO):
+def _wrap(number, key, name, length, circ, p, label, rings=(), notch=None, fill=BAMBOO, mark=None):
     """芯に巻いて筒にする帯。横が筒の長さ、縦が周。下の端に継ぎ目の糊代。notch は (幅, 深さ) で、左の端（口）の真ん中に切り欠く。
     切り欠きを継ぎ目の反対（周の半分）に置くのは、糊代の重なりで縁が厚くならない所に歌口を作るため。"""
     g = p["glue"]
@@ -268,6 +270,9 @@ def _wrap(number, key, name, length, circ, p, label, rings=(), notch=None, fill=
     # 竹の節の筋（コマ 9・27 の柄と竹筒の端の輪）。
     for x in rings:
         part.art.append({"kind": "line", "pts": [(x, 0.6), (x, circ - 0.6)], "stroke": BAMBOO_DARK, "sw": 0.5})
+    # mark は床の式が頼る位置の印（閉管の粘土の栓の深さ）。印が無いと詰める量で管の長さ、つまり鳴る高さが式とずれる。
+    if mark is not None:
+        part.art.append({"kind": "line", "pts": [(mark, 0.6), (mark, circ - 0.6)], "stroke": MARK, "sw": 0.6})
     return part
 
 
@@ -304,7 +309,8 @@ def _tongue(p):
     part = Part(4, "tongue", "舌", [(0, 0), (L, 0), (L, w), (0, w)], label_xy=(0.4, 0.3), label="4")
     # 根元と自由長の境の印（窓の端に合わせる）。折り線ではないので絵の線で描く。
     x = reed_root(p)
-    part.art = [{"kind": "line", "pts": [(x, 0.3), (x, w - 0.3)], "stroke": INK, "sw": 0.2}]
+    # 印の線を窓の端に合わせると、根元を挟む長さが式（reed_root）どおりになり、自由長が reed_length になる。
+    part.art = [{"kind": "line", "pts": [(x, 0.3), (x, w - 0.3)], "stroke": MARK, "sw": 0.3}]
     return part
 
 
@@ -385,7 +391,7 @@ def parts(p):
                 _reed_frame(p), _tongue(p), _disc(5, "lip", "口当て", p["lip_d"] / 2, "5", hole=p["pipe_d"] / 2 + t + 0.1), _collar(p)]
     if k == "tube":
         L = p["tube_length"]
-        return [_wrap(1, "tube", "竹筒", L, wrap_circ(p["tube_d"], t), p, "1 竹筒", rings=(L * 0.45, L * 0.8), notch=(p["notch_width"], p["notch_depth"])),
+        return [_wrap(1, "tube", "竹筒", L, wrap_circ(p["tube_d"], t), p, "1 竹筒", rings=(L * 0.45, L * 0.8), notch=(p["notch_width"], p["notch_depth"]), mark=L - p["plug_depth"]),
                 _mask(p), _strip(3, "handle", "曲がった柄", p["handle_length"], HANDLE_W, HANDLE_GLUE, "3", BAMBOO)]
     a, b = p["bone_a"], p["bone_b"]
     circ = wrap_circ(p["bone_d"], t)
@@ -459,7 +465,7 @@ def steps(p):
     if k == "horn":
         out += [f"2 息の管を径 {p['pipe_d']:g}mm の芯に巻き、糊代で貼って芯を抜く",
                 f"4 舌を薄い紙に写して切る（長さ {reed_root(p) + p['reed_length']:.1f}mm・幅 {p['reed_width']:g}mm）",
-                "3 舌の枠の片方の円盤に、4 舌の根元（線の外）を貼る。舌の先は窓の中で浮かせ、まわりに隙間を残す",
+                f"3 舌の枠の片方の円盤に、4 舌の根元を貼る。舌の赤茶の線を窓の端に合わせ（根元 {reed_root(p):.1f}mm を挟む）、舌の先は窓の中で浮かせ、まわりに隙間を残す",
                 "3 舌の枠を橋で谷折りして重ね、根元を挟んで貼る（窓どうしを重ねる）",
                 "2 息の管の端を 3 枠に貼る。1 ラッパを丸めて糊代で貼り、小さい口を枠の反対の面に当てる",
                 "6 継ぎの巻きで、管の端・枠・ラッパの口をまとめて巻いて貼る（息が漏れないように）",
@@ -467,7 +473,7 @@ def steps(p):
                 f"口当てから強めに吹く。舌の見込みの高さは {reed_hz(p):.0f}Hz（実物で未確認）。鳴らなければ舌の先の隙間を指で整える"]
     elif k == "tube":
         out += [f"1 竹筒を径 {p['tube_d']:g}mm の芯に巻き、糊代で貼って芯を抜く（切り欠きが口の縁に来る）",
-                f"筒の切り欠きの無い端に粘土を {p['plug_depth']:g}mm 詰めて塞ぐ",
+                f"筒の切り欠きの無い端から粘土を {p['plug_depth']:g}mm 詰めて塞ぐ（竹筒の赤茶の印まで。詰めすぎると高く、足りないと低くなる）",
                 "2 鬼の面を筒の中ほどに貼る（切り欠きを塞がない）", "3 曲がった柄を弧に曲げ、両端の糊代を筒に貼る",
                 f"切り欠きの縁に息を細く当てて吹く（瓶の口を吹くように）。見込みの高さは {tube_hz(p):.0f}Hz（実物で未確認）"]
     else:
