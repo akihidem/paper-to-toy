@@ -16,7 +16,7 @@ NOT_YET = []
 
 
 def main():
-    for tool in ("pdftotext", "pdftoppm", "fc-match"):
+    for tool in ("pdftotext", "pdftoppm", "pdfimages", "fc-match"):
         if not shutil.which(tool):
             print(f"検査できない: {tool} が無い", file=sys.stderr)
             return 4
