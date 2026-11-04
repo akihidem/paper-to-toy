@@ -122,6 +122,8 @@ th, tp = 2 * B["paper_thickness"], B["paper_thickness"]
 # 差せるかは狭く切れた側で見る: 隙間が MIN_CLEAR（毛羽 0.1mm ＋ 狭い側のずれ 2·CUT_TOL）に足りないと差せない
 assert abs(t.MIN_CLEAR - (0.1 + 2 * t.CUT_TOL)) < 1e-9
 assert t.wobble_deg({**B, "slot_width": th + t.MIN_CLEAR - 0.01}) is None
+# 溝は手で帯を切り取れる幅（1mm 以上）で、隙間の下限は切るずれを含む。組み方は「帯を切り取る」と言う
+assert t.RANGES["slot_width"][0] >= 1.0 and t.MIN_CLEAR >= 0.4
 assert any("帯" in s and "切り取る" in s and "1 本の切れ目にしない" in s for s in t.steps(B))
 # 表だけ（back 0）なら紙 1 枚なので、2 枚では差せない溝にも入る
 narrow = th + t.MIN_CLEAR - 0.1
@@ -138,24 +140,42 @@ Y2, Y3 = g0 + D, g0 + D + Hb
 # 閉じると、上の面（後ろの壁の上の縁 Y2 で倒す）の奥行きは Y2 − y、底の面（後ろの壁の下の縁 Y3 から）の奥行きは y − Y3。上下の溝がそろう
 assert abs((Y2 - (ty + th_ / 2)) - ((by + bh_ / 2) - Y3)) < 1e-9 and abs(tx - bx) < 1e-9 and (tw_, th_) == (bw, bh_)
 
-# 舌の先が底の溝を抜けて机に届く条件を、刷る外形から見る: 箱が BOX_TOL 高くも低くも折れて、
-# 舌の先は机に着き（姿の下の縁から舌の先まで ＞ 箱の高さ）、姿の下の縁は上の面より上にあり、舌は上下 2 つの溝の紙を両方通る
+# 舌の先が底の溝を抜けて机に届く事を、刷る外形から見る: 刷った舌は 箱の高さ + TONGUE_EXTRA で tongue() と同じ長さ。
+# TONGUE_EXTRA > BOX_TOL なので、箱が BOX_TOL 高く折れても先が机に着き、姿の下の縁は上の面から浮く（縁が面に乗ると先が浮いて、上の溝 1 つの形になる）。
+# この関係は寸法に依らないので check_physics には無く、ここで定数として見る
 front = next(q for q in t.parts(B) if q.key == "front")
 H = t.geometry(B)["H"]
 reach = max(y for _, y in front.outline) - H  # 刷った舌の、姿の下の縁から下の長さ
-for hb in (Hb - t.BOX_TOL, Hb, Hb + t.BOX_TOL):
-    float_up = reach - hb  # 舌の先が机に着いた時、姿の下の縁が上の面から浮く高さ
-    assert float_up > 0, hb  # 先は机に着き、縁は上の面に乗らない（乗ると先が浮いて、上の溝 1 つの形になる）
-    assert reach > hb - tp / 2 and reach - float_up <= tp / 2 + hb  # 舌は底の紙の真ん中（tp/2）と上の紙の真ん中（hb − tp/2）を両方通る
-    assert abs(t.tip_clear(B, hb) - float_up) < 1e-9
-# 傾きは広く切れた側（溝 + 2·CUT_TOL）と低く折れた箱で見るので、狭い側でだけ見ると通る溝でも落ちる
-gap_ok = (Hb - tp) * math.tan(math.radians(t.MAX_WOBBLE)) - 0.05  # 切るずれ・折るずれを見ない時の上限の少し内
+assert abs(reach - (Hb + t.TONGUE_EXTRA)) < 1e-9 and abs(t.tongue(B)[2] - reach) < 1e-9, reach
+assert t.TONGUE_EXTRA > t.BOX_TOL and reach > Hb + t.BOX_TOL
+# 傾きの上限を、紙の厚み th の板が 2 枚の紙の溝（広く切れた幅 sw + 2·CUT_TOL。真ん中の高さ tp/2 と Hb − BOX_TOL − tp/2）を通る形から
+# 数で解き、式（wobble_deg）と比べる。式を式で確かめないため
+def max_tilt(z1, z2, sw, thick):
+    lo, hi = 0.0, math.pi / 2 - 1e-6
+    for _ in range(60):  # 板の両の面が、2 つの溝の縁の内に収まる一番大きい傾き
+        a = (lo + hi) / 2
+        span = thick / math.cos(a) + (z2 - z1) * math.tan(a)
+        lo, hi = (a, hi) if span <= sw else (lo, a)
+    return math.degrees(lo)
+sw = B["slot_width"]
+assert abs(max_tilt(tp / 2, Hb - t.BOX_TOL - tp / 2, sw + 2 * t.CUT_TOL, th) - t.wobble_deg(B)) < 0.1, (max_tilt(tp / 2, Hb - t.BOX_TOL - tp / 2, sw + 2 * t.CUT_TOL, th), t.wobble_deg(B))
+# 上の溝 1 つだけ（紙 1 枚の厚みの間で挟む）では、ほぼ倒れる。底の溝が要る理由
+assert max_tilt(0, tp, sw, th) > 45
+# 緩い溝の境: 広く切れた側と低く折れた箱で MAX_WOBBLE を越える幅で落ち、少し狭い幅で通る
+loose = th + (Hb - t.BOX_TOL - tp) * math.tan(math.radians(t.MAX_WOBBLE)) - 2 * t.CUT_TOL + 0.05
+assert any("ぐらつく" in f.message for f in t.check_physics({**B, "slot_width": loose}))
+assert t.check_physics({**B, "slot_width": loose - 0.1}) == []
+# 切るずれ・折るずれを見ない時の上限の少し内（前の式なら通る幅）でも、今の式では落ちる
+gap_ok = (Hb - tp) * math.tan(math.radians(t.MAX_WOBBLE)) - 0.05
 assert any("ぐらつく" in f.message for f in t.check_physics({**B, "slot_width": th + gap_ok}))
 # 姿だけを変えた既定（勧めの値）は、どの台の姿も、溝が広く切れて箱が低く折れた側で通る（compose の試験で 35 とも通る）
 for fig, f in t.FIGURES.items():
     if f["stand"] == "base":
-        q = t.filled({**t.DEFAULTS, "figure": fig})
-        assert t.wobble_deg(q) <= t.MAX_WOBBLE and t.tip_clear(q, q["base_height"] + t.BOX_TOL) > 0, fig
+        assert t.wobble_deg(t.filled({**t.DEFAULTS, "figure": fig})) <= t.MAX_WOBBLE, fig
+# 溝の長さの下限（RANGES）は、舌の幅（溝 − 2·SLOT_END）から両側の余白 MIN_MARGIN を引いても窓が残る長さ。
+# 短いと、重心が舌の真ん中にぴたり来る姿しか横の検査を通らない。下限の溝でも、重心が真ん中に来る姿（覆面の人形）は通る
+assert t.RANGES["slot_length"][0] - 2 * t.SLOT_END - 2 * t.MIN_MARGIN > 0
+assert t.check_physics({**B, "slot_length": t.RANGES["slot_length"][0]}) == [], t.check_physics({**B, "slot_length": t.RANGES["slot_length"][0]})
 # 倒れるかは、軸（舌の先・机の上）から測る。低い亀でも、高い箱で奥行きが浅いと落ちる（姿の下の縁から測ると通っていた）
 K = t.filled({**P, "figure": "tsuchi_kame", "stand": "base", "base_depth": 15, "base_height": 30, "slot_width": 2.9})
 assert any(f.where == "台" for f in t.check_physics(K)), t.check_physics(K)
