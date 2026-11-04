@@ -96,7 +96,10 @@ out_mm = [float(m) for s in t.steps(tori) for m in re.findall(r"上へ (\d+(?:\.
 assert out_mm and out_mm[0] >= t.STREAMER_TOP, (out_mm, t.STREAMER_TOP)
 #    串を長く出す分も、竹串の長さの床で数える
 need = P["handle_length"] + 2 * P["radius"] + out_mm[0]
-assert any(f.where == "柄" for f in t.check_physics({**tori, "handle_length": math.floor(t.SKEWER_LEN - 2 * P["radius"] - out_mm[0]) + 1}))
+#    境は先を落とした竹串（SKEWER_USABLE）で見る。SKEWER_LEN で見ると 119mm を 102mm の限りと比べる事になり、境を押さえない
+fit = math.floor(t.SKEWER_USABLE - 2 * P["radius"] - out_mm[0])
+assert any(f.where == "柄" for f in t.check_physics({**tori, "handle_length": fit + 1}))
+assert not any(f.where == "柄" for f in t.check_physics({**tori, "handle_length": fit}))
 # 3. 柄に絡まない条件は厳密に L + 玉の半径 < √2·R。等しい糸（柄にちょうど届く）は落とす
 edge = math.sqrt(2) * P["radius"] - P["stick_d"] / 2 - P["bead_d"] / 2
 assert any(f.where == "糸" for f in t.check_physics({**P, "cord_length": edge})), "柄にちょうど届く糸を通した"
@@ -166,10 +169,13 @@ north = nums(st, r"北の壁から (\d+(?:\.\d+)?)mm 出す")[0]
 assert abs(t.pull_travel(K) - (K["base_length"] - (x - north + t.TAB_W))) < 1e-9
 assert north - t.pull_travel(K) >= t.HOLE_MARGIN
 assert abs((x - north + t.TAB_W / 2) - t.peg_pos(K)) < 1e-9, "旗の穴（留め具の真ん中）が軸の真横に来ない"
-# 16. 旗は棒の上に立ち、台の天井の下に収まる。巻いた留め具は横の軸から 1mm 以上離れる
-H, d = K["base_height"], K["stick_d"]
-assert H / 2 + d + t.TAB_FLAG <= H - 0.5 and t.rod_off(K) - d - 2 * K["paper_thickness"] >= 1
-assert [f.where for f in t.check_physics({**K, "base_height": 13})] == ["留め具"]
+# 16. 旗は棒の上に立ち、巻いた帯の厚みも入れて台の天井の下に収まる。壁 14mm は厚みの分（0.15mm）で落ちる（厚みを入れないと通る）
+H, d, tp = K["base_height"], K["stick_d"], K["paper_thickness"]
+assert H / 2 + d + tp + t.TAB_FLAG <= H - 0.5
+for bh in (13, 14):
+    assert [f.where for f in t.check_physics({**K, "base_height": bh})] == ["留め具"], bh
+#     巻いた留め具と軸の間は検査しない。寸法の範囲のどの端でも、帯 1 枚を引いて 1.5mm 以上空く（検査を置いても落ちる道が無い）
+assert min(t.rod_off({**K, "stick_d": sd}) - sd - pt for sd in t.RANGES["stick_d"] for pt in t.RANGES["paper_thickness"]) >= 1.5
 # 17. 竹串のとがった先を切り落とす手順（道具・大人がする）が、どの形にもある。切り落とした分、使える長さは短い
 for p in (P, {**P, "face": "tori"}, K):
     st = " ".join(t.steps(p))
@@ -184,3 +190,18 @@ m = " ".join(t.materials(K))
 assert "カッター" in m and "テープ" in m
 assert nums(" ".join(t.steps(K)), r"竹串 2 本を (\d+(?:\.\d+)?)mm に切り") == [t.rod_length(K)]
 print("ok")
+# ---- 最終差分の独立レビュー（2026-11-05・/code-review）の指摘を押さえる行 ----
+# 20. 留め具は刷った面を外にして巻く（谷折りで立てた 2 枚の刷った面が向き合い、糊の印が相手に当たる）。
+#     旗の穴は糊の印の中にあるので、巻く糸を 2 枚の穴に通して結んでから貼り合わせる（貼ってからでは穴が糊でふさがる）
+sk = t.steps(K)
+wrap = next(i for i, s in enumerate(sk) if "16 棒の留め具の北の縁" in s)
+tie = next(i for i, s in enumerate(sk) if "穴に通して結ぶ" in s)
+assert "刷った面を外にして" in sk[wrap] and wrap < tie and "結んでから" in sk[tie] and "貼り合わせて旗" in sk[tie]
+assert not any("貼り合わせて旗" in s for s in sk[:tie])
+# 21. 先を落とす手順は、諫鼓では 3 本まとめて 1 回（同じ文を 2 度刷らない）。でんでん太鼓では、帯の穴を先であけてから落とす
+assert sum("とがった先" in s for s in sk) == 1 and "3 本" in next(s for s in sk if "とがった先" in s)
+for p in (P, {**P, "face": "tori"}):
+    sp = t.steps(p)
+    assert next(i for i, s in enumerate(sp) if "竹串の先であける" in s) < next(i for i, s in enumerate(sp) if "とがった先" in s)
+# 22. 諫鼓の用意する物で、カッターの行は 1 つ（穴と竹串の両方に使う）
+assert sum("カッター" in m for m in t.materials(K)) == 1
