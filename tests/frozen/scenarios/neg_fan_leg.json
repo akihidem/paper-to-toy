@@ -11,7 +11,8 @@
   "expect": {
     "rc": 3,
     "floors": [
-      "F5.fan_leg"
+      "F5.fan_leg",
+      "F5.image_box"
     ]
   }
 }

@@ -57,6 +57,8 @@ def to_svg(layout):
         pts = [v for x, y in q.outline for v in (q.x + x, q.y + y)]
         d.append(dw.Lines(*pts, close=True, stroke_width=0.25, **STROKE))
         for lines, dash in ((q.valley, VALLEY), (q.mountain, MOUNTAIN)):
+            if q.hide_folds:
+                break  # 色の境で折る部品は、折り線を刷らない（v9）。
             for (x1, y1), (x2, y2) in lines:
                 d.append(dw.Line(q.x + x1, q.y + y1, q.x + x2, q.y + y2, stroke="black", stroke_width=0.18, stroke_dasharray=dash))
         for x, y, w, h in q.cuts:
@@ -67,6 +69,10 @@ def to_svg(layout):
         dash = {"stroke_dasharray": s["dash"]} if s.get("dash") else {}
         if s["kind"] == "rect":
             d.append(dw.Rectangle(s["x"], s["y"], s["w"], s["h"], stroke_width=0.25, **STROKE, **dash))
+        elif s["kind"] == "poly":
+            # 塗りの図形（元の repo では手順の紙の絵の塗り）。線の太さは絵ごとに渡し、無ければ縁を引かない。
+            kw = {"stroke": s.get("stroke", "black"), "stroke_width": s["sw"]} if s.get("sw") else {}
+            d.append(dw.Lines(*[v for pt in s["pts"] for v in pt], close=True, fill=s["fill"], **kw))
         else:
             d.append(dw.Line(s["x1"], s["y1"], s["x2"], s["y2"], stroke="black", stroke_width=0.25, **dash))
     for t in layout["texts"]:
@@ -79,10 +85,12 @@ def to_svg(layout):
         else:
             kw = {"stroke_dasharray": dash} if dash else {}
             d.append(dw.Line(x, y, x + 7, y, stroke="black", stroke_width=0.25, **kw))
-    rx, ry = layout["ruler"]
-    d.append(dw.Line(rx, ry + 3, rx + 100, ry + 3, stroke="black", stroke_width=0.25))
-    for i in range(11):
-        d.append(dw.Line(rx + i * 10, ry + 3, rx + i * 10, ry + (0.5 if i % 5 == 0 else 1.5), stroke="black", stroke_width=0.2))
+    # 測らない紙（元の repo の手順の紙など）は物差しを持たない。型紙は今までどおり必ず持つ（compose が必ず ruler を渡す）。
+    if layout.get("ruler"):
+        rx, ry = layout["ruler"]
+        d.append(dw.Line(rx, ry + 3, rx + 100, ry + 3, stroke="black", stroke_width=0.25))
+        for i in range(11):
+            d.append(dw.Line(rx + i * 10, ry + 3, rx + i * 10, ry + (0.5 if i % 5 == 0 else 1.5), stroke="black", stroke_width=0.2))
     return d.as_svg()
 
 

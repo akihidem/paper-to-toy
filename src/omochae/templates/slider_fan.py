@@ -103,7 +103,7 @@ def check_physics(p):
             out.append(Failure("F5.fan_leg", "蛇腹の扇", f"足の長さ {leg_length(p)} が糊代 {LEG_GLUE} に足りず、糊代が扇に食い込む（中心の高さ {d} が 2 未満）"))
     elif h > s:
         # 口の台の形も、静かな時の台から口までは押し上げる量 s（軸の形と同じ見方）。H − s は台の下の空きで、
-        # これと比べていたので、扇が口から出る寸法が通っていた（見直しの指摘・本人の決定 2026-11-04）。
+        # これと比べていたので、扇が口から出る寸法が通っていた（見直しの指摘で直した）。
         out.append(Failure("F5.fan_height", "蛇腹の扇", f"畳んだ高さ {h} が押し上げる量 {s} を超え、静かな時に扇が口から出る"))
     bound, limit = opening_bound_deg(p["fold_count"], p["fold_width"], h), clearance_limit_deg(A, d)
     if bound > limit:
@@ -152,6 +152,11 @@ def _tube(number, key, name, side, height, glue, label, notch=None):
 
 # 色は NDL の図から測った値。図を貼らず、色と線を描き直す（拡大した図の粗さを避け、作る線を読みやすくするため）。
 PAPER, ORANGE, BROWN, LINE, FACE = "#a89365", "#a5632c", "#7a5e3b", "#55492c", "#b9a677"
+# 色の境で折る（v9）。見える面に谷折り・山折りの線があると見た目が安っぽく見えるので、絵の色の境で折り、線を引かない
+# （作り手の判断）。隣り合う面と板の色を変え、その境を折り目にする。
+# 筒は 1 面おきに少し明るい地、扇は 2 色の板を交互にする。色は原図の地の色の近くから選んだ（作る側の選び）。
+PAPER_ALT = "#bba982"
+FAN_A, FAN_B = "#f1e9d6", "#d9caa6"
 
 
 def _tube_art(A, H, notch=None):
@@ -166,12 +171,13 @@ def _tube_art(A, H, notch=None):
         if notch and x0 < notch[0] and notch[1] < x1:
             cols = [(x0, notch[0]), (notch[1], x1)]
         art.append({"kind": "poly", "pts": [(x0, 0), (x1, 0), (x1, 4.5), (x0, 4.5)], "fill": ORANGE})
+        ground = PAPER if i % 2 == 0 else PAPER_ALT
         for c0, c1 in cols:
-            art.append({"kind": "poly", "pts": [(c0, 4.5), (c1, 4.5), (c1, H - 5), (c0, H - 5)], "fill": PAPER})
+            art.append({"kind": "poly", "pts": [(c0, 4.5), (c1, 4.5), (c1, H - 5), (c0, H - 5)], "fill": ground})
             art.append({"kind": "poly", "pts": [(c0, H - 5), (c1, H - 5), (c1, H), (c0, H)], "fill": BROWN})
         if len(cols) == 2:
             # 溝の上の端より上は 1 枚の面のまま塗る。
-            art.append({"kind": "poly", "pts": [(notch[0], 4.5), (notch[1], 4.5), (notch[1], notch[2]), (notch[0], notch[2])], "fill": PAPER})
+            art.append({"kind": "poly", "pts": [(notch[0], 4.5), (notch[1], 4.5), (notch[1], notch[2]), (notch[0], notch[2])], "fill": ground})
     art.append({"kind": "line", "pts": [(A - 1.2, 0), (A - 1.2, H)], "stroke": LINE, "sw": 0.5})
     art.append({"kind": "line", "pts": [(A + 1.2, 0), (A + 1.2, H)], "stroke": LINE, "sw": 0.5})
     return art
@@ -225,6 +231,7 @@ def parts(p):
         notch = (A * 1.5 - (p["knob_width"] + 1) / 2, A * 1.5 + (p["knob_width"] + 1) / 2, H - high)
     tube = _tube(1, "tube", "外筒", A, H, p["tube_glue"], "1 外筒", notch)
     tube.art = _tube_art(A, H, notch)
+    tube.hide_folds = True
     if p["hub"] == "axle":
         # 開く糸を試す穴。扇は 1 面目に平行に開くので、その両脇の面につなぐ。
         tube.holes += [(A * 1.5, THREAD_DEPTH, 0.6), (A * 3.5, THREAD_DEPTH, 0.6)]
@@ -263,6 +270,13 @@ def parts(p):
         line = ((0, i * w), (h, i * w))
         # 山と谷を交互にするのが蛇腹の形そのもの。
         (fan.valley if i % 2 else fan.mountain).append(line)
+    # 板ごとに 2 色を交互に塗り、色の境で折る（v9）。足は真ん中の板と同じ色にし、糊代は塗らない。
+    fan.art = [{"kind": "poly", "pts": [(0, i * w), (h, i * w), (h, (i + 1) * w), (0, (i + 1) * w)], "fill": FAN_A if i % 2 == 0 else FAN_B} for i in range(n)]
+    if p["hub"] == "axle" and leg_length(p) > LEG_GLUE:
+        # 足が糊代より短い寸法は F5.fan_leg で落とす。その時に足の絵を描くと形が裏返り、別の検査（F5.image_box）まで落ちて狙いが読めない。
+        m, leg = n // 2, leg_length(p)
+        fan.art.append({"kind": "poly", "pts": [(-leg + LEG_GLUE, m * w), (0, m * w), (0, (m + 1) * w), (-leg + LEG_GLUE, (m + 1) * w)], "fill": FAN_A if m % 2 == 0 else FAN_B})
+    fan.hide_folds = True
     if p["hub"] == "axle":
         # 中心の穴に糸を通して束ねる。扇の要と同じ形。端の 2 枚の穴は開く糸を試すため。
         r_hole = 2
@@ -380,7 +394,7 @@ def steps(p):
         out.append("まず 1 外筒だけを実線で切る。溝は下の端からはさみで切り込む（くり抜かない）")
     else:
         out.append("まず 1 外筒だけを実線で切る")
-    out.append("1 外筒を破線で谷折りし、糊代で貼って角筒にする")
+    out.append("1 外筒を色の境で谷折りし、糊代で貼って角筒にする")
     out.append("残りの部品を実線で切る。穴は竹串の先であける")
     if p["push_part"] in ("tab", "tube"):
         out.append("2 内筒も同じように角筒にする")
@@ -389,10 +403,10 @@ def steps(p):
     if p["push_part"] == "stick":
         out.append("2 土台も同じように角筒にし、割り箸の先を下から差し込んで貼る")
     out.append("3 台で 2 の上に蓋をする")
-    out.append("4 扇を破線で谷折り、一点鎖線で山折りにして、端から順に蛇腹に畳む")
+    out.append("4 扇を色の境で、端から谷折り・山折りを交互にして蛇腹に畳む")
     if p["hub"] == "axle":
         out.append("糸を 5 像の穴と 4 扇の中心側の穴の列に通し、ゆるく結ぶ")
-        out.append("4 扇の真ん中の足を破線で折り、足の糊代を 3 台の印に貼る")
+        out.append("4 扇の真ん中の足を、糊代の境の破線で折り、足の糊代を 3 台の印に貼る")
         out.append("5 像の足を 3 台に貼る")
     else:
         out.append("4 扇の端を 3 台に貼り、5 像の足も台に貼る")
@@ -404,10 +418,11 @@ def steps(p):
 
 
 def measures(p):
-    first = [("開いた角度（度）紙の力だけ", 20)]
-    if p["hub"] == "axle":
-        first.append(("糸あり", 20))
-    return {"predict": "どこまで開くと思いますか（度）", "rows": [first, [("試した回数", 15), ("開いた回数", 15)]]}
+    """手順の紙の「作る前に」の問いと、試した事の欄（元の repo の手順の紙が使う。この repo に手順の紙は無い）。
+
+    開き具合の角度と回数は欄を置かない。予想は数でなく、動き方を言葉か絵で書く（元の repo に合わせた）。
+    """
+    return {"predict": "押すと、どこがどう動くと思いますか（言葉か絵で）", "rows": []}
 
 
 def diagram(x, y, w, h, p):
@@ -422,7 +437,8 @@ def diagram(x, y, w, h, p):
     if p["push_part"] == "stick":
         stage = p["stage_height"] * s
         shapes.append({"kind": "rect", "x": cx - inner / 2, "y": rest_top, "w": inner, "h": stage, "dash": "1,0.6"})
-        shapes.append({"kind": "rect", "x": cx - 0.6, "y": rest_top + stage, "w": 1.2, "h": length - stage, "dash": "1,0.6"})
+        # 割り箸は筒の下へ出るが、絵の枠（y+h）の中で止める。枠の外へ出ると下の説明と重なる。
+        shapes.append({"kind": "rect", "x": cx - 0.6, "y": rest_top + stage, "w": 1.2, "h": max(0.0, min(length - stage, y + h - rest_top - stage)), "dash": "1,0.6"})
     else:
         shapes.append({"kind": "rect", "x": cx - inner / 2, "y": rest_top, "w": inner, "h": length, "dash": "1,0.6"})
     if p["push_part"] == "tab":
