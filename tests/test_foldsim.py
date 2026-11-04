@@ -83,6 +83,15 @@ try:
     raise AssertionError("知らない部品を通した")
 except ValueError:
     assert len(list(pathlib.Path(d).iterdir())) == 8
+# 雛形の部品でも今の形に無い物（吊る形の drop）は落とし、前の SVG を消さない
+dh = tempfile.mkdtemp()
+tsrc = load_source(pivot_counterweight.SOURCE)
+export("pivot_counterweight", {"mount": "hang"}, tsrc, dh)
+try:
+    export("pivot_counterweight", {"mount": "hang"}, tsrc, dh, parts={"drop"})
+    raise AssertionError("今の形に無い部品を通した")
+except ValueError as e:
+    assert "この形に無い部品: drop" in str(e) and len(list(pathlib.Path(dh).iterdir())) == 2
 # 知らない部品の key は落とす
 try:
     export("slider_fan", tab, src, tempfile.mkdtemp(), parts={"fan", "fna"})

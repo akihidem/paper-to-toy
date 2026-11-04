@@ -73,13 +73,18 @@ def export(template_id, params, source, out_dir, name=None, parts=None, title=No
     書き出しは仮の置き場で作り、全部書けてから、新しい物を先に正しい名前へ移し、その後で今回に無い前の物を消す
     （前の物を先に消すと、移す途中で止まった時に前の物を失った）。限り: 移すのは 1 つずつなので、途中で止まると新旧が混ざりうる。
     """
-    _, layout, failures = compose(template_id, params, source, title=title, inject=inject or {})
     if parts is not None:
-        # 雛形の部品の key は、今の寸法でなく雛形の既定の寸法と刷る形ごとに数える。今の寸法で部品を作ると、範囲の外や型の違う寸法で
-        # 作れず key を確かめられないまま先へ進み、前の SVG を消した（レビューの指摘）。
+        # 知らない key は、検査（compose）より先に落とす。雛形の部品の key は、今の寸法でなく雛形の既定の寸法と刷る形ごとに数える
+        # （今の寸法で部品を作ると、範囲の外や型の違う寸法で作れず key を確かめられないまま先へ進み、前の SVG を消した）。
         keys = known_parts(template_id)
         if not set(parts) <= keys:
             raise ValueError(f"知らない部品: {'・'.join(sorted(set(parts) - keys))}（この雛形の部品は {'・'.join(sorted(keys))}）")
+    _, layout, failures = compose(template_id, params, source, title=title, inject=inject or {})
+    if parts is not None and layout:
+        # 雛形の部品でも、今の形に無い部品（吊る形の drop など）は書けない。何も書かずに前の SVG を消さないよう、ここで落とす。
+        here = {q.key for q in layout["parts"]}
+        if not set(parts) <= here:
+            raise ValueError(f"この形に無い部品: {'・'.join(sorted(set(parts) - here))}（この形の部品は {'・'.join(sorted(here))}）")
     out = pathlib.Path(out_dir)
     head = name or template_id
     if failures:
