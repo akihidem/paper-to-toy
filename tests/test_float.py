@@ -195,11 +195,13 @@ assert "矢印" in st and "刻み" in st and "2 の数字の側" not in st
 assert t.figure_half_width(P, 1) < t.figure_half_width(P, P["wall_height"]) <= t.figure_half_width(P, P["figure_height"])  # 一番広いのは低い所の刃
 # 人形は葉の真ん中に、矢印と直角（y）に立ち、糊代は葉の上にある。風受けは葉に重ならない所に置くので、人形の紙の面（x ＝ 底の真ん中）
 # には届かない。それで人形と風受けの当たりは床にせず、その前提（風受けの足跡の x が葉の手前で終わる）をここで見る（六度目の検品の指摘）
-for q in ({**C}, {**C, "tray_length": 110, "leaf_radius": 30}, {**C, "cup_width": 12}):
-    if not t.check_physics(q):
-        fm = t.floor_marks(q)
-        cxq, rq = q["tray_length"] / 2, q["leaf_radius"]
-        assert all(c.bounds[2] < cxq - rq or c.bounds[0] > cxq + rq for c in fm["cups"]), q
+# 4 つとも通る寸法にする（七度目の検品: 前は 1 つが物理で落ちて飛ばされていた）。広い舟の端・狭い隙間の端を入れる
+edges = ({**C}, {**C, "tray_length": 110, "leaf_radius": 25}, {**C, "cup_width": 12}, {**C, "tray_length": 78, "leaf_radius": 14.5})
+for q in edges:
+    assert not t.check_physics(q), (q, t.check_physics(q))
+    fm = t.floor_marks(q)
+    cxq, rq = q["tray_length"] / 2, q["leaf_radius"]
+    assert all(c.bounds[2] < cxq - rq or c.bounds[0] > cxq + rq for c in fm["cups"]), q
 assert not hasattr(t, "figure_plan")
 # 六度目の検品の指摘 2: 組み方の文は刷った矢印と刻みで言う（幅が長さより長い舟では「長い向き」が刷った矢印と食い違った）
 assert all("長い向き" not in s for s in t.steps(C)) and all("長い向き" not in s for s in t.steps({**P, "tray_width": 80, "tray_length": 70}))
@@ -214,4 +216,17 @@ assert [f.where for f in t.check_physics(narrowfig)] == ["人形"], t.check_phys
 # 検品が挙げた、どの向きでも壁に当たるのに通っていた寸法（負の場面 float_neg_figure と同じ）
 wallhit = {**P, "tray_length": 71, "tray_width": 68, "wall_height": 23, "figure_height": 81, "leaf_radius": 22, "ballast_g": 4}
 assert [f.where for f in t.check_physics(wallhit)] == ["人形"]
+# 七度目の検品の指摘: 葉の向きの刻みが短すぎて刷られないのに通り、組み方の文は刻みを言っていた（風受けつき・長さ 76・葉 14.5）。
+# 葉を 90° 回して貼ると、人形が風受けに 12mm ほど入る。通る寸法では必ず刻みを刷り、刷れない寸法は落とす
+for L_ in (70, 74, 76, 78, 90):
+    for r_ in (12, 13, 14, 14.5, 15, 16, 20):
+        for v in t.VANES:
+            q = {**P, "vane": v, "tray_length": L_, "leaf_radius": r_, "figure_height": 40}
+            ticks = marks(t.parts(q)[0], "leafdir")
+            if not t.check_physics(q):
+                assert ticks and math.dist(*ticks[0]["pts"][:2]) >= t.NOTCH_MIN, q
+            elif not ticks:
+                assert "刻み" in " ".join(f.message for f in t.check_physics(q)), q
+fs = t.check_physics({**C, "tray_length": 76, "leaf_radius": 14.5})
+assert [f.where for f in fs] == ["葉の向きの刻み"], fs
 print("ok")

@@ -29,7 +29,9 @@
   組み方の文は「長い向き」と言わず、刷った矢印と刻みで言う（幅が長さより長い舟でも食い違わない）。
   長さの向きに立てると、槍の下の刃が端の風受けに当たる（既定の寸法で 1.4mm）。幅の向きでは、壁の上端より下の人形の外形の
   半幅が、底の半幅（壁の紙の分 WALL_GAP を引く）に入るかを見る。紙を裏返して貼っても入るよう、足の真ん中から左右の遠い方で見る。
-  壁の上端より上は、壁の外へ出てもよい。風受けとの当たりは床にしない: 風受けの足跡は葉に重ならないので（F5.float 風受け）、
+  壁の上端より上は、壁の外へ出てもよい。人形はまっすぐ立つと見る。風受けの足跡は葉の外にあるので、人形が矢印の向きへ傾いても、
+  傾きが atan(葉の半径 ÷ 風受けの高さ) より小さい間は風受けに届かない（既定で約 30°。式には入れない）。
+  向きは刷った刻みで決まるので、刻みを NOTCH_MIN 刷る所が無い寸法は落とす。風受けとの当たりは床にしない: 風受けの足跡は葉に重ならないので（F5.float 風受け）、
   葉の真ん中に立つ人形の紙の面と、葉の上に寝かせる糊代には届かない（試験でこの前提を見る）。
 - 粘土の厚みは、四隅の四角を合わせて底の内に切った実の面積から出す（狭い舟で四角が重なると 4 × 辺² より狭い）。
   粘土は G を下げるが、重さで V が増えて BM ＝ I/V も下がるので、狭い舟では GM が上がらない事がある。
@@ -81,6 +83,7 @@ CLAY_INSET = 3  # 粘土の四角を底の四隅の折り線から離す長さ�
 CUP_INSET = 1  # 風受けの足跡（外へ折った歯の先）を底の両端の折り線から離す長さ（mm）
 CUP_TAB = 4  # 風受けの足の歯の長さ（mm）。歯は外へ折って底に貼るので、足跡は半円の外へこの長さだけ広がる
 TAB = 7  # 人形と風受けの足の糊代の高さ（mm）
+NOTCH_MIN = 1.0  # 葉の向きの刻みの長さの下限（mm）。これより短いと刷っても見えず、葉を 90° 回して貼る（人形が風受けに当たる）と見込む
 WALL_GAP = 0.5  # 人形の外形を壁の内の面から離す長さ（mm）。壁の紙の厚みとテープの折り返しの見込み
 TAPE_FOLD = 5  # 水よけのテープをふちから内へ折り返す幅（mm）。組み方の文と質量の式で同じ値を使う（四度目の検品の指摘）
 # 舟のラベル「1 舟」の幅と高さの見込み（compose の字の大きさ 2.8mm・行送り 1.25。幅は Noto Serif CJK JP で 4.8mm と測り、1mm の空きを足した）。
@@ -216,14 +219,11 @@ def _tray(p):
     if floor.contains(fm["leaf"]):
         ring = list(fm["leaf"].exterior.coords)
         part.art.append({"kind": "line", "pts": [(x + h, y + h) for x, y in ring], "stroke": MARK, "sw": MARK_SW, "mark": "leaf"})
-        # 葉の向きの刻み（丸い印の右の外へ）。葉の矢印の先をここへ向ける
+        # 葉の向きの刻み（丸い印の右の外へ）。葉の矢印の先をここへ向ける。長さは notch_length の 1 つの式から出し、
+        # NOTCH_MIN に届かない寸法は F5.float で落とす（刷らないまま組み方の文が刻みを言わないように）
         cx, cy, r = L / 2, W / 2, p["leaf_radius"]
-        # 右の風受けの足跡（外へ折る歯を含む）の手前 0.3mm で止める。止めないと、既定の寸法で歯の下に 1mm 入った（六度目の検品の指摘）
-        k = min(3.0, L - 0.5 - (cx + r))
-        for c in fm["cups"]:
-            if c.bounds[0] > cx:
-                k = min(k, c.bounds[0] - (cx + r) - 0.3)
-        if k > 0.3:
+        k = notch_length(p)
+        if k >= NOTCH_MIN:
             part.art.append({"kind": "line", "pts": [(h + cx + r, h + cy), (h + cx + r + k, h + cy)], "stroke": MARK, "sw": 0.6, "mark": "leafdir"})
     for sq in fm["ballast"]:
         if floor.contains(sq):
@@ -252,6 +252,18 @@ def floor_marks(p):
             # 足跡は外へ折った歯の先まで（半径 ρ + 歯）。半円だけで見ると、歯が壁を上がるか葉に乗っても通っていた
             out["cups"].append(Polygon([(ex + R * math.cos(math.pi * i / 24), cy + sign * R * math.sin(math.pi * i / 24)) for i in range(25)]))
     return out
+
+
+def notch_length(p):
+    """葉の向きの刻みの長さ（mm）。丸い葉の印の右から外へ 3mm まで。底の折り線から 0.5mm 内、右の風受けの足跡（外へ折る歯を含む）の
+    手前 0.3mm で止める（止めないと、既定の寸法で歯の下に 1mm 入った。六度目の検品の指摘）。"""
+    L, r = p["tray_length"], p["leaf_radius"]
+    cx = L / 2
+    k = min(3.0, L - 0.5 - (cx + r))
+    for c in floor_marks(p)["cups"]:
+        if c.bounds[0] > cx:
+            k = min(k, c.bounds[0] - (cx + r) - 0.3)
+    return k
 
 
 def clay_area(p):
@@ -417,6 +429,9 @@ def check_physics(p):
     others = [fm["leaf"]] + fm["cups"]
     if any(sq.intersects(o) for sq in fm["ballast"] for o in others):
         out.append(Failure("F5.float", "粘土の印", "四隅の粘土の四角が、葉か風受けの置き場に重なる"))
+    # 葉の向きの刻みが刷れないと、葉の向き（＝人形の向き）が決まらない。風受けつきで葉を 90° 回すと、人形が風受けに 12mm ほど入る
+    if notch_length(p) < NOTCH_MIN:
+        out.append(Failure("F5.float", "葉の向きの刻み", f"丸い葉の印の右に、向きの刻みを {NOTCH_MIN:g}mm 刷る所が無い（{max(notch_length(p), 0):.1f}mm。葉を小さくするか舟を長くする）"))
     # 人形は底の幅の向きに立つ。壁の上端より下の外形は壁の内に（風受けとの当たりは、風受けを葉の外に置くので起きない。docstring）
     e = figure_half_width(p, h)
     if e > W / 2 - WALL_GAP:
