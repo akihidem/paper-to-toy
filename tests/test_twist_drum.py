@@ -121,9 +121,9 @@ for face in ("kiku", "tori"):
     assert t.wrap_size(p)[1] == P["handle_length"] - 2
 # 7. 棒の切り欠きは刷る留め具に置き換え、結ぶ所を棒の北の端からの長さで決める（押し込んだ時に軸の真横）
 assert "切り欠き" not in st
-assert nums(st, r"棒の北の端から (\d+(?:\.\d+)?)mm") == [t.rodtab_pos(K)] and t.rodtab_pos(K) == t.rod_north_out(K) + t.peg_pos(K)
+assert nums(st, r"棒の北の端から (\d+(?:\.\d+)?)mm") == [t.rodtab_pos(K)] and t.rodtab_pos(K) == t.rod_north_out(K) + t.peg_pos(K) - t.TAB_W / 2
 tab = {q.key: q for q in t.parts(K)}["rodtab"]
-assert abs(tab.width - (t.rod_perimeter(K) + 3)) < 1e-9 and len(tab.holes) == 1
+assert abs(tab.width - (t.rod_perimeter(K) + 2 * t.TAB_FLAG)) < 1e-9 and len(tab.holes) == 2
 #    引ける長さで軸が 1 回も回らない寸法は落とす
 assert t.pull_turns(K) >= 1 and any(f.where == "棒" for f in t.check_physics({**K, "base_length": 70}))
 # ---- 3 回目のレビューの指摘（2026-11-04）を押さえる行 ----
@@ -132,7 +132,7 @@ bad = {**K, "k_radius": 24, "face_gap": 10, "wheel_r": 8, "bead_d": 14, "k_cord"
 assert [f.where for f in t.check_physics(bad)] == ["糸"], [f.line() for f in t.check_physics(bad)]
 # 9. 引き切っても棒の北の端が北の壁の穴に HOLE_MARGIN 残る。回る数はこの引ける長さで数える
 #    （北に出す長さが引ける長さ＋余白か、は式そのものなので見ない。代わりに、棒が竹串の長さに収まるかを見る）
-assert t.rod_length(K) <= t.SKEWER_LEN
+assert t.rod_length(K) <= t.SKEWER_USABLE
 assert abs(t.pull_turns(K) - t.pull_travel(K) / (math.pi * K["stick_d"])) < 1e-9
 assert nums(" ".join(t.steps(K)), r"北の壁から (\d+(?:\.\d+)?)mm 出す") == [round(t.rod_north_out(K))]
 # 10. 柄の太さの分、絡む長さは短い（柄の表まで √2·R − 柄の半径）
@@ -154,8 +154,33 @@ north = nums(st, r"北の壁から (\d+(?:\.\d+)?)mm 出す")[0]
 tabp = nums(st, r"棒の北の端から (\d+(?:\.\d+)?)mm")[0]
 rod = nums(next(r for r in t.bom(odd) if r["key"] == "rod")["material"], r"長さ (\d+(?:\.\d+)?)mm")[0]
 assert north == int(north) and north - t.pull_travel(odd) >= t.HOLE_MARGIN
-assert abs(tabp - (north + t.peg_pos(odd))) < 1e-9 and abs(rod - (north + odd["base_length"] + t.ROD_GRIP)) < 1e-9
+assert abs(tabp - (north + t.peg_pos(odd) - t.TAB_W / 2)) < 1e-9 and abs(rod - (north + odd["base_length"] + t.ROD_GRIP)) < 1e-9
 # 14. 玉が花弁の先にちょうど触れる糸も落とす（柄に絡む側と同じ厳しさ）
 eq = {**K, "k_cord": K["bead_d"] / 2 + (K["wheel_r"] - t.wheel_anchor(K))}
 assert any("花車に重なる" in f.message for f in t.check_physics(eq))
+# ---- 5 回目のレビューの指摘（2026-11-05）を押さえる行 ----
+# 15. 刷る位置は留め具の北の縁。引ける長さは、押し込んだ時の南の縁から旗が南の壁に当たるまで。北に出す分はその先に余白を残す
+st = " ".join(t.steps(K))
+x = nums(st, r"棒の北の端から (\d+(?:\.\d+)?)mm の所に、16 棒の留め具の北の縁")[0]
+north = nums(st, r"北の壁から (\d+(?:\.\d+)?)mm 出す")[0]
+assert abs(t.pull_travel(K) - (K["base_length"] - (x - north + t.TAB_W))) < 1e-9
+assert north - t.pull_travel(K) >= t.HOLE_MARGIN
+assert abs((x - north + t.TAB_W / 2) - t.peg_pos(K)) < 1e-9, "旗の穴（留め具の真ん中）が軸の真横に来ない"
+# 16. 旗は棒の上に立ち、台の天井の下に収まる。巻いた留め具は横の軸から 1mm 以上離れる
+H, d = K["base_height"], K["stick_d"]
+assert H / 2 + d + t.TAB_FLAG <= H - 0.5 and t.rod_off(K) - d - 2 * K["paper_thickness"] >= 1
+assert [f.where for f in t.check_physics({**K, "base_height": 13})] == ["留め具"]
+# 17. 竹串のとがった先を切り落とす手順（道具・大人がする）が、どの形にもある。切り落とした分、使える長さは短い
+for p in (P, {**P, "face": "tori"}, K):
+    st = " ".join(t.steps(p))
+    assert "とがった先" in st and "切り落とす" in st and "大人がする" in st and "ニッパー" in st, p["face"]
+    assert any("ニッパー" in m for m in t.materials(p))
+assert t.SKEWER_USABLE == t.SKEWER_LEN - 2 * t.SKEWER_POINT and t.stick_cut(P) <= t.SKEWER_USABLE
+# 18. 柱の足の印は、黒い閉じた四角（切る線に見える）でなく、茶色のかぎの印
+marks = [a for a in {q.key: q for q in t.parts(K)}["base"].art if a["kind"] == "line"]
+assert len(marks) == 4 and all(a["stroke"] == t.BAND and len(a["pts"]) == 3 for a in marks)
+# 19. 諫鼓の用意する物にカッターとテープ、組み方に棒を切って束ねる手順がある（長さは部品表と同じ式）
+m = " ".join(t.materials(K))
+assert "カッター" in m and "テープ" in m
+assert nums(" ".join(t.steps(K)), r"竹串 2 本を (\d+(?:\.\d+)?)mm に切り") == [t.rod_length(K)]
 print("ok")

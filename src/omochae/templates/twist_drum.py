@@ -59,6 +59,11 @@ SOURCE = "NDL-1187053-R0000007-R-twist_drum"
 SOURCES = {"kiku": SOURCE, "tori": "NDL-1187053-R0000029-L-twist_drum", "kanko": "NDL-1187053-R0000010-R-twist_drum"}
 HOLE_MARGIN = 3  # 穴から紙の端（帯の縁・継ぎ目の糊代）までの見込み。これより狭いと串を回した時に裂けやすい
 SKEWER_LEN = 180  # 家にある竹串の長さの見込み（実物を測ったら置き換える）
+# 竹串のとがった先は、危ないので両端とも切り落としてから使う。1 つの先を落とす長さは見込み（実物で確かめていない）。
+SKEWER_POINT = 8
+SKEWER_USABLE = SKEWER_LEN - 2 * SKEWER_POINT
+CUT_POINTS = "竹串のとがった先は、ニッパーかカッターで切り落とす（大人がする）"
+CUT_TOOL = "ニッパーかカッター（竹串を切る。大人が使う）"
 TOP_OUT = 5  # 柄の先を胴の上へ出す長さ。抜け止めに糸を巻くため（幣の房の無い形）
 
 
@@ -206,8 +211,8 @@ def _check_hand(p):
     if pitch - 2 * inset < 1:
         out.append(Failure("F5.drum", "糊代の歯", f"歯の先が {pitch - 2 * inset:.1f}mm で、面を貼る所が無い（歯が深すぎる）"))
     need = stick_cut(p)
-    if need > SKEWER_LEN:
-        out.append(Failure("F5.drum", "柄", f"柄に竹串が {need:.0f}mm 要り、{SKEWER_LEN}mm の竹串で足りない"))
+    if need > SKEWER_USABLE:
+        out.append(Failure("F5.drum", "柄", f"柄に竹串が {need:.0f}mm 要り、先を落とした {SKEWER_USABLE}mm の竹串で足りない"))
     return out
 
 
@@ -394,9 +399,9 @@ def materials(p):
     # 行の位置でなく key で引く。形によって部品表の行が増えるので、位置で引くと別の行を刷る。
     by = {r["key"]: r for r in bom(p)}
     if p["face"] == "kanko":
-        return [f"{by['band']['material']}を 1 枚", "のり、はさみ、定規", by["peg"]["material"], by["rod"]["material"],
-                f"{by['cord']['material']}と{by['pull']['material']}", by["bead"]["material"]]
-    return [f"{by['band']['material']}を 1 枚", "のり、はさみ、定規", by["stick"]["material"], f"{by['cord']['material']}を 2 本", f"{by['bead']['material']}を 2 つ"]
+        return [f"{by['band']['material']}を 1 枚", "のり、はさみ、定規、セロハンテープ", CUT_TOOL, "カッター（台と帯の四角い穴。大人が使う）",
+                by["peg"]["material"], by["rod"]["material"], f"{by['cord']['material']}と{by['pull']['material']}", by["bead"]["material"]]
+    return [f"{by['band']['material']}を 1 枚", "のり、はさみ、定規", CUT_TOOL, by["stick"]["material"], f"{by['cord']['material']}を 2 本", f"{by['bead']['material']}を 2 つ"]
 
 
 def steps(p):
@@ -406,7 +411,7 @@ def steps(p):
     out = ["刷った物差しに定規を当て、10cm か確かめる", "部品を実線で切る。3 胴の帯の歯の間も切り込む。帯の穴は竹串の先であける",
            "3 胴の帯を丸め、終わりの糊代を頭の下に入れて貼る（絵が外）", "上下の歯を破線で内へ谷折りする",
            "1 表の面と 2 裏の面を、歯に外から貼る",
-           f"竹串を {stick_cut(p):g}mm に切る（胴の下の柄 {p['handle_length']:g}mm・胴 {2 * p['radius']:g}mm・胴の上 {top_out(p):g}mm）",
+           f"{CUT_POINTS}。その竹串を {stick_cut(p):g}mm に切る（胴の下の柄 {p['handle_length']:g}mm・胴 {2 * p['radius']:g}mm・胴の上 {top_out(p):g}mm）",
            f"竹串を太い 2 つの穴（帯の頭から {pos['stick'][0]:.0f}mm と {pos['stick'][1]:.0f}mm）に通し、上へ {top_out(p):g}mm 出す。穴の所を糊で留める",
            f"糸の端に玉を付け、玉の中心から {p['cord_length']:g}mm の所で、菱形の小さい穴に結ぶ（左右 2 本）",
            "4 柄の巻き紙を胴の下の竹串に巻いて貼る"]
@@ -459,7 +464,10 @@ BASE_TAB = 6  # 台の角の糊代の幅（壁の高さより狭くする）
 WHEEL_PETALS = 10  # 図の花車の花弁の数
 PEG_TOP = 3  # 花車の軸の竹串を、花車の上へ出す長さ
 ROD_GRIP = 40  # 引く棒の、南の壁から出して手で持つ長さ
-TAB_W, TAB_FLAG = 5, 7  # 棒の留め具の帯の幅と、糸を結ぶ旗の長さ
+# 棒の留め具: 帯の幅（棒の向き）と、帯の両端を貼り合わせて棒の上に立てる旗の高さ。
+# 旗は棒の真上に立てる。横（軸の側）に向けると、棒の表から軸の表まで 2.5mm（太さ 3mm の時）しか無く、旗が軸に当たった。
+# 旗は南の壁の棒の穴より上に出るので、引くと壁に当たって止まる（止め具も兼ねる）。
+TAB_W, TAB_FLAG = 5, 3.5
 
 
 def wheel_anchor(p):
@@ -473,9 +481,9 @@ def peg_cut(p):
 
 
 def rodtab_pos(p):
-    """棒の留め具（巻く糸を結ぶ所）の、棒の北の端からの長さ。棒を押し込んだ時に留め具が軸の真横に来る所にする。
-    図の棒の切り欠きの代わり【解釈】。位置を寸法から決めて刷るので、結ぶ所が作る人ごとにずれない。"""
-    return rod_north_out(p) + peg_pos(p)
+    """棒の北の端から、棒の留め具の北の縁までの長さ。押し込んだ時に、留め具の真ん中（旗の穴）が軸の真横に来る所にする。
+    図の棒の切り欠きの代わり【解釈】。合わせる縁を北の縁と決めて刷るので、結ぶ所が作る人ごとにずれない。"""
+    return rod_north_out(p) + peg_pos(p) - TAB_W / 2
 
 
 def rod_north_out(p):
@@ -492,8 +500,9 @@ def rod_length(p):
 
 
 def pull_travel(p):
-    """棒を南へ引ける長さ。留め具が南の壁（の内側の余白 HOLE_MARGIN）に当たるまで。"""
-    return p["base_length"] - peg_pos(p) - HOLE_MARGIN
+    """棒を南へ引ける長さ。押し込んだ時の留め具の南の縁（軸の位置＋帯の幅の半分）から、旗が南の壁に当たるまで。
+    前は壁の 3mm 手前で止まると見ていたが、旗は壁に当たって止まるので、当たるまでを引ける長さにする。"""
+    return p["base_length"] - peg_pos(p) - TAB_W / 2
 
 
 def pull_turns(p):
@@ -577,8 +586,14 @@ def check_kanko(p):
         out.append(Failure("F5.drum", "糊代の歯", f"歯の先が {pitch - 2 * inset:.1f}mm で、面を貼る所が無い（歯が深すぎる）"))
     # 結ぶ所（留め具）を決めたので、引ける長さで軸が回る数も数えられる。1 回も回らないと玉が振れない。
     # 北に出す分を引ける長さに合わせたので、台が長いと棒が伸びる。でんでん太鼓の柄と同じく竹串の長さで落とす。
-    if rod_length(p) > SKEWER_LEN:
-        out.append(Failure("F5.drum", "棒", f"引く棒に竹串が {rod_length(p):g}mm 要り、{SKEWER_LEN}mm の竹串で足りない"))
+    if rod_length(p) > SKEWER_USABLE:
+        out.append(Failure("F5.drum", "棒", f"引く棒に竹串が {rod_length(p):g}mm 要り、先を落とした {SKEWER_USABLE}mm の竹串で足りない"))
+    # 留め具の旗は棒の上に立つ。台の天井の下に収まらないと棒が引けず、巻いた留め具が横の軸に当たると軸が回らない。
+    H, d, tp = p["base_height"], p["stick_d"], p["paper_thickness"]
+    if H / 2 + d + TAB_FLAG > H - 0.5:
+        out.append(Failure("F5.drum", "留め具", f"留め具の旗の先が台の天井まで {H / 2 - d - TAB_FLAG:.1f}mm で、0.5mm 空かない（台の壁を高く）"))
+    if rod_off(p) - d - 2 * tp < 1:
+        out.append(Failure("F5.drum", "留め具", "巻いた留め具が花車の軸に 1mm まで近づき、当たる"))
     if pull_turns(p) < 1:
         out.append(Failure("F5.drum", "棒", f"棒を引ける長さ {pull_travel(p):.0f}mm では、軸が 1 回も回らない（{pull_turns(p):.1f} 回）"))
     return out
@@ -651,7 +666,10 @@ def _base(p):
     s = p["post_side"]
     py = H + p["post_pos"]
     sq = [(cx - s / 2, py - s / 2), (cx + s / 2, py - s / 2), (cx + s / 2, py + s / 2), (cx - s / 2, py + s / 2)]
-    part.art.append({"kind": "line", "pts": sq + [sq[0]], "stroke": INK, "sw": 0.3})  # 柱の足を貼る所
+    # 柱の足を貼る所は、四隅のかぎの印（茶色）で示す。黒い閉じた四角は切る線に見え、穴に切られた。
+    k = s / 4
+    for (x0, y0), (ux, uy) in zip(sq, ((1, 1), (-1, 1), (-1, -1), (1, -1))):
+        part.art.append({"kind": "line", "pts": [(x0 + ux * k, y0), (x0, y0), (x0, y0 + uy * k)], "stroke": BAND, "sw": 0.5})
     part.holes = [(cx, H + peg_pos(p), p["stick_d"] / 2 + 0.4)]  # 軸が回るよう、穴は串より 0.8mm 太い
     cw, ch = rod_cut(p)
     rx = cx + rod_off(p) - cw / 2
@@ -679,13 +697,14 @@ def _wheel(p):
 
 
 def _rodtab(p):
-    """棒の留め具。帯を棒に巻いて貼り、旗を軸に向けて立て、旗の穴に巻く糸を結ぶ。"""
-    W = rod_perimeter(p) + 3
-    pts = [(0, 0), (W, 0), (W, TAB_W), (7, TAB_W), (7, TAB_W + TAB_FLAG), (1, TAB_W + TAB_FLAG), (1, TAB_W), (0, TAB_W)]
-    part = Part(16, "rodtab", "棒の留め具", pts, label_xy=(W - 6.5, 0.8), label="16")
-    part.glue = [[(W - 3, 0), (W, 0), (W, TAB_W), (W - 3, TAB_W)]]
-    part.valley = [((1, TAB_W), (7, TAB_W))]
-    part.holes = [(4, TAB_W + TAB_FLAG - 2.5, 0.6)]
+    """棒の留め具。帯（長さ＝棒の周り＋旗 2 枚分、幅 TAB_W は棒の向き）を棒に巻き、両端を棒の上で貼り合わせて旗にする。
+    旗の 2 枚の穴は重なる所に置き、巻く糸を通して結ぶ。破線で旗を立てる。"""
+    F = TAB_FLAG
+    W = rod_perimeter(p) + 2 * F
+    part = Part(16, "rodtab", "棒の留め具", [(0, 0), (W, 0), (W, TAB_W), (0, TAB_W)], label_xy=(F + 1, 0.8), label="16")
+    part.glue = [[(W - F, 0), (W, 0), (W, TAB_W), (W - F, TAB_W)]]
+    part.valley = [((F, 0), (F, TAB_W)), ((W - F, 0), (W - F, TAB_W))]
+    part.holes = [(F / 2, TAB_W / 2, 0.5), (W - F / 2, TAB_W / 2, 0.5)]
     return part
 
 
@@ -745,12 +764,13 @@ def steps_kanko(p):
             "3 胴の帯を丸めて貼り、歯を内へ折って 1 表の面（巴）と 2 裏の面を貼る",
             "10 柱を四角い筒に貼り、足の糊代を外へ折る。頭を胴の四角い穴に差して貼る",
             "11 台を破線で折り、角の糊代で箱にする（底は無い）。印の四角に柱の足を貼る。表の面を花車の側に向ける",
-            f"竹串 13（{peg_cut(p):g}mm）を台の丸い穴に通し、下の端を床に着ける",
+            f"{CUT_POINTS}。竹串 13 を {peg_cut(p):g}mm に切り、台の丸い穴に通して、下の端を床に着ける",
             f"17 花車の高さの紙を軸の横の台の上の面に立て、12 花車を台の上の面から {p['peg_height']:g}mm の所（紙の上の端の印）に貼る。軸の上の端からは {PEG_TOP}mm 下",
             f"花車の小さい穴に糸を結び、玉の中心まで {p['k_cord']:g}mm にする",
+            f"竹串 2 本を {rod_length(p):g}mm に切り（{CUT_POINTS}）、縦に重ねてセロハンテープで 3 か所巻いて束ね、14 引く棒にする",
             f"【解釈】14 引く棒を南の壁の穴から北の壁の穴へ通し、北の壁から {rod_north_out(p):g}mm 出す（引き切っても北の穴から抜けない長さ）",
-            f"【解釈】16 棒の留め具を、棒の北の端から {rodtab_pos(p):g}mm の所（軸の真横）に巻いて貼り、旗を軸に向ける",
-            f"【解釈】巻く糸の端を旗の穴に結び、台の下から軸に {math.ceil(pull_turns(p))} 回巻く（棒を南へ {pull_travel(p):.0f}mm 引くと、約 {pull_turns(p):.1f} 回まわる）",
+            f"【解釈】台の下から、棒の北の端から {rodtab_pos(p):g}mm の所に、16 棒の留め具の北の縁を合わせて巻き、両端を棒の真上で貼り合わせて旗にする（旗の穴が軸の真横に来る）",
+            f"【解釈】巻く糸の端を旗の穴に結び、台の下から軸に {math.ceil(pull_turns(p))} 回巻く（旗が南の壁に当たるまで {pull_travel(p):g}mm 引くと、約 {pull_turns(p):.1f} 回まわる）",
             "棒を引いて軸を回し、玉が面に当たるか見る"]
 
 
