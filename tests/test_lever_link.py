@@ -83,4 +83,16 @@ assert any("窓から見える" in f.message for f in t.check_physics({**eb, "tr
 
 # 登る形は板に谷折りの耳があり、折りの書き出しの対象になる
 assert all(q.valley for q in t.parts(sv) if q.key.endswith("bar"))
+
+# 床が見る量（押す・引く量、粘土の置き場）は、紙に印を刷り、組み方の文で印を言う。印が無いと、作る人は床が見た量で動かせない
+for k in ("sumo", "hashigo", "ebako"):
+    q = {**P, "kind": k, "travel": 16}
+    ticks = [it for pt in t.parts(q) for it in pt.art if it.get("mark") == "travel"]
+    assert len(ticks) == 2 and abs(math.dist(ticks[0]["at"], ticks[1]["at"]) - 16) < 1e-6, (k, ticks)
+    assert any("印" in s and "16mm" in s for s in t.steps(q)), k
+for k in ("saru_take", "saru_sao"):
+    q = {**P, "kind": k}
+    clay = [it for pt in t.parts(q) for it in pt.art if it.get("mark") == "clay"]
+    assert len(clay) == 1 and any("粘土" in s and "印" in s for s in t.steps(q)), k
+assert any("印" in s and "20mm" in s for s in t.steps({**P, "kind": "yakko"}))
 print("ok")
