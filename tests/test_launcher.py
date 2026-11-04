@@ -8,13 +8,14 @@ assert TEMPLATES["launcher"] is t, "templates/ に置けば登録される"
 for p in (P, B):
     assert t.check_physics(p) == [] and not t.check_range(p), t.check_physics(p)
 
-# k は作る物の寸法から: 梁 2 本・k₁ = 3·E_HIGH·I/L³。既定の弩は 64N/m・25mm で 20mJ
+# k は作る物の寸法から: 梁 2 本・k₁ = 3·E_HIGH·I/L³。弩の引きは引き金の座の奥まで（draw + notch_depth = 29mm）で、既定は 64N/m・27mm ほど
 k1 = 3 * t.E_HIGH * (P["arm_w"] * (t.LAYERS * P["paper_t"]) ** 3 / 12) / P["arm_len"] ** 3 * 1000
-assert abs(t.spring_k(P) - 2 * k1) < 1e-9 and abs(t.energy_mj(P) - 0.5 * 2 * k1 * 0.025 ** 2 * 1000) < 1e-9
+x_eff = (P["draw"] + P["notch_depth"]) / 1000
+assert abs(t.spring_k(P) - 2 * k1) < 1e-9 and abs(t.energy_mj(P) - 0.5 * 2 * k1 * x_eff ** 2 * 1000) < 1e-9
 # 引きを倍にすると 4 倍、紙の厚さを倍にすると 8 倍（厚さの 3 乗）
-assert abs(t.energy_mj({**P, "draw": 50}) / t.energy_mj(P) - 4) < 1e-9 and abs(t.spring_k({**P, "paper_t": 0.4}) / t.spring_k(P) - 8) < 1e-9
+assert abs(t.energy_mj({**P, "draw": 2 * P["draw"] + P["notch_depth"]}) / t.energy_mj(P) - 4) < 1e-9 and abs(t.spring_k({**P, "paper_t": 0.4}) / t.spring_k(P) - 8) < 1e-9
 # 上限ちょうどの手前は通り、越えれば F5.launch のばねで落ちる（引く長さで探す: x = √(2E/k)）
-x_cap = (2 * t.ENERGY_CAP_MJ / 1000 / t.spring_k(P)) ** 0.5 * 1000
+x_cap = (2 * t.ENERGY_CAP_MJ / 1000 / t.spring_k(P)) ** 0.5 * 1000 - P["notch_depth"]
 assert t.check_physics({**P, "draw": x_cap - 1e-6}) == []
 fs = t.check_physics({**P, "draw": x_cap + 0.5})
 assert [(f.floor, f.where) for f in fs] == [("F5.launch", "ばね")], fs
@@ -25,11 +26,11 @@ assert any(f.where == "ばね" for f in t.check_physics({**B, "paper_t": 0.35}))
 assert abs(t.tip_sag_min(P) - t.COIN_G / 1000 * 9.8 / k1 * 1000) < 1e-9
 assert any("確かめられない" in f.message for f in t.check_physics({**P, "arm_len": 30, "draw": 10}))
 
-# 玉の重さ ＝ 紙の面積 × 面密度。64mm 四方・150g/m² は 0.6144g
-assert abs(t.projectile_mass(P) - 64 * 64 * 150e-6) < 1e-12
+# 玉の重さ ＝ 紙の面積 × 面密度。60mm 四方・150g/m² は 0.54g
+assert abs(t.projectile_mass(P) - 60 * 60 * 150e-6) < 1e-12
 assert any(f.where == "玉" and "重さ" in f.message for f in t.check_physics({**P, "ball_paper": 100, "paper_gsm": 120, "ball_d": 18}))
 # 毛玉は芯の玉の紙と房の帯を足した重さ。厚い紙では 1g を越える
-assert abs(t.projectile_mass(B) - (64 * 64 + t.POM_LEN * t.POM_BASE + t.POM_TEETH * t.TOOTH * B["fringe_len"]) * 150e-6) < 1e-12
+assert abs(t.projectile_mass(B) - (60 * 60 + t.POM_LEN * t.POM_BASE + t.POM_TEETH * t.TOOTH * B["fringe_len"]) * 150e-6) < 1e-12
 assert any(f.where == "玉" and "重さ" in f.message for f in t.check_physics({**B, "paper_gsm": 200}))
 
 # 先の太さ: どちらの形も丸めた玉の直径。毛玉の房の長さは数えない（当たるとつぶれる）。15mm より細いと落ちる
@@ -47,7 +48,8 @@ assert any("まとまらない" in f.message for f in t.check_physics({**P, "bal
 assert any(f.where == "腕" for f in t.check_physics({**P, "arm_w": 7}))
 assert any(f.where == "弓" for f in t.check_physics({**B, "arm_w": 7}))
 # 引き金の切れ込みの奥の残り・浅すぎる切れ込み・台の後ろの端までの余り
-assert any("奥に" in f.message for f in t.check_physics({**P, "notch_depth": 8}))
+assert any("奥に" in f.message for f in t.check_physics({**P, "trigger_w": 6}))
+assert any("座の前の縁" in f.message for f in t.check_physics({**P, "notch_depth": 3}))
 assert any("浅く" in f.message for f in t.check_physics({**P, "notch_depth": 1}))
 assert any("後ろの端" in f.message for f in t.check_physics({**P, "stock_length": 70, "draw": 50}))
 # 弦の溝と糊代の間
@@ -57,7 +59,9 @@ assert any(f.where == "弦の溝" for f in t.check_physics({**P, "glue": 8}))
 arm = next(q for q in t.parts(P) if q.key == "arma")
 assert [y for _, y, _ in arm.holes] == [k * P["arm_w"] + P["arm_w"] / 2 for k in range(t.LAYERS)]
 trig = next(q for q in t.parts(P) if q.key == "trigger")
-assert (0, t.GRIP + P["stock_w"] / 2 + 1) in trig.outline and (P["notch_depth"], t.GRIP + P["stock_w"] / 2 - 1) in trig.outline
+# 5 回目で鉤に改めた: 座は弦の高さ（GRIP + 筒の半分）、入口はその POCKET_H 下、前の縁は肩の内側（x = SHOULDER）
+sh, yp = t.SHOULDER, t.GRIP + P["stock_w"] / 2
+assert (sh, yp + t.POCKET_H + 1) in trig.outline and (sh + P["notch_depth"], yp - 1) in trig.outline and t.seat_xy(P) == (sh + P["notch_depth"] - t.POCKET_W / 2, yp)
 
 # 形ごとの部品と部品表が合い、飛ばす物は紙だけ（竹串・楊枝・豆を部品表に載せない）
 for p in (P, B):
@@ -151,5 +155,35 @@ CHECKS4 = {
  "L δ と x の余裕を書く": lambda: "δ ≒ x/2" in t.__doc__ and "上限" in t.__doc__,
 }
 for name, check in CHECKS4.items():
+    assert check(), name
+# 5 回目の指摘の行: 引き金は前に縁のある鉤で座までの引きを力に入れる、弓の持つ所は 55mm 以上で貼り重ねて硬い、
+# 弩の腕の根元の折りは確かめていないと書く、かさの密度は物差しの小さい穴で見る、弦の長さの印を刷り張って結ばない、
+# 紙の玉のほかを筒に入れない、引き金に肩
+from shapely.geometry import LineString
+def hook_holds(p):
+    """引き金の外形で、弦の座（くぼみ）の前に縁（lip）があるか: 弦の座の点から前（x が小さい向き）へ水平に出ると紙に当たる。"""
+    tr = next(q for q in t.parts(p) if q.key == "trigger")
+    poly = Polygon(tr.outline)
+    sx, sy = t.seat_xy(p)
+    if poly.contains(Point(sx, sy)):
+        return False  # 座が紙の中では弦が入らない
+    from shapely.geometry import LineString
+    ray = LineString([(sx, sy), (-1, sy)])
+    return ray.intersection(poly).length > 0
+CHECKS5 = {
+ "H 引き金は前に縁のある鉤で弦を受け、座までの引きを力に入れる": lambda: (hook_holds(P)
+     and abs(t.draw_eff(P) - (P["draw"] + P["notch_depth"])) < 1e-9
+     and any(f.where == "ばね" for f in t.check_physics({**P, "stock_w": 20, "draw": 25, "notch_depth": 9.76, "arm_w": 13.09, "paper_t": 0.2}))),
+ "H 弓の持つ所は 55mm 以上で、貼り重ねて硬い": lambda: (t.GRIP_W >= 55 and t.GRIP_TURNS >= 3
+     and abs(next(q for q in t.parts(B) if q.key == "grip").width - t.grip_len(B)) < 1e-9
+     and any(f.where == "ばね" for f in t.check_physics({**B, "bow_span": 81.18, "paper_t": 0.08, "arm_w": 10.47, "draw": 30.24}))),
+ "M 弩の腕の根元の折りは確かめていないと書く": lambda: "根元の折り" in t.__doc__ and "蝶番" in t.__doc__,
+ "M かさの密度は物差しの小さい穴で見る": lambda: abs(t.bulk_density(P) - P["ball_paper"] ** 2 * P["paper_gsm"] * 1e-6 / (3.141592653589793 / 6 * ((t.gauge_holes(P)[0] + t.GAUGE_TOL) / 10) ** 3)) < 1e-9 and t.check_physics(P) == [],
+ "M 弦の長さの印を刷り、張って結ばない": lambda: (t.STRING_SLACK > t.STRING_TOL > 0
+     and all("strlen" in {q.key for q in t.parts(p)} and any("張らない" in s and "印" in s for s in t.steps(p)) for p in (P, B))),
+ "L 紙の玉のほかを筒に入れない": lambda: any("紙の玉のほか" in s and "入れない" in s for s in t.steps(P)) and "おはじき" in t.__doc__,
+ "L 引き金に肩": lambda: (lambda tr: tr.width > P["trigger_w"] + 1)(next(q for q in t.parts(P) if q.key == "trigger")),
+}
+for name, check in CHECKS5.items():
     assert check(), name
 print("ok")

@@ -3,7 +3,8 @@
   "source_id": "NDL-1187053-R0000008-L-launcher",
   "params": {
     "form": "crossbow",
-    "notch_depth": 8
+    "trigger_w": 6,
+    "notch_depth": 4
   },
   "inject": {},
   "expect": {
