@@ -63,7 +63,7 @@ assert "F5.overlap" in [f.floor for f in failures]
 import re
 from omochae.compose import TEMPLATES
 for tpl in TEMPLATES.values():
-    for form in {"slider_fan": slider_fan.PUSH_PARTS, "pivot_counterweight": pivot_counterweight.MOUNTS}[tpl.ID]:
+    for form in tpl.FORMS:
         assert all(re.fullmatch(r"[a-z]+", q.key) for q in tpl.parts({**tpl.DEFAULTS, tpl.FORM: form})), (tpl.ID, form)
 # --name は模様として読まない（[ab] で頭 a・b の SVG を消さない）
 d = tempfile.mkdtemp()
@@ -74,6 +74,12 @@ assert len(list(pathlib.Path(d).iterdir())) == 8
 # 寸法が落ちる時も、知らない部品の key を先に落とし、前の SVG を消さない
 try:
     export("slider_fan", {"push_part": "tab", "fold_height": 50}, src, d, name="a", parts={"fna"})
+    raise AssertionError("知らない部品を通した")
+except ValueError:
+    assert len(list(pathlib.Path(d).iterdir())) == 8
+# 部品が作れない寸法（型の違う値）と知らない部品の key を一緒に渡しても、key を先に落とし、前の SVG を消さない
+try:
+    export("slider_fan", {"push_part": "tab", "fold_count": "many"}, src, d, name="a", parts={"fna"})
     raise AssertionError("知らない部品を通した")
 except ValueError:
     assert len(list(pathlib.Path(d).iterdir())) == 8

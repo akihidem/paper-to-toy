@@ -44,6 +44,7 @@ RANGES = {
 PUSH_PARTS = ("tab", "tube", "stick")
 # 刷る形を決める寸法（押し方）。仮説の違いそのものなので、寸法を直に渡す入口（python -m omochae --params）では既定に頼らず必ず書かせる。
 FORM = "push_part"
+FORMS = PUSH_PARTS  # 刷る形の値の一覧（作りうる部品を数える時に使う）
 # 既定の出典（data/sources/ の名前）。--source を書かない時に、雛形と合わない出典の印を刷らないため。
 SOURCE = "NDL-1187053-R0000005-L"
 HUBS = ("axle", "rim")

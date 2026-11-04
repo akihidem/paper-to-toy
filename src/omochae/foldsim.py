@@ -58,6 +58,12 @@ def _old_outputs(out, head):
     return [f for f in out.iterdir() if f.is_file() and pat.fullmatch(f.name)]
 
 
+def known_parts(template_id):
+    """雛形が作りうる部品の key の組。雛形の既定の寸法で、刷る形（FORM）の値ごとに部品を作って合わせる。"""
+    tpl = TEMPLATES[template_id]
+    return {q.key for form in tpl.FORMS for q in tpl.parts({**tpl.DEFAULTS, tpl.FORM: form})}
+
+
 def export(template_id, params, source, out_dir, name=None, parts=None, title=None, inject=None):
     """雛形と寸法から部品を作り、検査を通ったら、折りのある部品を 1 つずつ SVG にする。Returns (書いたファイル, 検査の失敗)。
 
@@ -67,14 +73,12 @@ def export(template_id, params, source, out_dir, name=None, parts=None, title=No
     書き出しは仮の置き場で作り、全部書けてから、新しい物を先に正しい名前へ移し、その後で今回に無い前の物を消す
     （前の物を先に消すと、移す途中で止まった時に前の物を失った）。限り: 移すのは 1 つずつなので、途中で止まると新旧が混ざりうる。
     """
-    tpl = TEMPLATES[template_id]
     _, layout, failures = compose(template_id, params, source, title=title, inject=inject or {})
     if parts is not None:
-        try:
-            keys = {q.key for q in (layout["parts"] if layout else tpl.parts({**tpl.DEFAULTS, **params}))}
-        except Exception:  # 範囲の外の寸法で部品が作れない時は、key を確かめられないので検査の失敗だけを返す
-            keys = None
-        if keys is not None and not set(parts) <= keys:
+        # 雛形の部品の key は、今の寸法でなく雛形の既定の寸法と刷る形ごとに数える。今の寸法で部品を作ると、範囲の外や型の違う寸法で
+        # 作れず key を確かめられないまま先へ進み、前の SVG を消した（レビューの指摘）。
+        keys = known_parts(template_id)
+        if not set(parts) <= keys:
             raise ValueError(f"知らない部品: {'・'.join(sorted(set(parts) - keys))}（この雛形の部品は {'・'.join(sorted(keys))}）")
     out = pathlib.Path(out_dir)
     head = name or template_id
