@@ -68,4 +68,31 @@ assert "円盤" in floors(kind="top", hole_offset=2) and floors(kind="top", hole
 # 部品表に重ねる枚数を書く。刷る円盤も同じ枚数
 p = P(kind="top", layers=4)
 assert len(s.parts(p)) == 4 and all("4 枚重ねる" in r["name"] for r in s.bom(p) if r["key"].startswith("disc"))
+
+# 円錐の独楽: 円錐の殻の質量と慣性モーメントを足す。円錐が高いほど円盤が上がり、倒れやすい
+assert s.top_omega_min(P(kind="cone", cone_h=20))[0] > s.top_omega_min(P(kind="cone", cone_h=10))[0]
+mc, zc, i3c, i1c = s.top_parts_mass(P(kind="cone"))[2]
+q = P(kind="cone")
+assert abs(zc - (q["cone_tip"] + 2 * q["cone_h"] / 3)) < 1e-9 and abs(i3c - mc * q["cone_r"] ** 2 / 2) < 1e-9
+# 扇形の角は 2πR/s。平らすぎると糊代を足して一回りを超える
+a, g = s.cone_angles(q)
+assert abs(a - 2 * math.pi * q["cone_r"] / math.hypot(q["cone_r"], q["cone_h"])) < 1e-9
+assert "円錐" in floors(kind="cone", cone_h=5) and "円錐" not in floors(kind="cone", cone_h=10)
+assert "独楽" in floors(kind="cone", cone_tip=25)
+# 扇形の内の弧は、丸めると軸の太さの口になる（内の半径 × R/s ＝ 軸の半径）
+cone = next(x for x in s.parts(q) if x.key == "cone")
+ri = min(math.hypot(x - cone.width / 2, y - cone.width / 2) for x, y in cone.outline)
+assert abs(ri * q["cone_r"] / math.hypot(q["cone_r"], q["cone_h"]) - q["axle_d"] / 2) < 0.05, ri
+# 車屏風: 屏風の重さが車の張り出しを支える。車を遠く・重くすると前へ倒れる
+back, front = s.screen_moment(P(kind="screen"))
+assert front < back
+assert "屏風" in floors(kind="screen", wheel_gap=30, layers=6)
+# 車が机に当たる・車が前の面に当たる
+assert "車" in floors(kind="screen", panel_h=60) and "車" in floors(kind="screen", wheel_gap=2)
+# 2 つの穴は、コの字に折った時に向かい合う（同じ高さで、3 の面の折り線から同じ距離）
+scr = next(x for x in s.parts(P(kind="screen")) if x.key == "screen")
+(x1, y1, _), (x2, y2, _) = scr.holes
+(f2, _), _ = scr.valley[0]
+(f3, _), _ = scr.valley[1]
+assert y1 == y2 and abs((f2 - x1) - (x2 - f3)) < 1e-9
 print("ok")
