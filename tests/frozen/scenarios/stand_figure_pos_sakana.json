@@ -4,6 +4,7 @@
   "params": {
     "figure": "sakana",
     "stand": "base",
+    "base_depth": 40,
     "slot_length": 9
   },
   "inject": {},

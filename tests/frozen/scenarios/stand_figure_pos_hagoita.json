@@ -4,6 +4,7 @@
   "params": {
     "figure": "hagoita",
     "stand": "base",
+    "base_depth": 40,
     "slot_length": 10
   },
   "inject": {},

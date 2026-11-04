@@ -4,7 +4,7 @@
   "params": {
     "figure": "inu",
     "stand": "base",
-    "slot_width": 0.3
+    "paper_thickness": 0.3
   },
   "inject": {},
   "expect": {
