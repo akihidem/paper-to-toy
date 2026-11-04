@@ -87,12 +87,39 @@ assert all(q.valley for q in t.parts(sv) if q.key.endswith("bar"))
 # 床が見る量（押す・引く量、粘土の置き場）は、紙に印を刷り、組み方の文で印を言う。印が無いと、作る人は床が見た量で動かせない
 for k in ("sumo", "hashigo", "ebako"):
     q = {**P, "kind": k, "travel": 16}
+    go = t.reach(q) if k != "ebako" else 16  # 止まる所で届く量が travel より小さければ、その量を刷る（下の 2 回目の見直し 1）
     ticks = [it for pt in t.parts(q) for it in pt.art if it.get("mark") == "travel"]
-    assert len(ticks) == 2 and abs(math.dist(ticks[0]["at"], ticks[1]["at"]) - 16) < 1e-6, (k, ticks)
-    assert any("印" in s and "16mm" in s for s in t.steps(q)), k
+    assert len(ticks) == 2 and abs(math.dist(ticks[0]["at"], ticks[1]["at"]) - go) < 1e-6, (k, ticks)
+    assert any("印" in s and f"{go:.0f}mm" in s for s in t.steps(q)), k
 for k in ("saru_take", "saru_sao"):
     q = {**P, "kind": k}
     clay = [it for pt in t.parts(q) for it in pt.art if it.get("mark") == "clay"]
     assert len(clay) == 1 and any("粘土" in s and "印" in s for s in t.steps(q)), k
-assert any("印" in s and "20mm" in s for s in t.steps({**P, "kind": "yakko"}))
+assert any("印" in s and f"{t.reach({**P, 'kind': 'yakko'}):.0f}mm" in s for s in t.steps({**P, "kind": "yakko"}))
+
+# 2 回目の見直し 1: 止まる物や張り切る糸で入力が travel まで届かない時、届く量だけを印と文に刷る（刷った量を押せない紙にしない）
+yk = {**P, "kind": "yakko"}
+ry = t.motion(yk)
+assert ry["reach"] < P["travel"] - 1, ry  # 糸は約 10.6mm しか縮まない
+assert not any(f"{P['travel']:g}mm" in s for s in t.steps(yk)) and any(f"{ry['reach']:.0f}mm" in s for s in t.steps(yk)), t.steps(yk)
+hs = {**P, "kind": "hashigo"}
+rh = t.motion(hs)
+assert rh["reach"] < P["travel"] - 1, rh  # 机に当たる所までしか押せない
+ticks = [it for pt in t.parts(hs) for it in pt.art if it.get("mark") == "travel"]
+assert abs(math.dist(ticks[0]["at"], ticks[1]["at"]) - rh["reach"]) < 1e-6 and not any(f"{P['travel']:g}mm" in s for s in t.steps(hs))
+# 届く量が小さすぎて振れが足りなければ、今までどおり落ちる
+assert t.motion({**P, "kind": "sumo"})["reach"] == P["travel"]
+
+# 2 回目の見直し 2: 斜めの棒の両端の穴が、組んだ姿で水車の手の穴と犬の尾の穴に重なる
+pcs, mk = t.assembly({**P, "kind": "karakuri"})
+by = {pc["part"].key: pc for pc in pcs}
+rod_holes = [t.to_asm(by["rod"], (x, y)) for x, y, _ in by["rod"]["part"].holes]
+dog_tail = t.to_asm(by["dog"], by["dog"]["part"].holes[1][:2])
+wheel_hand = t.to_asm(by["wheel"], by["wheel"]["part"].holes[1][:2])
+assert math.dist(rod_holes[0], wheel_hand) < 1e-6 and math.dist(rod_holes[1], dog_tail) < 1e-6, (rod_holes, dog_tail, wheel_hand)
+
+# 2 回目の見直し 3: 相撲の B は棒の溝の 1 本のピンだけでは回って滑るので、蹴る間は B の立つ足を持つ（床はそれを前提に腰を固定の軸と見る）
+sm = {**P, "kind": "sumo"}
+assert any(it.get("mark") == "hold" for q in t.parts(sm) if q.key == "wrestlerb" for it in q.art)
+assert any("B の立つ足" in s and "持つ" in s for s in t.steps(sm)), t.steps(sm)
 print("ok")
