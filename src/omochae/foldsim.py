@@ -11,6 +11,7 @@
 """
 import argparse
 import pathlib
+import re
 import shutil
 import sys
 import tempfile
@@ -23,7 +24,7 @@ COLORS = {"outline": "#000000", "mountain": "#ff0000", "valley": "#0000ff"}
 
 
 def part_svg(part):
-    """1 つの部品を SVG の文字列にする。座標は mm のまま。穴と糊代は折りに関わらないので書かない。"""
+    """1 つの部品を SVG の文字列にする。座標は mm のまま。外形・中を切り抜く穴（cuts）・山折り・谷折りを書く。軸の穴と糊代は折りに関わらないので書かない。"""
     xs = [x for x, _ in part.outline]
     ys = [y for _, y in part.outline]
     x0, y0 = min(xs), min(ys)
@@ -47,25 +48,40 @@ def part_svg(part):
             f"{body}</svg>\n")
 
 
+def _old_outputs(out, head):
+    """前の回に同じ頭で書いた SVG。名前は <頭>_<部品の key>_foldsim.svg で、key は英小文字だけ（試験で見る）。
+    glob の模様にすると、--name の [ や * が模様として読まれ、別の頭の SVG まで当たった（レビューの指摘）ので、名前を正規表現で比べる。
+    """
+    if not out.exists():
+        return []
+    pat = re.compile(re.escape(head) + r"_[a-z]+_foldsim\.svg")
+    return [f for f in out.iterdir() if f.is_file() and pat.fullmatch(f.name)]
+
+
 def export(template_id, params, source, out_dir, name=None, parts=None, title=None, inject=None):
     """雛形と寸法から部品を作り、検査を通ったら、折りのある部品を 1 つずつ SVG にする。Returns (書いたファイル, 検査の失敗)。
 
-    parts は書き出す部品の key の組（None なら折りのある部品を全部。知らない key は ValueError）。name はファイル名の頭
-    （既定は雛形の名前）。title と inject は場面の物で、python -m omochae と同じ検査にするために compose へ渡す。
-    前の回の同じ頭の SVG（<頭>_*_foldsim.svg）は、検査に落ちた時も書き出した時も残さない（部品を減らした回と混ざらないように）。
-    書き出しは仮の置き場で作り、全部書けてから移す。途中で止まった時は前の回の物に触らない。
+    parts は書き出す部品の key の組（None なら折りのある部品を全部）。知らない key は、検査より先に ValueError（何も消さない）。
+    name はファイル名の頭（既定は雛形の名前）。title と inject は場面の物で、python -m omochae と同じ検査にするために compose へ渡す。
+    前の回の同じ頭の SVG は、検査に落ちた時も書き出した時も残さない（部品を減らした回と混ざらないように）。
+    書き出しは仮の置き場で作り、全部書けてから、新しい物を先に正しい名前へ移し、その後で今回に無い前の物を消す
+    （前の物を先に消すと、移す途中で止まった時に前の物を失った）。限り: 移すのは 1 つずつなので、途中で止まると新旧が混ざりうる。
     """
+    tpl = TEMPLATES[template_id]
     _, layout, failures = compose(template_id, params, source, title=title, inject=inject or {})
+    if parts is not None:
+        try:
+            keys = {q.key for q in (layout["parts"] if layout else tpl.parts({**tpl.DEFAULTS, **params}))}
+        except Exception:  # 範囲の外の寸法で部品が作れない時は、key を確かめられないので検査の失敗だけを返す
+            keys = None
+        if keys is not None and not set(parts) <= keys:
+            raise ValueError(f"知らない部品: {'・'.join(sorted(set(parts) - keys))}（この雛形の部品は {'・'.join(sorted(keys))}）")
     out = pathlib.Path(out_dir)
     head = name or template_id
-    old = lambda: list(out.glob(f"{head}_*_foldsim.svg")) if out.exists() else []
     if failures:
-        for f in old():
+        for f in _old_outputs(out, head):
             f.unlink()
         return [], failures
-    keys = {q.key for q in layout["parts"]}
-    if parts is not None and not set(parts) <= keys:
-        raise ValueError(f"知らない部品: {'・'.join(sorted(set(parts) - keys))}（この雛形の部品は {'・'.join(sorted(keys))}）")
     out.mkdir(parents=True, exist_ok=True)
     work = pathlib.Path(tempfile.mkdtemp(prefix=".foldsim-", dir=out))
     try:
@@ -76,9 +92,11 @@ def export(template_id, params, source, out_dir, name=None, parts=None, title=No
                 f = work / f"{head}_{q.key}_foldsim.svg"
                 f.write_text(part_svg(q), encoding="utf-8")
                 made.append(f)
-        for f in old():
-            f.unlink()
+        old = _old_outputs(out, head)
         written = [f.replace(out / f.name) for f in made]
+        for f in old:
+            if f.name not in {w.name for w in written}:
+                f.unlink()
     finally:
         shutil.rmtree(work, ignore_errors=True)
     return written, []

@@ -59,6 +59,24 @@ assert sorted(p.name for p in pathlib.Path(d).iterdir()) == ["slider_fan_fan_fol
 # 場面の inject も検査に渡す（python -m omochae と同じ判定）
 _, failures = export("slider_fan", {}, src, tempfile.mkdtemp(), inject={"move_part": {"name": "base", "x": 10, "y": 60}})
 assert "F5.overlap" in [f.floor for f in failures]
+# 前の回の SVG を名前で選ぶので、部品の key は英小文字だけにしておく
+import re
+from omochae.compose import TEMPLATES
+for tpl in TEMPLATES.values():
+    for form in {"slider_fan": slider_fan.PUSH_PARTS, "pivot_counterweight": pivot_counterweight.MOUNTS}[tpl.ID]:
+        assert all(re.fullmatch(r"[a-z]+", q.key) for q in tpl.parts({**tpl.DEFAULTS, tpl.FORM: form})), (tpl.ID, form)
+# --name は模様として読まない（[ab] で頭 a・b の SVG を消さない）
+d = tempfile.mkdtemp()
+for n in ("a", "b"):
+    export("slider_fan", tab, src, d, name=n)
+export("slider_fan", {"push_part": "tab", "fold_height": 50}, src, d, name="[ab]")
+assert len(list(pathlib.Path(d).iterdir())) == 8
+# 寸法が落ちる時も、知らない部品の key を先に落とし、前の SVG を消さない
+try:
+    export("slider_fan", {"push_part": "tab", "fold_height": 50}, src, d, name="a", parts={"fna"})
+    raise AssertionError("知らない部品を通した")
+except ValueError:
+    assert len(list(pathlib.Path(d).iterdir())) == 8
 # 知らない部品の key は落とす
 try:
     export("slider_fan", tab, src, tempfile.mkdtemp(), parts={"fan", "fna"})
