@@ -46,7 +46,9 @@ assert [f.where for f in t.check_physics(q)] == ["舟の壁"]
 # 狭く深い厚紙の舟は G が高く戻らない
 deep = {**P, "tray_length": 40, "tray_width": 22, "wall_height": 35, "figure_height": 30, "leaf_radius": 10, "ballast_g": 0, "paper_gsm": 300}
 fs = t.check_physics(deep)
-assert [(f.floor, f.where) for f in fs] == [("F5.float", "重心")], fs
+# 人形が壁の間に入るかを見るようになってから（五度目の検品）、GM が落ちる狭い舟では人形も壁に当たる。範囲の中を乱数で 4000 組
+# 試しても、GM だけで落ちる組は無かった（人形が入る幅 29mm ほどからは、紙の舟の BM が十分に大きい）。両方で落ちる事を見る
+assert {(f.floor, f.where) for f in fs} == {("F5.float", "重心"), ("F5.float", "人形")}, fs
 # 粘土は G を下げるが、重くなって V が増え BM ＝ I/V も下がる。粘土の厚みを実の面積から出すと、この狭い舟では GM は上がらない
 # （前は粘土の重心を 3mm に決め打ちし、GM が上がると見ていた）。粘土で直すより、舟を広くする方が効く
 light = {**deep, "ballast_g": 1, "clay_side": 6}
@@ -92,8 +94,10 @@ my = sum(Polygon(a["pts"]).centroid.y for a in clay) / 4
 assert abs(mx - cx) < 1e-6 and abs(my - cy) < 1e-6
 assert not marks(t.parts({**P, "ballast_g": 0})[0], "ballast")  # 粘土を使わない時は刷らない
 (foot,) = marks(leaf, "figure")
-fx = [x for x, _ in foot["pts"]]
-assert abs((min(fx) + max(fx)) / 2 - P["leaf_radius"]) < 1e-6 and abs(max(fx) - min(fx) - t.foot_width(P)) < 1e-6
+# 足の印は葉の矢印と直角（葉の y の向き）。人形は舟の幅の向きに立つ（五度目の検品の指摘で向きを決めた）
+fy = [y for _, y in foot["pts"]]
+assert {x for x, _ in foot["pts"]} == {P["leaf_radius"]}
+assert abs((min(fy) + max(fy)) / 2 - P["leaf_radius"]) < 1e-6 and abs(max(fy) - min(fy) - t.foot_width(P)) < 1e-6
 cups = marks(t.parts(C)[0], "cups")
 assert len(cups) == 2
 st = " ".join(t.steps(C))
@@ -135,7 +139,7 @@ fw = t.foot_width(P)
 r_min = max(fw / 2, math.hypot(fw / 2 - 1.5, t.TAB))  # 台形の角のうち、葉の中心から一番遠い所
 assert any(f.where == "人形" for f in t.check_physics({**P, "leaf_radius": math.floor(r_min * 10) / 10}))
 # 小さな人形では糊代の奥行きが効く。足の幅だけ（幅 ≦ 葉の直径の 9 割）で見ると、この寸法は通っていた
-small = {**P, "figure_height": 30, "leaf_radius": 8, "tray_width": 24, "tray_length": 60, "ballast_g": 0}
+small = {**P, "figure_height": 30, "leaf_radius": 8, "tray_width": 32, "tray_length": 60, "ballast_g": 0}
 assert t.foot_width(small) <= 2 * 8 * 0.9 and [f.where for f in t.check_physics(small)] == ["人形"]
 # 指摘 4: 水の注意は守れる形で言う（こぼしたら拭く・使った水は捨てる・中の刷った色がにじむ・出したら乾かす）
 st = " ".join(t.steps(P))
@@ -150,7 +154,8 @@ def floors(q):
 
 
 # 指摘 1: 顔の点が帽子と胴の間で外形の外に出て、高い人形（70 から）が F5.image_box で落ちていた。顔も外形に入れる
-assert floors({**P, "figure_height": 70}) == [] and floors({**P, "figure_height": 90}) == ["F5.float"]
+# 高い人形は壁の間に入るよう舟を広げて見る（五度目の検品から、壁の上端より下の人形の幅を見る）
+assert floors({**P, "figure_height": 70, "tray_width": 70}) == [] and floors({**P, "figure_height": 90}) == ["F5.float"]
 # 指摘 2: 高い風受けを葉の下に積むと説明の文に重なった。人形の段は 1 段目に置いた物の一番下から始める
 assert floors({**P, "vane": "cups", "wall_height": 8, "glue": 5, "cup_width": 12, "cup_height": 60}) == []
 # 指摘 3: 広い舟で葉が舟の右に入らず印字域を出た。入らない物は舟の下へ送る
@@ -176,4 +181,26 @@ assert (2 * (L + W) * t.TAPE_FOLD * P["tape_gsm"] / 1e6, h - t.TAPE_FOLD / 2) in
 assert any(f"{t.TAPE_FOLD}mm" in s for s in t.steps(P))
 # 葉より広い足の印は葉の内に留め、底に収まらない印は刷らない（F5.float が落とす寸法で、絵の検査を重ねて鳴らさない）
 assert floors({**P, "tray_length": 110, "leaf_radius": 30}) == ["F5.float"]
+
+# 五度目の検品の指摘 1: 人形の向きを決め、向きに沿って、壁の上端より下の人形の外形が底の内に入るか、風受けの高さより下の外形が
+# 風受けの足跡に当たらないかを見る。向きは葉の矢印（舟の長い向き）と舟の底の刻みで刷り、組み方の文で言う
+(arrow,) = marks(leaf, "arrow")
+ax = [x for x, _ in arrow["pts"]]
+assert max(ax) > P["leaf_radius"] and len({round(y, 6) for _, y in arrow["pts"][:2]}) == 1  # 矢の軸は葉の +x（右）へ
+(tick,) = marks(tray, "leafdir")
+assert min(x for x, _ in tick["pts"]) >= h + L / 2 + P["leaf_radius"] - 1e-6  # 丸い印の右の外に刻む
+st = " ".join(t.steps(C))
+assert "矢印" in st and "刻み" in st and "2 の数字の側" not in st
+# 人形の外形の半幅（足の真ん中から、左右の遠い方）。高さで切るので、低い所ほど狭い
+assert t.figure_half_width(P, 1) < t.figure_half_width(P, P["wall_height"]) <= t.figure_half_width(P, P["figure_height"])  # 一番広いのは低い所の刃
+# 既定の風受けつきで、人形は風受けにも壁にも当たらない（舟の長い向きに立てると、槍の下の刃が左の風受けに 1.4mm 入っていた）
+fp = t.figure_plan(C, C["cup_height"])
+assert not any(fp.intersects(c) for c in t.floor_marks(C)["cups"])
+# 幅の狭い舟では、壁の上端より下の袴と刃が壁に当たる
+narrowfig = {**P, "tray_width": 44}
+assert t.figure_half_width(narrowfig, narrowfig["wall_height"]) > narrowfig["tray_width"] / 2 - t.WALL_GAP
+assert [f.where for f in t.check_physics(narrowfig)] == ["人形"], t.check_physics(narrowfig)
+# 検品が挙げた、どの向きでも壁に当たるのに通っていた寸法（負の場面 float_neg_figure と同じ）
+wallhit = {**P, "tray_length": 71, "tray_width": 68, "wall_height": 23, "figure_height": 81, "leaf_radius": 22, "ballast_g": 4}
+assert [f.where for f in t.check_physics(wallhit)] == ["人形"]
 print("ok")
