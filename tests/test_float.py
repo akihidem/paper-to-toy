@@ -1,0 +1,65 @@
+"""浮き人形の床（F5.float）の式の要所を数点で確かめる。浮心・重心・BM は言葉で決めると間違えやすいので、ここで数える。"""
+import math
+
+from shapely.geometry import Polygon
+
+from omochae.compose import TEMPLATES
+from omochae.templates import float as t  # module の名が float なので、組み込みの float を隠さないよう別名で読む
+
+P = dict(t.DEFAULTS)
+assert TEMPLATES["float"] is t, "templates/ に置けば登録される"
+for v in t.VANES:
+    assert t.check_physics({**P, "vane": v}) == [] and not t.check_range({**P, "vane": v}), v
+
+# 質量は刷る部品の面積 × 面密度 ＋ テープ ＋ 粘土。部品の面積から数え直して合わせる
+by = {q.key: q for q in t.parts(P)}
+L, W, h = P["tray_length"], P["tray_width"], P["wall_height"]
+paper = sum(Polygon(q.outline).area for q in by.values()) * P["paper_gsm"] / 1e6
+tape = (L * W + 2 * (L + W) * h) * P["tape_gsm"] / 1e6
+hy = t.hydro(P)
+assert abs(hy["m"] - (paper + tape + P["ballast_g"])) < 1e-9, hy
+# 喫水 ＝ 体積 ÷ 底の面積、1g は 1000mm³
+assert abs(hy["d"] - hy["m"] * 1000 / (L * W)) < 1e-9 and abs(hy["f"] - (h - hy["d"])) < 1e-9
+# BM ＝ I/V（狭い向き: 長さ × 幅³ / 12）、KB ＝ d/2
+assert abs(hy["BM"] - L * W ** 3 / 12 / hy["V"]) < 1e-9 and abs(hy["KB"] - hy["d"] / 2) < 1e-9
+# 長さと幅を入れ替えても、倒れやすい向きで見るので BM は同じ
+assert abs(t.hydro({**P, "tray_length": W, "tray_width": L})["BM"] - hy["BM"]) < 1e-9
+
+# 人形が高いほど G が上がり、GM が下がる。重りは G を下げる
+assert t.hydro({**P, "figure_height": 90})["KG"] > hy["KG"]
+assert t.hydro({**P, "ballast_g": 0})["KG"] > hy["KG"]
+
+# 重りを積むと沈み、壁が低いと余裕が足りず落ちる
+fs = t.check_physics({**P, "wall_height": 10, "ballast_g": 30})
+assert [(f.floor, f.where) for f in fs] == [("F5.float", "舟の壁")], fs
+# 余裕が下限を越えても、狭い舟では少し傾いただけでふちが水に着く
+q = {**P, "wall_height": 12, "ballast_g": 32}
+assert t.hydro(q)["f"] >= t.FREEBOARD_MIN and t.hydro(q)["heel"] < t.MIN_HEEL
+assert [f.where for f in t.check_physics(q)] == ["舟の壁"]
+
+# 狭く深い厚紙の舟は G が高く戻らない。粘土で G を下げると GM は上がる
+deep = {**P, "tray_length": 40, "tray_width": 20, "wall_height": 35, "figure_height": 34, "leaf_radius": 9, "ballast_g": 0, "paper_gsm": 300}
+fs = t.check_physics(deep)
+assert [(f.floor, f.where) for f in fs] == [("F5.float", "重心")], fs
+assert t.hydro({**deep, "ballast_g": 4})["GM"] > t.hydro(deep)["GM"]
+
+# 葉は底に入り、人形の足の台は葉に乗る
+assert any(f.where == "葉" for f in t.check_physics({**P, "leaf_radius": 30}))
+assert any(f.where == "人形" for f in t.check_physics({**P, "leaf_radius": 15}))
+# 糊代が壁より広いと角が閉じない
+assert any(f.where == "舟の糊代" for f in t.check_physics({**P, "wall_height": 9, "glue": 8}))
+
+# 風受け: 半円に丸めると紙の幅が π × 半径。壁の上に出ないと落ち、底に入らないと落ちる
+C = {**P, "vane": "cups"}
+assert abs(t.cup_radius(C) * math.pi - C["cup_width"]) < 1e-9
+assert any(f.where == "風受け" and "壁の上" in f.message for f in t.check_physics({**C, "cup_height": 25}))
+assert any(f.where == "風受け" and "底に入らない" in f.message for f in t.check_physics({**C, "cup_width": 40}))
+# 風受けは cups の形だけにあり、部品表にも載る。部品表の番号と key が刷る部品と合う
+assert {"cupa", "cupb"} <= set(by_c := {q.key for q in t.parts(C)}) and "cupa" not in by
+rows = {r["number"]: r["key"] for r in t.bom(C)}
+assert all(rows[q.number] == q.key for q in t.parts(C)) and {"tape", "ballast"} <= set(rows.values())
+
+# 組み方の文は水の注意を先に言い、紙が濡れると弱る事を言う
+assert t.steps(P)[0] == "水を使う時は大人と一緒に・紙は濡れると弱る"
+assert "吸水を入れない" in t.__doc__
+print("ok")
