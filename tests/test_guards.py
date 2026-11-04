@@ -179,4 +179,11 @@ assert any(f"2 頭を {pc.HEAD_OVERLAP}mm 重ねて貼る" in s for s in pc.step
 strip = next(q for q in pc.parts(hang) if q.key == "strip")
 assert strip.height - strip.holes[0][1] - pc.HEAD_OVERLAP == pc.axle_to_head_top(hang)
 
+# 9. 雛形は templates/ に置くだけで登録される（雛形を並行して足す担当が、共有の登録の行に触らずに済むように）。ID を持つ module は漏れなく載る
+import pkgutil
+import omochae.templates as tdir
+mods = {i.name for i in pkgutil.iter_modules(tdir.__path__)}
+assert {"slider_fan", "pivot_counterweight"} <= set(TEMPLATES), sorted(TEMPLATES)
+assert {t.__name__.rsplit(".", 1)[1] for t in TEMPLATES.values()} == {m for m in mods if hasattr(__import__(f"omochae.templates.{m}", fromlist=["ID"]), "ID")}
+
 print("ok")

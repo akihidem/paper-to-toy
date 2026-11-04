@@ -1,12 +1,32 @@
 """寸法から頁の配置を作る。描画はしない（検査だけを速く回せるようにするため。道具 check_params もここを使う）。"""
+import importlib
+import pkgutil
+
 from .floors import check_art, check_bom, check_holes, check_layout
 from .marks import mark_lines
 from .model import TextBox
 from .page import PAGES
-from .templates import pivot_counterweight, slider_fan
 from .textfit import text_width, wrap
 
-TEMPLATES = {slider_fan.ID: slider_fan, pivot_counterweight.ID: pivot_counterweight}
+
+def _discover():
+    """templates/ の下で ID を持つ module を全部、雛形として登録する。
+    手で並べた辞書にすると、雛形を並行して足す担当がみな同じ行を書き換え、合流のたびにぶつかる。置けば登録される形にして、
+    雛形の担当が共有のファイルに触らずに済むようにする。名前の順に読むので、登録の順は毎回同じ。ID が重なれば黙って上書きせずに落とす。
+    """
+    from . import templates
+    found = {}
+    for info in sorted(pkgutil.iter_modules(templates.__path__), key=lambda i: i.name):
+        mod = importlib.import_module(f"{templates.__name__}.{info.name}")
+        if not hasattr(mod, "ID"):
+            continue
+        if mod.ID in found:
+            raise RuntimeError(f"雛形の ID が重なる: {mod.ID}（{found[mod.ID].__name__} と {mod.__name__}）")
+        found[mod.ID] = mod
+    return found
+
+
+TEMPLATES = _discover()
 TITLE_SIZE, BODY_SIZE, LABEL_SIZE = 5.0, 3.0, 2.8
 LINE = 1.25  # 行送りの倍率。CJK の字面より少し広く取る
 GAP = 4.0
