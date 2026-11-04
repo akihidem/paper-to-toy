@@ -131,7 +131,8 @@ assert t.pull_turns(K) >= 1 and any(f.where == "棒" for f in t.check_physics({*
 bad = {**K, "k_radius": 24, "face_gap": 10, "wheel_r": 8, "bead_d": 14, "k_cord": 3}
 assert [f.where for f in t.check_physics(bad)] == ["糸"], [f.line() for f in t.check_physics(bad)]
 # 9. 引き切っても棒の北の端が北の壁の穴に HOLE_MARGIN 残る。回る数はこの引ける長さで数える
-assert t.rod_north_out(K) - t.pull_travel(K) >= t.HOLE_MARGIN
+#    （北に出す長さが引ける長さ＋余白か、は式そのものなので見ない。代わりに、棒が竹串の長さに収まるかを見る）
+assert t.rod_length(K) <= t.SKEWER_LEN
 assert abs(t.pull_turns(K) - t.pull_travel(K) / (math.pi * K["stick_d"])) < 1e-9
 assert nums(" ".join(t.steps(K)), r"北の壁から (\d+(?:\.\d+)?)mm 出す") == [round(t.rod_north_out(K))]
 # 10. 柄の太さの分、絡む長さは短い（柄の表まで √2·R − 柄の半径）
@@ -141,4 +142,20 @@ edge = {**K, "peg_height": 47}
 lo, hi, dz = t.kanko_window(edge)
 assert dz == t.STRIKE_ZONE * K["k_radius"] and hi is not None and abs(hi - lo) < 1e-9
 assert t.check_physics({**edge, "k_cord": lo}) == []
+# ---- 4 回目のレビューの指摘（2026-11-05）を押さえる行 ----
+# 12. 引く棒が竹串（SKEWER_LEN）より長くなる寸法は落とす（台が長いと、北に出す分も伸びる）
+bad = {**K, "base_length": 100, "face_gap": 14, "k_cord": 5.8}
+assert [f.where for f in t.check_physics(bad)] == ["棒"], [f.line() for f in t.check_physics(bad)]
+# 13. 端数の出る寸法でも、刷る 3 つの数（北に出す長さ・留め具の位置・棒の長さ）は 1 つの丸めた値から出て食い違わない。
+#     北に出す長さは切り上げるので、引き切っても余白が残る
+odd = {**K, "base_length": 79.6, "k_length": 43}
+st = " ".join(t.steps(odd))
+north = nums(st, r"北の壁から (\d+(?:\.\d+)?)mm 出す")[0]
+tabp = nums(st, r"棒の北の端から (\d+(?:\.\d+)?)mm")[0]
+rod = nums(next(r for r in t.bom(odd) if r["key"] == "rod")["material"], r"長さ (\d+(?:\.\d+)?)mm")[0]
+assert north == int(north) and north - t.pull_travel(odd) >= t.HOLE_MARGIN
+assert abs(tabp - (north + t.peg_pos(odd))) < 1e-9 and abs(rod - (north + odd["base_length"] + t.ROD_GRIP)) < 1e-9
+# 14. 玉が花弁の先にちょうど触れる糸も落とす（柄に絡む側と同じ厳しさ）
+eq = {**K, "k_cord": K["bead_d"] / 2 + (K["wheel_r"] - t.wheel_anchor(K))}
+assert any("花車に重なる" in f.message for f in t.check_physics(eq))
 print("ok")
