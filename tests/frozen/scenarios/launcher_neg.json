@@ -3,8 +3,7 @@
   "source_id": "NDL-1187053-R0000008-L-launcher",
   "params": {
     "form": "crossbow",
-    "spring_k": 80,
-    "draw": 40
+    "paper_t": 0.24
   },
   "inject": {},
   "expect": {

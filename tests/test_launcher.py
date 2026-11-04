@@ -8,16 +8,22 @@ assert TEMPLATES["launcher"] is t, "templates/ に置けば登録される"
 for p in (P, B):
     assert t.check_physics(p) == [] and not t.check_range(p), t.check_physics(p)
 
-# ためる力 ½kx²: 40N/m・30mm は 18mJ。k を倍にすると倍、引きを倍にすると 4 倍
-assert abs(t.energy_mj(P) - 18.0) < 1e-9
-assert abs(t.energy_mj({**P, "spring_k": 80}) - 36.0) < 1e-9 and abs(t.energy_mj({**P, "draw": 60}) - 72.0) < 1e-9
-# 上限ちょうどは通り、少しでも越えれば F5.launch のばねで落ちる（k = 2E/x²）
-k_cap = 2 * t.ENERGY_CAP_MJ / 1000 / (P["draw"] / 1000) ** 2
-assert t.check_physics({**P, "spring_k": k_cap - 1e-9}) == []  # 割り算の丸めの分だけ下げる
-fs = t.check_physics({**P, "spring_k": k_cap + 1})
+# k は作る物の寸法から: 梁 2 本・k₁ = 3·E_HIGH·I/L³。既定の弩は 64N/m・25mm で 20mJ
+k1 = 3 * t.E_HIGH * (P["arm_w"] * (t.LAYERS * P["paper_t"]) ** 3 / 12) / P["arm_len"] ** 3 * 1000
+assert abs(t.spring_k(P) - 2 * k1) < 1e-9 and abs(t.energy_mj(P) - 0.5 * 2 * k1 * 0.025 ** 2 * 1000) < 1e-9
+# 引きを倍にすると 4 倍、紙の厚さを倍にすると 8 倍（厚さの 3 乗）
+assert abs(t.energy_mj({**P, "draw": 50}) / t.energy_mj(P) - 4) < 1e-9 and abs(t.spring_k({**P, "paper_t": 0.4}) / t.spring_k(P) - 8) < 1e-9
+# 上限ちょうどの手前は通り、越えれば F5.launch のばねで落ちる（引く長さで探す: x = √(2E/k)）
+x_cap = (2 * t.ENERGY_CAP_MJ / 1000 / t.spring_k(P)) ** 0.5 * 1000
+assert t.check_physics({**P, "draw": x_cap - 1e-6}) == []
+fs = t.check_physics({**P, "draw": x_cap + 0.5})
 assert [(f.floor, f.where) for f in fs] == [("F5.launch", "ばね")], fs
-# 弓の形も同じ上限（輪ゴムの弦でも同じ式）
-assert any(f.where == "ばね" for f in t.check_physics({**B, "spring_k": 80, "draw": 40}))
+# 弓の形も同じ式で、弓の長さの半分を梁にする
+assert abs(t.spring_k(B) - 2 * k1 * (P["arm_len"] / (B["bow_span"] / 2)) ** 3) < 1e-9
+assert any(f.where == "ばね" for f in t.check_physics({**B, "paper_t": 0.35}))
+# 止めの条件の下がり: 重りの力 ÷ k₁。下がりが読めないほど硬い腕は落とす
+assert abs(t.tip_sag_min(P) - t.COIN_G / 1000 * 9.8 / k1 * 1000) < 1e-9
+assert any("確かめられない" in f.message for f in t.check_physics({**P, "arm_len": 30, "draw": 10}))
 
 # 玉の重さ ＝ 紙の面積 × 面密度。64mm 四方・150g/m² は 0.6144g
 assert abs(t.projectile_mass(P) - 64 * 64 * 150e-6) < 1e-12
@@ -41,7 +47,7 @@ assert any(f.where == "弓" for f in t.check_physics({**B, "arm_w": 7}))
 # 引き金の切れ込みの奥の残り・浅すぎる切れ込み・台の後ろの端までの余り
 assert any("奥に" in f.message for f in t.check_physics({**P, "notch_depth": 8}))
 assert any("浅く" in f.message for f in t.check_physics({**P, "notch_depth": 1}))
-assert any("後ろの端" in f.message for f in t.check_physics({**P, "stock_length": 70, "draw": 50, "spring_k": 10}))
+assert any("後ろの端" in f.message for f in t.check_physics({**P, "stock_length": 70, "draw": 50}))
 # 弦の溝と糊代の間
 assert any(f.where == "弦の溝" for f in t.check_physics({**P, "glue": 8}))
 
@@ -58,7 +64,7 @@ for p in (P, B):
     assert keys <= {r["key"] for r in rows}
     assert not any(w in r["material"] for r in rows for w in ("竹串", "楊枝", "豆"))
     assert any(t.SAFETY in s for s in t.steps(p))
-assert sum("輪ゴム" in r["material"] for r in t.bom(B)) == 1
+assert not any("輪ゴム" in r["material"] for p in (P, B) for r in t.bom(p))  # ばねは刷った紙だけ
 # 出典は形ごと（弩はコマ 8 左、弓と毛玉はコマ 29 左）。既定の出典は既定の形の物
 assert getattr(t, "SOURCES", {}) == {"crossbow": "NDL-1187053-R0000008-L-launcher", "bow": "NDL-1187053-R0000029-L-launcher"} and t.SOURCE == t.SOURCES[P["form"]]
 # 引く長さ x がためる力の上限を決めるので、引ける所の限りを紙に刷り、組み方の文で言う
@@ -71,4 +77,25 @@ assert stop is not None and any(it["kind"] == "line" and all(abs(y - (t.STOP_BAS
 assert "drawstop" in {r["key"] for r in t.bom(B)} and any("引き止めの帯" in s and "線" in s for s in t.steps(B))
 # 0.08J は確かめていない目安として書くだけで、決まり（規格）の値として書かない
 assert "目安" in t.__doc__ and "安全の決まり" not in t.__doc__
+# 2 回目の指摘の行: 弓のばねは刷った紙だけ（輪ゴムを使わない）、弩は引ける所が 1 つで止めの条件で確かめる、
+# 物差しの穴と床の範囲が合う、弓の真ん中の穴をあける、弦の糸が部品表にある、貼り重ねの 3 つの面を全部貼る、弩で引く長さを変えさせない
+from shapely.geometry import Polygon
+from shapely.ops import unary_union
+CHECKS = {
+ "H1 弓の k は作った物から": lambda: (not any("輪ゴム" in r["material"] for r in t.bom(B)) and "spring_k" not in t.DEFAULTS
+     and abs(t.spring_k(B) - 2 * 3 * t.E_HIGH * (P["arm_w"] * (t.LAYERS * P["paper_t"]) ** 3 / 12) / (B["bow_span"] / 2) ** 3 * 1000) < 1e-9
+     and t.energy_mj({**B, "paper_t": 0.3}) > t.energy_mj(B)),
+ "H2 弩の引きは 1 つで、測って止める": lambda: (not any("引く長さを減らす" in s for s in t.steps(P))
+     and any("使わない" in s and f"{t.tip_sag_min(P):.0f}mm" in s for s in t.steps(P))
+     and any("使わない" in s and f"{t.tip_sag_min(B):.0f}mm" in s for s in t.steps(B))),
+ "M 物差しの穴と閉じた範囲": lambda: (lambda s, b: any(f.where == "玉" for f in t.check_physics({**P, "ball_d": s}))
+     and any(f.where == "玉" for f in t.check_physics({**P, "ball_d": b})) and t.check_physics({**P, "ball_d": s + t.GAUGE_TOL}) == [])(*t.gauge_holes(P)),
+ "M 弓の真ん中の穴": lambda: any("真ん中の穴" in s and "あけ" in s for s in t.steps(B)),
+ "M 弓の弦の糸が部品表に": lambda: any(r["key"] == "string" and "糸" in r["material"] for r in t.bom(B)),
+ "M 貼り重ねの 3 つの面": lambda: (lambda a: abs(unary_union([Polygon(g) for g in a.glue]).area - a.width * a.height) < 1e-6)(next(q for q in t.parts(P) if q.key == "arma"))
+     and any("裏" in s and "貼" in s for s in t.steps(P)),
+ "L 弩で引く長さを変えさせない": lambda: not any("引く長さを変えて" in s for s in t.steps(P)) and "変える" not in t.measures(P)["predict"],
+}
+for name, check in CHECKS.items():
+    assert check(), name
 print("ok")
