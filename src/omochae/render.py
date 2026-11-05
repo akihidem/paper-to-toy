@@ -3,8 +3,9 @@ import io
 import pathlib
 import subprocess
 
-import cairosvg
+import cairocffi
 import drawsvg as dw
+from cairosvg.surface import PDFSurface
 from PIL import Image
 from shapely.geometry import LineString, Polygon
 
@@ -16,6 +17,9 @@ VALLEY, MOUNTAIN = "2,1", "3,1,0.6,1"
 # 組み立ての位置の印（貼る所・差す深さ・粘土の置き場）。切る線は黒の実線、折る線は黒の破線なので、印は赤茶の点の線にして、
 # 切るとも折るとも読まれないようにする（族の雛形で、実線の印が切られ、破線の印が折られうると、レビューで分かった）。凡例にも意味を書く。
 MARK_COLOR, MARK_DASH, MARK_SW = "#b0503c", "0.2,0.8", 0.35
+# PDF の作った時刻の欄に入れる決まった値。cairo は既定で今の時刻と時間帯を入れるので、同じ入力でも毎回ちがうファイルになり、
+# 作った機械の時計も紙に残る。始まりの時刻は「時刻を持たない」の慣例で、欄そのものは cairo が必ず書くので消せない。
+PDF_DATE = "1970-01-01T00:00:00Z"
 
 
 def _hatch(d, poly_pts, dx=0, dy=0):
@@ -103,13 +107,21 @@ def to_svg(layout):
     return d.as_svg()
 
 
+class _RepeatablePDF(PDFSurface):
+    # なぜ書いた後に直さないか: cairo 1.18 は時刻の欄を圧縮した塊に入れるので、書いた後のバイトでは置き換えられない。
+    def _create_surface(self, width, height):
+        surface, width, height = super()._create_surface(width, height)
+        surface.set_metadata(cairocffi.PDF_METADATA_CREATE_DATE, PDF_DATE)
+        return surface, width, height
+
+
 def write_all(layout, out_stem):
     stem = pathlib.Path(out_stem)
     stem.parent.mkdir(parents=True, exist_ok=True)
     svg = to_svg(layout)
     stem.with_suffix(".svg").write_text(svg, encoding="utf-8")
     pdf = stem.with_suffix(".pdf")
-    cairosvg.svg2pdf(bytestring=svg.encode("utf-8"), write_to=str(pdf))
+    _RepeatablePDF.convert(bytestring=svg.encode("utf-8"), write_to=str(pdf))
     return pdf
 
 
