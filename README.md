@@ -236,6 +236,18 @@ PYTHONPATH=src .venv/bin/python -m omochae.feedback summarize examples/reports  
 - 名前・連絡先は書かない。決まりの外の欄と、メールアドレス・電話番号・郵便番号の形は落とす（F12.pii）。
 - 集計は、困り事が当たる行き先（寸法・床・組み方の文）を出すだけで、型紙も寸法も変えない。直しは人が採る。
 
+報告の入口（本人の決定でエンジンの側に置く・Issue #22）:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m omochae.intake serve                  # http://127.0.0.1:8765/ （手元の機械だけ）
+PYTHONPATH=src .venv/bin/python -m omochae.intake review list            # 受付箱の ID
+PYTHONPATH=src .venv/bin/python -m omochae.intake review accept <ID>     # 端末で人が ID を打って受け入れる
+PYTHONPATH=src .venv/bin/python -m omochae.feedback summarize local/reports/accepted
+```
+
+- 受付箱と受け入れた物は local/reports/ に置く（git の外）。送った人の IP や端末の情報は残さない。写真は受け付けない。
+- 却下（`review reject <ID>`）は中身を消し、ID と決まった理由の語だけを残す。
+
 ## 折れる様子を Origami Simulator で見る
 
 型紙の折りのある部品を、[Origami Simulator](https://origamisimulator.org)（ブラウザーで折り線図を折って見せる道具）が読める SVG に書き出す。入口は型紙と同じ（`--scenario`、または `--template` と `--params`）で、書き出す前に型紙と同じ検査を通す（落ちれば 3）。

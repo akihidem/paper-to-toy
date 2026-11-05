@@ -43,7 +43,7 @@ FLOORS = {
     "pull_nod": "F5.pull_nod", "lever_link": "F5.link", "launcher": "F5.launch", "stand_figure": "F5.stand",
 }
 ALLOWED = {"template", "form", "params", "source_id", "built", "moved", "finish", "motion_notes", "finish_notes",
-           "problems", "reported_at"}
+           "problems", "reported_at", "reviewed_at"}  # reviewed_at は入口（omochae.intake）で人が受け入れた時刻
 PROBLEM_KEYS = {"kind", "step", "note"}
 # 出典の ID と時刻は決まった形だけを通す。自由な文を入れられる欄を、感想の 2 つと困り事の note に絞るため。
 SOURCE_ID = re.compile(r"NDL-\d+-R\d+-[LR](-[a-z_]+)?")
@@ -116,9 +116,10 @@ def check(r):
     sid = r.get("source_id")
     if sid is not None and not (isinstance(sid, str) and SOURCE_ID.fullmatch(sid)):
         out.append(Failure("F12.report", "source_id", "出典の ID の形（NDL-…）でない"))
-    at = r.get("reported_at")
-    if at is not None and not (isinstance(at, str) and REPORTED_AT.fullmatch(at)):
-        out.append(Failure("F12.report", "reported_at", "日付か ISO 8601 の時刻でない"))
+    for key in ("reported_at", "reviewed_at"):
+        at = r.get(key)
+        if at is not None and not (isinstance(at, str) and REPORTED_AT.fullmatch(at)):
+            out.append(Failure("F12.report", key, "日付か ISO 8601 の時刻でない"))
     if not isinstance(r.get("built"), bool):
         out.append(Failure("F12.report", "built", "組み上がったかを true か false で書く"))
     m = r.get("moved")

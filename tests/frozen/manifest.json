@@ -919,6 +919,7 @@
   "test_frozen_manifest",
   "test_guards",
   "test_init_python",
+  "test_intake",
   "test_launcher",
   "test_lever_link",
   "test_neg_exact_fails",
