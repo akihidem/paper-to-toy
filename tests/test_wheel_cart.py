@@ -143,7 +143,20 @@ for p in (MALLET, {**STICK, "stick_in": 0.5}):
     assert not any(t.text and "位置の印" in t.text for t in lay["texts"]), p["ride"]
 # 組み方の文は、印を刷った見た目（赤茶の点の線）で言う。刷らない時は折り目で止めると言う
 assert any("人形" in s and "赤茶の点の線" in s and "四角い印" in s for s in w.steps(RAT)), w.steps(RAT)
-assert any("割り箸の先" in s and "赤茶の点の線" in s for s in w.steps(STICK)), w.steps(STICK)
+assert any("割り箸の先" in s and "赤茶の点の線" in s and "切らない" in s for s in w.steps(STICK)), w.steps(STICK)
 st0 = w.steps({**STICK, "stick_in": 0.5})
-assert any("割り箸の先" in s and "折り目で止め" in s for s in st0) and not any("赤茶" in s for s in st0), st0
+assert any("割り箸の先" in s and "折り目（破線）で止めて貼る" in s for s in st0) and not any("赤茶" in s for s in st0), st0
+# 春駒の文で、二股の折り目を「頭の折り目」と言わない（頭は馬の頭の部品の名）
+assert not any("頭の折り目" in s for q in (STICK, {**STICK, "stick_in": 0.5}) for s in w.steps(q))
+# 鼠車の印は閉じた四角（3 辺だけの コ の字にしない）で、人形の耳の大きさ（幅は人形の 0.6 倍・奥行き 7mm）
+rider = next(it for it in next(x for x in w.parts(RAT) if x.key == "body").art if it.get("mark") == "rider")
+assert rider["closed"] is True and len(rider["pts"]) == 4, rider
+rx, ry = [x for x, _ in rider["pts"]], [y for _, y in rider["pts"]]
+assert abs(max(rx) - min(rx) - RAT["figure_w"] * 0.6) < 1e-9 and abs(max(ry) - min(ry) - 7) < 1e-9, rider
+# 印を刷る下限は、型紙（_fork）と組み方の文で同じ。下限のすぐ上では印を 2 本刷って文も印と言い、下限ちょうどでは刷らずに折り目と言う
+for d, n in ((w.STOP_MARK_MIN, 0), (w.STOP_MARK_MIN + 0.1, 2)):
+    q = {**STICK, "stick_in": d}
+    stops = [it for it in next(x for x in w.parts(q) if x.key == "fork").art if it.get("mark") == "stop"]
+    assert len(stops) == n, (d, len(stops))
+    assert any("赤茶の点の線" in s for s in w.steps(q)) == bool(n), (d, w.steps(q))
 print("ok")
