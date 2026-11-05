@@ -10,8 +10,9 @@
 - 寸法の式（check_physics・slot_span）でなく、刷る部品（外形・折り線・糊代・穴・溝の切り込み）から形を組む。式と絵がずれた時に見つけるため
 - 面は硬い板、折り線は蝶番と見る。紙の厚み・たわみ・摩擦は入れないので、通っても紙で動く保証ではない
 - 刷る紙・手順の文・凍結の床は変えない。入口は python -m omochae.fold3d だけで、型紙の検査（compose）には繋がない。
-  3D.close・3D.skewer は凍結の基準（tests/frozen/criteria.md）の床ではない（足すかは本人が決める）
+  3D.close・3D.skewer は凍結の基準（tests/frozen/criteria.md）の床（2026-11-05 の本人の決定で足した。試験は tests/test_fold3d.py）
 前提と限り:
+- 谷と山の向き（どちらの面が筒の外を向くか）は見ない。谷を全部山に替えても、鏡に映した角筒として閉じる
 - 外筒は折り線を刷らず、絵の色の境で折る（hide_folds）。ここで折るのは型紙の折り線のデータで、色の境がその上にある事は見ない
   （型紙の絵は、折り線と同じ位置から面ごとに塗っている）
 - 内筒は外筒の真ん中に、同じ面の並び（1 面目と 1 面目を向かい合わせ）で入れる。すき間の分だけ横にずれる遊びは見ない
@@ -147,8 +148,9 @@ def fold(part, deg=FOLD_DEG):
     """部品を折り線で面に分け、外形の始めの点を持つ面を動かさずに、折り線ごとに deg° 折る。谷は刷った面の側へ、山は裏へ折る。
 
     Returns 面の並び（list of Face）。親の面を子より先に並べる。最初の面が動かない面（筒なら 1 面目）。
-    外形が自分と交わる・長さ 0 の折り線がある・折り線が面をちょうど 2 つに分けていない・折り線でつながらない面がある時は
-    FoldError（黙って飛ばしたり、例外の 4 にしたりすると、崩れた型紙が「確かめられない」に紛れる）。
+    外形が自分と交わる・長さ 0 の折り線・外形の縁まで届かない折り線・ほかの折り線と重なる折り線・面をちょうど 2 つに分けない
+    折り線・折り線でつながらない面がある時は FoldError（黙って飛ばしたり、例外の 4 にしたりすると、崩れた型紙が
+    「確かめられない」に紛れる）。
     """
     lines = [(ln, 1) for ln in part.valley] + [(ln, -1) for ln in part.mountain]
     outline = Polygon(part.outline)
@@ -157,6 +159,14 @@ def fold(part, deg=FOLD_DEG):
     for n, ((a, b), _) in enumerate(lines, 1):
         if math.dist(a, b) <= EPS:
             raise FoldError(f"{n} 本目の折り線の長さが 0")
+        # 両端が外形の縁にある事。面を分ける時は線を少し伸ばすので、縁の手前で止まる折り線も分けてしまい、見逃した（レビューの指摘）
+        gap = max(outline.boundary.distance(Point(pt)) for pt in (a, b))
+        if gap > EPS:
+            raise FoldError(f"{n} 本目の折り線が外形の縁まで届いていない（端が {gap:.1f}mm 離れる）")
+        # 同じ所の 2 本目（谷と山を重ねた矛盾も）は、面の木で黙って飛ばされ、本数だけが増えて通った（レビューの指摘）
+        for m, ((c, d), _) in enumerate(lines[:n - 1], 1):
+            if LineString([a, b]).intersection(LineString([c, d])).length > EPS:
+                raise FoldError(f"{n} 本目の折り線が {m} 本目と重なる")
     polys = [outline]
     for (a, b), _ in lines:
         polys = [g for f in polys for g in split(f, _long(a, b)).geoms]
@@ -238,8 +248,10 @@ def _close(part, faces):
 
     相手は帯の反対の端の面に限る。どの面でもよいとすると、折り線の崩れで糊代が別の面に貼り付く形を通しうる（レビューの指摘）。
     継ぎ目を先に見る。折り線が 1 本ずれた時に、継ぎ目と糊代の重なりの 2 行が出ると、1 つの崩れが 2 つに見えるため。
+    谷と山の向きは見ない（どちらの面が筒の外を向くか）。谷を全部山に替えても、鏡に映した角筒として閉じる。文には実際の本数を言う。
     """
     where = part.label
+    kinds = "・".join(f"{name} {len(ls)} 本" for name, ls in (("谷折り", part.valley), ("山折り", part.mountain)) if ls)
     if not part.glue:
         return None, Failure("3D.close", where, "糊代の印が無く、角筒の継ぎ目を貼れない")
     glued = _glue_faces(part, faces)
@@ -254,7 +266,7 @@ def _close(part, faces):
         return None, Failure("3D.close", where, "糊代を折って貼る相手の面が無い")
     gap = _seam(part, faces[k], [g.at(pt) for pt in hinge])
     if gap > TOL:
-        return None, Failure("3D.close", where, f"型紙の折り線で 90° ずつ谷折りすると、継ぎ目が {gap:.1f}mm ずれ、角筒に閉じない")
+        return None, Failure("3D.close", where, f"型紙の折り線（{kinds}）で 90° ずつ折ると、継ぎ目が {gap:.1f}mm ずれ、角筒に閉じない")
     f = faces[k]
     mapped = [f.flat(g.at(pt)) for pt in g.poly.exterior.coords]
     lift = max(abs(z) for _, z in mapped)
@@ -262,8 +274,7 @@ def _close(part, faces):
     if lift > TOL or cover < GLUE_COVER:
         return None, Failure("3D.close", where, f"糊代が貼る相手の面に重ならない（浮き {lift:.1f}mm・重なり {cover:.0%}）")
     target = "1 面目" if k == 0 else "帯の反対の端の面"
-    folds = len(part.valley) + len(part.mountain)
-    return f"閉じる {where}: 折り線 {folds} 本を 90° ずつ谷折りすると角筒に閉じる（継ぎ目のずれ {gap:.2f}mm・糊代は{target}に {cover:.0%} 重なる）", None
+    return f"閉じる {where}: 型紙の折り線（{kinds}）を 90° ずつ折ると角筒に閉じる（継ぎ目のずれ {gap:.2f}mm・糊代は{target}に {cover:.0%} 重なる）", None
 
 
 def tube_axis(faces):
@@ -314,6 +325,9 @@ def _skewer(outer_part, outer, inner_part, inner, p):
     if fit <= EPS:
         return None, Failure("3D.skewer", inner_part.label, f"内筒の断面が外筒の断面に収まらず（すき間 {fit:.1f}mm）、外筒に入らない")
     d = _sub(centers[1], centers[0])
+    if math.sqrt(_dot(d, d)) <= EPS:
+        # 2 つの穴が同じ所にあると竹串の向きが決まらない。先へ進むと 0 で割って 4 になった（レビューの指摘）
+        return None, Failure("3D.skewer", "竹串", "2 つの穴が同じ所にあり、竹串の向きが決まらない")
     tilt = abs(_dot(d, up_i))
     if tilt > TOL:
         return None, Failure("3D.skewer", "竹串", f"2 つの穴の高さが {tilt:.1f}mm 違い、竹串が傾く（溝の中で引っかかる）")

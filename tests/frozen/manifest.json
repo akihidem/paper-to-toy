@@ -1,5 +1,5 @@
 {
- "criteria.md": "d8ebed11cc3d8cc11afc4760ad2af82167158cdbb52f635baf7fe8ac62cf6658",
+ "criteria.md": "add8a2e19e603f6d9c3c7b3dda76a844ae614333c8ab126f6758b9fab7c42168",
  "scenarios": {
   "balance_neg.json": {
    "floors": [
@@ -1125,6 +1125,7 @@
   "test_fan_model",
   "test_feedback",
   "test_float",
+  "test_fold3d",
   "test_foldsim",
   "test_frozen_manifest",
   "test_guards",
