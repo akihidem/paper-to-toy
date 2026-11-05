@@ -32,7 +32,9 @@ def ops(parts, p):
     push は押し上げる行程（3D.skewer が行程の全部で竹串が溝を通る事を見る）。
     """
     by = {q.key: q for q in parts}
-    outer, inner, fan = by["tube"], by["pusher"], by["fan"]
+    outer, inner = by["tube"], by["pusher"]
+    # 扇は手順 13 の文に名を出すだけ。外筒と内筒だけを渡しても呼べるようにする（3D の確かめは扇の部品を要らない）
+    fan = by["fan"].label if "fan" in by else "扇"
     w1, w2 = fold_words(outer), fold_words(inner)
     particle = "も" if w1 == w2 else "は"
     return [
@@ -41,5 +43,5 @@ def ops(parts, p):
         ("thread", f"竹串を {inner.label}の {len(inner.holes)} つの穴に通す"),
         ("insert", f"{inner.name}を {outer.label}に入れ、竹串の端を溝から出す"),
         # 押し上げる量は、3D.skewer が竹串の行程として確かめる長さと同じ（静かな時から押し上げ切るまで）
-        ("push", f"竹串の端を溝に沿って上へ {p['push_amount']:g}mm 押し上げると、{fan.label}が {outer.label}の口から出て、蛇腹が開く"),
+        ("push", f"竹串の端を溝に沿って上へ {p['push_amount']:g}mm 押し上げると、{fan}が {outer.label}の口から出て、蛇腹が開く"),
     ]

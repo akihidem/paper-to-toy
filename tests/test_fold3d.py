@@ -39,8 +39,13 @@ pc, p = built(TAB)
 notes, fails = fold3d.check(list(pc.values()), p)
 assert not fails, [f.line() for f in fails]
 # 所見の頭には、確かめた操作が組み方の手順の何番かを添える（組んだ過程と手順書を番号で結ぶ。手順の文は同じ操作から作る）
-heads = ["閉じる 1 外筒（手順 3）: ", "外向き 1 外筒（手順 3）: ", "閉じる 2 内筒（手順 5）: ", "並ぶ 竹串（手順 6・12・13）: "]
-assert len(notes) == 4 and all(n.startswith(h) for n, h in zip(notes, heads)), notes
+heads = ["閉じる 1 外筒（手順 3）: ", "外向き 1 外筒（手順 3）: ", "閉じる 2 内筒（手順 5）: ", "並ぶ 竹串（手順 6・12）: ",
+         "押し上げる 竹串（手順 13）: "]
+assert len(notes) == 5 and all(n.startswith(h) for n, h in zip(notes, heads)), notes
+# 13 は、竹串の行程までを 3D で見た事と、扇が開く所はまだ 3D で組んでいない事を、はっきり言う（確かめたように見せない）
+assert "69mm の行程" in notes[4] and "まだ 3D で組んでいない" in notes[4], notes[4]
+# 手順の番号を添えるのに扇などの部品は要らない。外筒と内筒だけを渡しても確かめられる
+assert not fold3d.check([pc["tube"], pc["pusher"]], p)[1]
 # 外筒は色の面を外にする山折り（見える面）。内筒は破線を刷る谷折りのまま（隠れる部品）
 assert "山折り 4 本" in notes[0] and "谷折り 4 本" in notes[2] and all("糊代は1 面目に" in notes[i] for i in (0, 2)), notes
 
@@ -206,6 +211,10 @@ BEFORE = ["刷った物差しに定規を当て、10cm か確かめる", "まず
           "4 扇の真ん中の足を、糊代の境の破線で折り、足の糊代を 3 台の印に貼る", "5 像の足を 3 台に貼る", "内筒を 1 外筒に入れ、竹串の端を溝から出す"]
 assert st[:12] == BEFORE and len(st) == 13, st
 assert [st[i - 1] for i in (3, 5, 6, 12, 13)] == [made[k] for k in ("fold_outer", "fold_inner", "thread", "insert", "push")], st
+# 操作の種類から手順の番号を引ける（文の突き合わせでなく、雛形が文と種類を 1 つの並びで持つ）
+assert slider_fan.step_ops(p) == {"fold_outer": 3, "fold_inner": 5, "thread": 6, "insert": 12, "push": 13}
+assert slider_fan.step_ops({**p, "hub": "rim"}) == {"fold_outer": 3, "fold_inner": 5, "thread": 6, "insert": 10, "push": 11}
+assert slider_fan.step_ops({**slider_fan.DEFAULTS, "push_part": "tube", "pusher_height": 84}) == {}
 # 本人の決定の手順 2 の文が、データから一字も違わずにできる（外筒と折り方が違うので「は」）
 assert made["fold_inner"] == "2 内筒は破線で谷折りし、糊代で貼って角筒にする", made
 assert made["push"] == f"竹串の端を溝に沿って上へ {p['push_amount']:g}mm 押し上げると、4 扇が 1 外筒の口から出て、蛇腹が開く", made
@@ -233,7 +242,7 @@ def cli3d(*args, env=ENV):
 
 
 r = cli3d("--scenario", str(ROOT / "examples/fan_tab.json"))
-assert r.returncode == 0 and "並ぶ 竹串（手順 6・12・13）: " in r.stdout and not r.stderr, (r.returncode, r.stdout, r.stderr)
+assert r.returncode == 0 and "並ぶ 竹串（手順 6・12）: " in r.stdout and "押し上げる 竹串（手順 13）: " in r.stdout and not r.stderr, (r.returncode, r.stdout, r.stderr)
 r = cli3d("--scenario", str(ROOT / "tests/frozen/scenarios/neg_overlap.json"))
 assert r.returncode == 3 and "F5.overlap" in r.stderr, r.stderr
 with tempfile.TemporaryDirectory() as d:

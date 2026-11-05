@@ -34,7 +34,6 @@ from dataclasses import dataclass
 from .__main__ import Parser, load_source, scenario_from_args
 from .compose import TEMPLATES, compose
 from .model import Failure, ToolMissing
-from .ops3d import ops as assembly_ops
 
 # ここだけが使う shapely の部分も、読めなければ 4 にする。読み込みは main の囲いより前に走るので、
 # 囲わないとトレースバックの 1 になる（__main__ の囲いと同じ考え。レビューの指摘）。
@@ -431,13 +430,12 @@ def _skewer(outer_part, outer, inner_part, inner, p):
             f"押し上げ切った時 {c_push:.2f}mm{stop}）"), None
 
 
-def _step_numbers(parts, p):
-    """3D の操作の種類ごとの、手順の番号（雛形の組み方の何番目か）。手順の文は同じ操作から作る（omochae.ops3d）ので、文で引ける。
+def _step_numbers(p):
+    """3D の操作の種類ごとの、手順の番号（雛形の組み方の何番目か）。雛形が、手順の文と操作の種類を 1 つの並びで持つ（step_ops）。
 
-    崩した部品（負の対照）から作った文は、雛形の手順に無いので番号が付かない（所見に番号を出さないだけで、確かめは変わらない）。
+    文を突き合わせて引くと、文の小さな直しで黙って外れた（レビューの指摘）。扇などの部品も要らない。
     """
-    st = TEMPLATES["slider_fan"].steps(p)
-    return {kind: st.index(text) + 1 for kind, text in assembly_ops(parts, p) if text in st}
+    return TEMPLATES["slider_fan"].step_ops(p)
 
 
 def _tag(note, nums, *kinds):
@@ -455,7 +453,7 @@ def check(parts, p):
     if OUTER not in by or INNER not in by:
         raise ToolMissing("外筒と内筒が無い（最小の 1 本は、御来迎 つまみの形だけを組む）")
     notes, failures, faced, folded = [], [], [], {}
-    nums = _step_numbers(parts, p)
+    nums = _step_numbers(p)
     for q in (by[OUTER], by[INNER]):
         try:
             folded[q.key] = fold(q)
@@ -478,7 +476,13 @@ def check(parts, p):
         return notes, failures + faced
     # 色の面の向きは竹串の形に効かない（鏡に映した筒でも穴と溝は並ぶ）ので、3D.face で落ちても竹串は見る
     note, fail = _skewer(by[OUTER], folded[OUTER], by[INNER], folded[INNER], p)
-    return (notes + [_tag(note, nums, "thread", "insert", "push")], faced) if note else (notes, faced + [fail])
+    if not note:
+        return notes, faced + [fail]
+    # 竹串の確かめは、通す（手順 6）と入れる（12）の操作。押し上げる（13）は、竹串の行程までを 3D で見ていて、扇が口から出て開く所は
+    # まだ組んでいない。13 まで確かめたように見せないよう、別の行で、見た所と見ていない所を言う（レビューの指摘）
+    push = (f"押し上げる 竹串: 竹串は {p['push_amount']:g}mm の行程で、溝の中を通る（上の行）。扇が口から出て開く所は、"
+            "まだ 3D で組んでいない（寸法の式 F5.fan_height・F5.fan_clearance が見ている）")
+    return notes + [_tag(note, nums, "thread", "insert"), _tag(push, nums, "push")], faced
 
 
 def run(template_id, params, source, title=None, inject=None):
