@@ -311,16 +311,38 @@ assert any(f"約 {e['c']:.0f}mm 後ろ" in s and "手で広げない" in s for s
 # （返し忘れると、犬張子では数 mm ずれる）
 mark = next(q for q in t.parts(P) if q.key == "back").art[-1]
 HP, WP, cxP = t.geometry(P)["H"], t.geometry(P)["W"], t.geometry(P)["cx"]
-assert mark["kind"] == "line" and abs(min(y for _, y in mark["pts"]) - (HP - e["s"])) < 1e-6 and abs(max(y for _, y in mark["pts"]) - (HP - e["h"])) < 1e-6
+assert mark["kind"] == "mark" and abs(min(y for _, y in mark["pts"]) - (HP - e["s"])) < 1e-6 and abs(max(y for _, y in mark["pts"]) - (HP - e["h"])) < 1e-6
 mx = [x for x, _ in mark["pts"]]
 assert abs((min(mx) + max(mx)) / 2 - (WP - cxP)) < 1e-6 and abs(max(mx) - min(mx) - P["tab_width"]) < 1e-6 and abs(WP - 2 * cxP) > 1
 # 裏の印が無い時（back 0）は、貼る高さを 0.1mm まで数で言う（1mm に丸めると、小さい姿では丸めの分で傾きが変わる）
-assert any(f"下の縁から {e['h']:.1f}〜{e['s']:.1f}mm の高さ" in s for s in t.steps({**P, "back": 0}))
+assert any(f"机に着く縁から {e['h']:.1f}〜{e['s']:.1f}mm の高さ" in s for s in t.steps({**P, "back": 0}))
+# 裏の印は切る線と紛れない位置の印で刷り、凡例に行が出る。裏の姿が無い時は印も無く、線を引く鉛筆を用意する物に言う
+assert not any(a["kind"] == "line" and a.get("stroke") == t.INK and len(a["pts"]) >= 5 for a in next(q for q in t.parts(P) if q.key == "back").art)
+assert not any(a["kind"] == "mark" for q in t.parts({**P, "back": 0}) for a in q.art)
+assert "鉛筆" in "".join(t.materials({**P, "back": 0})) and "鉛筆" not in "".join(t.materials(P))
+assert any("部品 2 は無い" in s for s in t.steps({**P, "back": 0})) and not any("部品 2 は無い" in s for s in t.steps(P))
 # 貼る面を先に背に貼り、後で三角を閉じる（閉じる糊代の折り目を、貼った面の下の端にそろえる）
 st = t.steps(P)
-i_glue = next(i for i, x in enumerate(st) if "長い糊代の面" in x and "四角い印" in x)
+i_glue = next(i for i, x in enumerate(st) if "長い糊代" in x and "四角い位置の印" in x and "押さえて乾かす" in x)
 i_close = next(i for i, x in enumerate(st) if "三角を閉じる" in x and "折り目を端にそろえて" in x)
 assert i_glue < i_close
+assert "乾くまで立てない" in st[i_close] and any("定規を当てて線の真上で山折り" in x for x in st)
+# 台の形: 舌が底の溝を通った事を、持ち上げて見させる（外れて箱の床で止まっても、浮きの差は紙の厚みだけで見分けられない）
+st_b = t.steps(B)
+assert any("底の溝から舌の先が出ている" in x and "押し込まず" in x for x in st_b)
+# 箱は左右の壁の糊代を先に貼り、上の面を後で閉じる（先に閉じると残りの糊代に指が届かない）。のりは舌の先まで、付け根の角は切り過ぎない
+box_step = next(x for x in st_b if "台の箱を一点鎖線" in x)
+assert box_step.index("左右の壁の糊代 4 枚") < box_step.index("上の面を閉じて") < box_step.index("箱のゆがみを直す")
+assert any("舌の先までのりを塗って" in x and "角で止める" in x for x in st_b)
+assert any("角で止める" in x and "部品 2 は無い" in x for x in t.steps({**B, "back": 0}))
+assert not any("舌" in x for x in t.steps(P))
+# 組み方の文は、サイトの手順の紙の左の列で float と同じ行数まで（サイトは「番号. 文」の形で、同じ折り返しで刷る）
+from omochae.templates.float import STEP_COL_W, STEP_LINES_MAX, STEP_SIZE
+from omochae.textfit import wrap
+for fig in t.FIGURES:
+    for q in (t.filled({**t.DEFAULTS, "figure": fig}), t.filled({**t.DEFAULTS, "figure": fig, "back": 0})):
+        n_lines = sum(len(wrap(f"{i}. {s_}", STEP_SIZE, STEP_COL_W)) for i, s_ in enumerate(t.steps(q), 1))
+        assert n_lines <= STEP_LINES_MAX, (n_lines, fig, q["back"])
 # 手順の番号は「手順 n:」、部品の番号は「部品 n」。表と裏は粗く切って貼ってから、実線で 2 枚いっしょに切る（縁と舌がそろう）
 for q in (P, B, {**P, "back": 0}):
     st = t.steps(q)
