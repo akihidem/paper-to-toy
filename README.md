@@ -227,6 +227,37 @@ PYTHONPATH=src .venv/bin/python -m omochae.foldsim --scenario examples/fan_tab.j
 
 書いた SVG を Origami Simulator の「File → Import」で開く。線の色は Origami Simulator の約束に合わせた（外形と中を切り抜く穴 黒 `#000000`・山折り 赤 `#ff0000`・谷折り 青 `#0000ff`）。検査に落ちた時と、書き出した時は、前の回の同じ頭の SVG を残さない（`--parts` で部品を減らした回は、その部品だけになる）。線の濃さは付けないので、どの折りも折り切った角度（180°）として扱われる。紙の厚みと摩擦は模擬しないので、実物の動きとは違う。部品を選ぶ時は `--parts fan,tube`。
 
+## エンジンごとの改善の輪（作る過程の記録 → 直しの案 → 人の採否 → 次の版）
+
+型紙 1 枚の直し（寸法を 1 つ変えた次の版）とは別に、雛形から刷る全部の紙に効く直しを、作る過程の記録から起こす（Issue #63）。
+機械は材料を束ねるだけで、採るかどうかも、直した後にどうなったかも決めない。
+
+```sh
+PYTHONPATH=src .venv/bin/python -m omochae.engine_loop check examples/bundles/sample_made_up.json   # 束の形と連絡先の形（0 通る / 3 落ちる）
+PYTHONPATH=src .venv/bin/python -m omochae.engine_loop take examples/bundles/sample_made_up.json    # 入口。連絡先の形のある文は落として数だけ残す
+PYTHONPATH=src .venv/bin/python -m omochae.engine_loop propose                  # 直しの案（下書き）を起こす
+PYTHONPATH=src .venv/bin/python -m omochae.engine_loop list                     # 案の一覧（show <番号> で当たった文つき）
+PYTHONPATH=src .venv/bin/python -m omochae.engine_loop adopt EP-0001 --by <人>   # 人が採る（reject で採らない）
+PYTHONPATH=src .venv/bin/python -m omochae.engine_loop release --commit <番号> --by <人> --sheet-set slider_fan=<組の名>   # 直しが main に入った後、次の版を刻む
+PYTHONPATH=src .venv/bin/python -m omochae.engine_loop compare                  # 版ごとの数を並べる（判定はしない）
+```
+
+- 束は、サイトの側が作る過程の記録（止まった所・動きの結果・工夫の言葉・感想・質問）を、雛形の id と刷った組ごとに束ねた JSON 1 つ。欄は決めた物だけで、決まりの外の欄がある束は束ごと断る。名前・連絡先・人の印の値・写真・声・映像・分より細かい時刻は入れない。
+- 案の行き先は 3 種。
+  - 雛形: 同じ手順で止まった人が 2 人から（人の印の無い記録だけなら、止まったの札が 3 回から）。作った人の工夫の言葉（直した点と思いつき）は 1 件から。
+  - 部品（雛形をまたぐ共有の所。刷り方・凡例・位置の印など）: 同じ種類の困り事が 2 つ以上の雛形で出た時。
+  - 生成の決まり（床と既定の寸法）: 検査を通って刷られた紙で、動かない側の札が 2 件から。「わからない」は動かない側に数えない。
+- 案は数と当たった文だけを持ち、新しい寸法の値を持たない。採否は、人が名前を書いて決める。採った案は「次の版の予定」に入り、4 つの見出しの Issue の下書きが出る（立てるのは人）。
+- 直しが main に入ったら、人が `release` で次の版を刻む。版の台帳は `data/engine/versions.json`（版の番号・採った案の番号と行き先と題・件数・commit・変わった刷った組）。作った人の文と、決めた人の名前は台帳に入れない。
+- `compare` は、雛形ごとに刷った組ごとの数（報告の数・動きの札の数・止まった段の札と人の数・やめた段・最初に動くまでの分の幅）を並べる。上下や割合は出さない。件数が少ないと、差があっても偶然と分けられず、作った人も作り方も版ごとに違うため、読むのは人。
+- 分かっている限り:
+  - 見本の束 `examples/bundles/sample_made_up.json` は、形を見せるために作った見本で、実の記録ではない。実の記録の束は、まだ 1 つも通していない。採った案も、刻んだ次の版も、まだ無い（台帳は版 1 だけ）。
+  - 名前は形では落とせない。束と案と Issue の下書きは git の外（local の下）にだけ置き、下書きは人が読んでから使う。
+  - 文から困り事の種類を拾う所は、語の一致だけの荒い束ね。当たった文を案に付けるので、人が読んで確かめる。
+  - 版の印は紙に刷らない（必須 2 種の刷った絵を変えないため）。版と紙は、束の「刷った組」と、`release` で書く刷った組でつなぐ。
+  - 入口の床（F13.bundle・F13.pii・F13.proposal・F13.human・F13.version）は、この道具の床。凍結の基準の一覧には、まだ載せていない。
+  - 束は、同じ出し元の物は新しい 1 つだけを数える（束はその時までの記録の全部なので）。
+
 ## 終了の番号
 
 | exit | 意味 |
@@ -242,7 +273,9 @@ PYTHONPATH=src .venv/bin/python -m omochae.foldsim --scenario examples/fan_tab.j
 - `src/omochae/` エンジン（`compose.py` 配置と検査の流れ・`floors.py` 描く前の検査・`marks.py` 印と刷った後の検査・`render.py` 描画・`textfit.py` 文字の幅・`fan_model.py` / `pivot_model.py` 扇と振り子の式・`metrics.py` 寸法から出る値）
 - `src/omochae/templates/` 雛形
 - `src/omochae/foldsim.py` Origami Simulator への書き出し
+- `src/omochae/engine_loop.py` エンジンごとの改善の輪（束の入口・直しの案・人の採否・次の版・版ごとの数の並び）
 - `data/sources/` 出典の記録（国立国会図書館の書誌の値）
+- `data/engine/` エンジンの版の台帳（`omochae.engine_loop`。数と行き先だけで、作った人の文は入れない）
 - `tests/frozen/` 凍結した場面と合格の基準（照合の表 `manifest.json` と合わないと `./run.sh` は 4。凍結を変える時は理由を commit に書き、`python tests/run_floors.py --write-manifest` で表も同じ commit で直す。落ちる場面は FAIL の行が 1 つか、期待の `lines` に全部の行の形を書く） / `tests/test_*.py` 式と検査の守りの試験
 - `examples/` 最小の例
 

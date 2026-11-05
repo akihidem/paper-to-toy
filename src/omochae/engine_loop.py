@@ -1,0 +1,575 @@
+"""エンジンごとの改善の輪（#63）。作る過程の記録の束から、エンジンの側（雛形・部品・生成の決まり）への直しの案を作り、
+人が採った案をエンジンの次の版にする。直した後は、版ごとの数を並べて人が読む。
+
+本人の言葉（2026-11-05）: 作る過程の記録を「フィードバックとして型紙を改善するほか、型紙を生成するエンジンごと改善する」。
+段: take（入口）→ propose（案）→ adopt・reject（人の採否）→ release（次の版を刻む）→ compare（版ごとの数を並べる）。
+判断の芯:
+- 型紙 1 枚の直し（寸法を 1 つ変えた次の版）は、サイトの側の輪が持つ。ここが見るのは、雛形から刷る全部の紙に効く直しだけ。
+  行き先は 3 種: 雛形（その雛形の手順の文・部品の形）・部品（雛形をまたぐ共有の所。刷り方・凡例・位置の印）・
+  生成の決まり（床と既定の寸法）。
+- 機械は決めない。案は材料（数と文）を束ねた下書きで、新しい寸法の値を持たせない。少ない記録から値を決め打つと、
+  仮説の違いと作り方の違いが混ざるため。採る・採らないは人が名前を書いて決める。
+- 効いたかの判定も機械が断定しない（本人の決まり 2026-11-05）。compare は版ごとの数を並べるだけで、上がった・下がったを言わない。
+  件数が少ないと、差があっても偶然と分けられず、作った人も作り方も版ごとに違うため。
+- 個人の情報は入口で落とす。束の欄は決めた物だけ（決まりの外の欄は束ごと断る）。文に連絡先の形があれば、その文を落として
+  数だけ残す。落とした文は、画面にも置き場にも出し直さない。名前は形では見分けられないので、作った人の文は git の外
+  （local/ の下）にだけ置き、git に入る台帳（data/engine/versions.json）には、数と行き先と決まった形の題だけを書く。
+- 今の雛形・床・刷り方のコードは呼ばない（雛形の一覧を見るだけ）。必須 2 種の刷った絵を動かさないため。
+終了: 0 = できた / 3 = 落ちた・断った / 4 = できない（置き場や束が読めない）。
+"""
+import argparse
+import datetime
+import json
+import os
+import pathlib
+import re
+import secrets
+import sys
+import unicodedata
+
+from .compose import TEMPLATES
+from .model import Failure
+
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+SCHEMA = "omochae.making-bundle/1"
+TZ = datetime.timezone(datetime.timedelta(hours=9))
+
+# 束の欄。足す時は、誰の記録かを辿れる物でない事を確かめてから足す（tests/test_engine_loop.py が鍵の一致を見る）。
+TOP_KEYS = {"schema", "exported_at", "from", "dropped_pii", "groups"}
+GROUP_KEYS = {"template", "sheet_set", "reports", "results", "moved_word", "not_moved_word", "stuck_steps", "quit_steps",
+              "minutes", "measures", "record_ids", "texts"}
+TEXT_KEYS = {"kind", "step", "text", "count"}
+# 文の種類: 止まった所・直した点（工夫）・次の思いつき（工夫）・感想・聞く口の質問・試した記録への人の説明。
+TEXT_KINDS = ("stuck", "fix", "idea", "impression", "question", "explain")
+TEXT_JA = {"stuck": "止まった所", "fix": "直した点", "idea": "思いつき", "impression": "感想", "question": "質問", "explain": "人の説明"}
+# 案が持つ数の呼び方（Issue の下書きで使う）。どれも件数で、寸法の値ではない。
+NUMBER_JA = {"stuck_taps": "止まったの札", "stuck_people": "止まった人（印のある分）", "quit_people": "その段でやめた人", "reports": "報告",
+             "fixes": "直した点", "ideas": "思いつき", "not_moved": "動かない側の札", "moved": "動いた側の札", "templates": "雛形", "texts": "当たった文"}
+MAX_TEXT = 300  # 文 1 つの長さ。上限を先に見てから連絡先の形を探す（長い文で探す時間が延びないように）
+MAX_TEXTS = 2000
+MAX_GROUPS = 500
+MAX_STEP = 40  # 手順の番号の上限。どの雛形の組み方も 40 手順より短い
+MAX_COUNT = 100000  # 数の欄の上限。上限が無いと、数の欄で番号を運べる
+NAME = re.compile(r"[A-Za-z0-9_.-]{1,80}")  # 雛形の id・刷った組・出し元の名
+MEASURE = re.compile(r"[a-z_]{1,30}")
+RECORD_ID = re.compile(r"R-[0-9]{4,8}")
+# 時刻は分まで。秒まで持つと、ほかの記録と突き合わせて人を絞れる。
+MINUTE = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}([+-]\d{2}:\d{2}|Z)?")
+PROPOSAL_ID = re.compile(r"EP-[0-9]{4,}")
+COMMIT = re.compile(r"[0-9a-f]{7,40}")
+
+# 案を起こす数の線。線を低く置くのは、案は下書きで、採るかは人が決めるため（高く置くと、少ない場で出た事が人の目に届かない）。
+STUCK_PEOPLE = 2  # 同じ手順で止まった人（その場限りの印のある人）がこの数から
+STUCK_TAPS = 3  # 印の無い記録だけの時は、止まったの札がこの数から（1 人が続けて押した分と分けられないので、人より高く置く）
+NOT_MOVED = 2  # 検査を通った紙で、動かない側の札がこの数から
+SHARED_TEMPLATES = 2  # 同じ種類の困り事がこの数の雛形で出たら、雛形ごとでなく共有の所を見る
+# 文から拾う、雛形をまたぐ困り事の種類と、当たる共有の所。語は少なく保つ（広げるほど、関係の無い文を拾う）。拾い方は荒いので、
+# 案には当たった文をそのまま付け、人が読んで確かめる。
+SHARED = {
+    "fold": ("折り線の刷り方と凡例（render）", re.compile(r"折り線|谷折|山折|折る向き|破線|点線")),
+    "glue": ("糊代の大きさと位置の描き方", re.compile(r"糊代|のりしろ|のり代")),
+    "mark": ("位置の印（marks）", re.compile(r"位置の印|貼る所|貼る場所|差す深さ|どこに貼")),
+    "cut": ("切る線の示し方（太さ・切る順）", re.compile(r"切る線|切り込み|切りにく|切れな")),
+    "text": ("字の大きさと配置（textfit・page）", re.compile(r"字が小さ|文字が小さ|読めな|読みにく")),
+}
+
+# 連絡先の形の見方。枝 engine/making の omochae.feedback（417746e）と同じ考え: 番号の書き方を式で追わず、
+# 数字の多い所と、連絡先の語と印で見る（安全の側に倒す）。向こうが main に入ったら 1 つに寄せる。
+KANJI_DIGITS = str.maketrans("〇一二三四五六七八九零壱弐参", "01234567890123")
+CONTACT = re.compile(r"(?i)@|アット|メアド|メール|電話|携帯|https?://|www\.|[a-z0-9-]+\.(com|net|org|jp|io|me|co|app|dev)\b"
+                     r"|(?<![a-z])(tel|mail)(?![a-z])|twitter|ツイッター|インスタ|instagram|tiktok|youtube|facebook"
+                     r"|フェイスブック|discord|ディスコード|gmail|yahoo|(?<![a-z])line\s*(id)?\s*[:：]|ライン\s*(id)?\s*[:：]")
+
+
+def has_contact(text):
+    """連絡先の形があるか。近く（24 文字の中）に数字が 7 つ以上あるか、連絡先の語と印がある時に真。
+    電話（10 桁〜）も郵便番号（7 桁）も数字の多さで当たる。寸法の数字の多い文も落ちる（安全の側）。
+    名前は形では見分けられない。だから文は git の外にだけ置き、人が読んでから使う。"""
+    raw = "".join(ch for ch in unicodedata.normalize("NFKC", str(text)[:MAX_TEXT])
+                  if unicodedata.category(ch) not in ("Cf", "Mn", "Me") and not ch.isspace())
+    if CONTACT.search(raw):
+        return True
+    digits = [i for i, ch in enumerate(raw.translate(KANJI_DIGITS)) if ch.isdigit()]
+    return any(digits[i + 6] - digits[i] < 24 for i in range(len(digits) - 6))
+
+
+def _count(v, top=MAX_COUNT):
+    return isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= top
+
+
+def _step(v):
+    """手順の番号。JSON の鍵は文字なので、文字の数も受ける。決まりの外は None。"""
+    if isinstance(v, str) and re.fullmatch(r"[0-9]{1,2}", v):
+        v = int(v)
+    return v if isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= MAX_STEP else None
+
+
+def _span(v):
+    """数の幅 [最小, 最大, 件数]。平均は受けない（少ない件数の平均は、確かな値のように見える）。"""
+    return (isinstance(v, list) and len(v) == 3 and all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v)
+            and v[0] <= v[1] and _count(v[2]) and abs(v[0]) <= MAX_COUNT and abs(v[1]) <= MAX_COUNT)
+
+
+def _word(v):
+    """動きの札の言葉。短い言葉だけ（雛形が持つ「動いた」「回らない」など）。自由な文を札の欄で運ばせない。"""
+    return isinstance(v, str) and 1 <= len(v) <= 20 and not has_contact(v)
+
+
+def check_bundle(b):
+    """束の形を確かめる。Returns Failure の list（空なら通る）。知らせの文に、束の値は入れない（落とした中身を出し直さないため）。
+    連絡先の形のある文は F13.pii で名指しする（何番目の群の何番目の文か、だけ）。take は、その文を落として先へ進む。"""
+    if not isinstance(b, dict):
+        return [Failure("F13.bundle", "束", "JSON の物（辞書）でない")]
+    out = []
+    bad = lambda where, msg: out.append(Failure("F13.bundle", where, msg))
+    if set(b) - TOP_KEYS:
+        bad("束", f"決まりの外の欄が {len(set(b) - TOP_KEYS)} つある（名前や連絡先の欄は受けない）")
+    if b.get("schema") != SCHEMA:
+        bad("schema", f"束の形の名は {SCHEMA}")
+    at = b.get("exported_at")
+    if not (isinstance(at, str) and MINUTE.fullmatch(at)):
+        bad("exported_at", "時刻は分まで（秒を持たない）")
+    if not (isinstance(b.get("from"), str) and NAME.fullmatch(b["from"])):
+        bad("from", "出し元の名は英数字と . - _ で 80 字まで")
+    if "dropped_pii" in b and not _count(b["dropped_pii"]):
+        bad("dropped_pii", "落とした文の数は 0 以上の整数")
+    groups = b.get("groups")
+    if not isinstance(groups, list) or len(groups) > MAX_GROUPS:
+        bad("groups", f"群は list で {MAX_GROUPS} まで")
+        return out
+    seen = set()
+    for i, g in enumerate(groups):
+        w = f"groups[{i}]"
+        if not isinstance(g, dict):
+            bad(w, "群は辞書")
+            continue
+        if set(g) - GROUP_KEYS:
+            bad(w, f"決まりの外の欄が {len(set(g) - GROUP_KEYS)} つある")
+        tid, ss = g.get("template"), g.get("sheet_set", "")
+        if not (isinstance(tid, str) and NAME.fullmatch(tid)):
+            bad(f"{w}.template", "雛形の id の形でない")
+        if not (isinstance(ss, str) and (ss == "" or NAME.fullmatch(ss))):
+            bad(f"{w}.sheet_set", "刷った組の形でない（分からない時は空）")
+        if (tid, ss) in seen:
+            bad(w, "同じ雛形と刷った組の群が 2 つある")
+        seen.add((tid if isinstance(tid, str) else None, ss if isinstance(ss, str) else None))
+        if not _count(g.get("reports", 0)):
+            bad(f"{w}.reports", "報告の数は 0 以上の整数")
+        res = g.get("results", {})
+        if not (isinstance(res, dict) and len(res) <= 10 and all(_word(k) and _count(v) for k, v in res.items())):
+            bad(f"{w}.results", "動きの札は、短い言葉と数の組")
+        for key in ("moved_word", "not_moved_word"):
+            if key in g and not (g[key] == "" or _word(g[key])):
+                bad(f"{w}.{key}", "札の言葉は 20 字まで")
+        st = g.get("stuck_steps", {})
+        if not (isinstance(st, dict) and all(_step(k) and isinstance(v, dict) and set(v) == {"taps", "people"}
+                                            and _count(v["taps"]) and _count(v["people"]) for k, v in st.items())):
+            bad(f"{w}.stuck_steps", f"止まった段は、手順の番号（1〜{MAX_STEP}）と taps・people の数")
+        qs = g.get("quit_steps", {})
+        if not (isinstance(qs, dict) and all(_step(k) and _count(v) for k, v in qs.items())):
+            bad(f"{w}.quit_steps", f"やめた段は、手順の番号（1〜{MAX_STEP}）と人の数")
+        if g.get("minutes") is not None and not _span(g["minutes"]):
+            bad(f"{w}.minutes", "分の幅は [最小, 最大, 件数]")
+        ms = g.get("measures", {})
+        if not (isinstance(ms, dict) and len(ms) <= 20 and all(isinstance(k, str) and MEASURE.fullmatch(k) and _span(v) for k, v in ms.items())):
+            bad(f"{w}.measures", "測った値は、欄の名（英小文字）と [最小, 最大, 件数]")
+        ids = g.get("record_ids", [])
+        if not (isinstance(ids, list) and len(ids) <= MAX_COUNT and all(isinstance(x, str) and RECORD_ID.fullmatch(x) for x in ids)):
+            bad(f"{w}.record_ids", "記録の番号は R- と数字")
+        texts = g.get("texts", [])
+        if not isinstance(texts, list) or len(texts) > MAX_TEXTS:
+            bad(f"{w}.texts", f"文は list で {MAX_TEXTS} まで")
+            continue
+        for j, t in enumerate(texts):
+            wt = f"{w}.texts[{j}]"
+            if not isinstance(t, dict) or set(t) - TEXT_KEYS:
+                bad(wt, "文の欄は kind・step・text・count だけ")
+                continue
+            if t.get("kind") not in TEXT_KINDS:
+                bad(wt, f"文の種類は {'・'.join(TEXT_KINDS)} のどれか")
+            if t.get("step") is not None and _step(t["step"]) is None:
+                bad(wt, f"手順の番号は 1〜{MAX_STEP} の整数か null")
+            if "count" in t and not (_count(t["count"]) and t["count"] >= 1):
+                bad(wt, "同じ文の回数は 1 以上の整数")
+            if not (isinstance(t.get("text"), str) and 1 <= len(t["text"]) <= MAX_TEXT):
+                bad(wt, f"文は 1〜{MAX_TEXT} 字")
+            elif has_contact(t["text"]):
+                out.append(Failure("F13.pii", wt, "連絡先の形（数字の多い所か、@・メール・電話・URL などの語）がある"))
+    return out
+
+
+def base():
+    """作った人の文が入る置き場（git の外）。試験と別の機械のために、環境の値で向け直せる。"""
+    return pathlib.Path(os.environ.get("OMOCHAE_ENGINE_LOOP", ROOT / "local" / "engine-loop"))
+
+
+def ledger_path():
+    """版の台帳（git の中）。数と行き先と決まった形の題だけを書く。"""
+    return pathlib.Path(os.environ.get("OMOCHAE_ENGINE_LEDGER", ROOT / "data" / "engine" / "versions.json"))
+
+
+def _dirs():
+    d = {k: base() / k for k in ("bundles", "proposals", "issues")}
+    for p in d.values():
+        p.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _now(spec="minutes"):
+    return datetime.datetime.now(TZ).isoformat(timespec=spec)
+
+
+def _load(path):
+    return json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
+
+
+def _dump(path, obj, exclusive=False):
+    with open(path, "x" if exclusive else "w", encoding="utf-8") as f:
+        json.dump(obj, f, ensure_ascii=False, indent=1)
+        f.write("\n")
+
+
+def take(b):
+    """入口。束を確かめ、連絡先の形のある文を落として数だけ残し、置き場に置く。
+    Returns (置いた path か None, Failure の list, ここで落とした文の数)。形の誤りが 1 つでもあれば、何も置かない。"""
+    fails = check_bundle(b)
+    if any(f.floor != "F13.pii" for f in fails):
+        return None, [f for f in fails if f.floor != "F13.pii"], 0
+    dropped = 0
+    groups = []
+    for g in b["groups"]:
+        kept = [t for t in g.get("texts", []) if not has_contact(t["text"])]
+        dropped += len(g.get("texts", [])) - len(kept)
+        groups.append({**g, "texts": kept})
+    clean = {**b, "groups": groups, "dropped_pii": b.get("dropped_pii", 0) + dropped}
+    path = _dirs()["bundles"] / f"B-{datetime.datetime.now(TZ):%Y%m%d-%H%M}-{secrets.token_hex(4)}.json"
+    _dump(path, clean, exclusive=True)
+    return path, [], dropped
+
+
+def bundles():
+    """置き場の束。同じ出し元の束は、新しい物だけを返す（束はその時までの記録の全部なので、古い束も数えると 2 重になる）。"""
+    latest = {}
+    for p in sorted(_dirs()["bundles"].glob("B-*.json")):
+        try:
+            b = _load(p)
+        except (OSError, ValueError):
+            continue
+        if check_bundle(b):
+            continue  # 置いた後に手で書き換えられた束は数えない
+        if b["from"] not in latest or (b["exported_at"], p.name) >= (latest[b["from"]][0]["exported_at"], latest[b["from"]][1]):
+            latest[b["from"]] = (b, p.name)
+    return [b for b, _ in latest.values()]
+
+
+def groups(bs):
+    """束の群を、雛形と刷った組ごとに合わせる（出し元が違う束の、同じ雛形・同じ組を足す）。"""
+    out = {}
+    for b in bs:
+        for g in b["groups"]:
+            key = (g["template"], g.get("sheet_set", ""))
+            m = out.setdefault(key, {"template": key[0], "sheet_set": key[1], "reports": 0, "results": {}, "moved_word": "", "not_moved_word": "",
+                                     "stuck_steps": {}, "quit_steps": {}, "minutes": None, "measures": {}, "record_ids": [], "texts": []})
+            m["reports"] += g.get("reports", 0)
+            for k, v in g.get("results", {}).items():
+                m["results"][k] = m["results"].get(k, 0) + v
+            for key2 in ("moved_word", "not_moved_word"):
+                m[key2] = m[key2] or g.get(key2, "")
+            for k, v in g.get("stuck_steps", {}).items():
+                s = m["stuck_steps"].setdefault(_step(k), {"taps": 0, "people": 0})
+                s["taps"] += v["taps"]
+                s["people"] += v["people"]
+            for k, v in g.get("quit_steps", {}).items():
+                m["quit_steps"][_step(k)] = m["quit_steps"].get(_step(k), 0) + v
+            m["minutes"] = _join(m["minutes"], g.get("minutes"))
+            for k, v in g.get("measures", {}).items():
+                m["measures"][k] = _join(m["measures"].get(k), v)
+            m["record_ids"] += [r for r in g.get("record_ids", []) if r not in m["record_ids"]]
+            m["texts"] += [{"kind": t["kind"], "step": t.get("step"), "text": t["text"], "count": t.get("count", 1)} for t in g.get("texts", [])]
+    return out
+
+
+def _join(a, b):
+    if a is None or b is None:
+        return a or b
+    return [min(a[0], b[0]), max(a[1], b[1]), a[2] + b[2]]
+
+
+def drafts(gs):
+    """群から直しの案（下書き）を起こす。Returns 案の list（まだ置かない）。key は同じ案を 2 度起こさないための鍵。
+    案は行き先・題・数・当たった文だけを持つ。新しい寸法の値は持たない。"""
+    out = []
+    shared = {}
+    for (tid, ss), g in sorted(gs.items()):
+        where = f"{tid}（刷った組 {ss or '不明'}）"
+        here = tid in TEMPLATES
+        # 雛形: 同じ手順で止まった人が重なった所。
+        for step, s in sorted(g["stuck_steps"].items()):
+            if s["people"] >= STUCK_PEOPLE or (s["people"] == 0 and s["taps"] >= STUCK_TAPS):
+                out.append({"key": f"stuck:{tid}:{ss}:{step}", "target": {"kind": "template", "name": tid}, "template": tid, "sheet_set": ss, "step": step,
+                            "title": f"{tid}: 手順 {step} の文と、その段の部品の形を見直す",
+                            "numbers": {"stuck_taps": s["taps"], "stuck_people": s["people"], "quit_people": g["quit_steps"].get(step, 0), "reports": g["reports"]},
+                            "why": f"{where}の手順 {step} で、止まったの札が {s['taps']} 回（印のある人 {s['people']} 人）。",
+                            "evidence": [t for t in g["texts"] if t["step"] == step and t["kind"] in ("stuck", "question")],
+                            "record_ids": g["record_ids"], "in_engine": here})
+        # 雛形: 工夫の言葉（作った人が直した点と、次の思いつき）。1 件でも案にする（直した人は、型紙の足りない所を実物で見つけている）。
+        craft = [t for t in g["texts"] if t["kind"] in ("fix", "idea")]
+        if craft:
+            n_fix, n_idea = (sum(t["count"] for t in craft if t["kind"] == k) for k in ("fix", "idea"))
+            out.append({"key": f"craft:{tid}:{ss}", "target": {"kind": "template", "name": tid}, "template": tid, "sheet_set": ss, "step": None,
+                        "title": f"{tid}: 作った人の工夫（直した点と思いつき）を、雛形に入れるか見る",
+                        "numbers": {"fixes": n_fix, "ideas": n_idea, "reports": g["reports"]},
+                        "why": f"{where}で、作った人が直した点が {n_fix} 件、思いつきが {n_idea} 件。",
+                        "evidence": craft, "record_ids": g["record_ids"], "in_engine": here})
+        # 生成の決まり: 検査を通って刷られた紙なのに、動かない側の札が重なった所。「わからない」は動かない側に数えない。
+        not_moved = g["results"].get(g["not_moved_word"], 0) if g["not_moved_word"] else 0
+        if not_moved >= NOT_MOVED:
+            out.append({"key": f"motion:{tid}:{ss}", "target": {"kind": "rule", "name": f"{tid} の動きの床と既定の寸法"}, "template": tid, "sheet_set": ss, "step": None,
+                        "title": f"{tid}: 動きの床の式と既定の寸法を見直す",
+                        "numbers": {"not_moved": not_moved, "moved": g["results"].get(g["moved_word"], 0), "reports": g["reports"]},
+                        "why": f"{where}は検査を通って刷られた紙で、「{g['not_moved_word']}」の札が {not_moved} 件（報告 {g['reports']} 件）。",
+                        "evidence": [t for t in g["texts"] if t["kind"] in ("stuck", "impression", "explain")][:10], "record_ids": g["record_ids"], "in_engine": here})
+        for t in g["texts"]:
+            for kind, (_, words) in SHARED.items():
+                if words.search(t["text"]):
+                    shared.setdefault(kind, {}).setdefault(tid, []).append({**t, "template": tid, "sheet_set": ss})
+    # 部品（共有の所）: 同じ種類の困り事が、2 つ以上の雛形で出た時。
+    for kind, by_tpl in sorted(shared.items()):
+        if len(by_tpl) >= SHARED_TEMPLATES:
+            texts = [t for tid in sorted(by_tpl) for t in by_tpl[tid]]
+            out.append({"key": f"shared:{kind}:{'+'.join(sorted(by_tpl))}", "target": {"kind": "part", "name": SHARED[kind][0]}, "template": None, "sheet_set": None, "step": None,
+                        "title": f"共有の所: {SHARED[kind][0]}を見直す",
+                        "numbers": {"templates": len(by_tpl), "texts": sum(t["count"] for t in texts)},
+                        "why": f"同じ種類の困り事が {len(by_tpl)} つの雛形（{'・'.join(sorted(by_tpl))}）で出た。雛形ごとでなく共有の所に当たるかを見る。",
+                        "evidence": texts, "record_ids": [], "in_engine": True})
+    return out
+
+
+def proposals():
+    return [_load(p) for p in sorted(_dirs()["proposals"].glob("EP-*.json"))]
+
+
+def propose():
+    """置き場の束から案を起こし、まだ無い案だけを下書きとして置く。Returns 新しく置いた案の list。"""
+    have = {p["key"] for p in proposals()}
+    d = _dirs()["proposals"]
+    made = []
+    for dr in drafts(groups(bundles())):
+        if dr["key"] in have:
+            continue
+        n = max((int(p.stem[3:]) for p in d.glob("EP-*.json")), default=0) + 1
+        p = {"id": f"EP-{n:04d}", "status": "draft", **dr, "made_at": _now()}
+        _dump(d / f"{p['id']}.json", p, exclusive=True)
+        made.append(p)
+    return made
+
+
+def ledger():
+    """版の台帳を読む。無ければ空の台帳。同じ案が 2 つの版に入っていたら読めない物として止める（刻み直しを黙って通さない）。"""
+    path = ledger_path()
+    led = _load(path) if path.exists() else {"versions": [], "next": []}
+    ids = [p["id"] for v in led["versions"] for p in v.get("proposals", [])] + [p["id"] for p in led.get("next", [])]
+    if len(ids) != len(set(ids)):
+        raise ValueError("版の台帳に、同じ案が 2 度ある")
+    return led
+
+
+def _entry(p):
+    """台帳に書く案の行。git に入るので、作った人の文（evidence・why の中の札の言葉）は入れない。題は決まった形で、数は件数だけ。"""
+    return {"id": p["id"], "target": p["target"], "title": p["title"], "numbers": p["numbers"]}
+
+
+def issue_draft(p):
+    """採った案の Issue の下書き（4 つの見出し）。git の外に置く。立てるのは人（外に出る操作なので、ここからは立てない）。"""
+    ja = {"template": "雛形", "part": "部品（共有の所）", "rule": "生成の決まり"}[p["target"]["kind"]]
+    lines = [f"# {p['title']}", "", "（下書き。立てる前に、文の中に名前や連絡先が無いかを人が読む）", "",
+             "## 目的", f"{ja}「{p['target']['name']}」を、作る過程の記録に合わせて直す。", "",
+             "## なぜか（根拠）", f"- {p['why']}", f"- 案の番号 {p['id']}。数: " + "、".join(f"{NUMBER_JA.get(k, k)} {v}" for k, v in p["numbers"].items())]
+    lines += [f"- {TEXT_JA[t['kind']]}" + (f"（手順 {t['step']}）" if t.get("step") else "") + (f"（{t['template']}）" if t.get("template") else "")
+              + f": 「{t['text']}」× {t['count']}" for t in p["evidence"]]
+    if not p.get("in_engine"):
+        lines.append("- この雛形は、この repo の雛形の一覧に無い（サイトの側の雛形）。当たる雛形を人が決める。")
+    lines += ["", "## どうしたらいいか", "- 直し方は、この下書きでは決めていない（機械は寸法の値を出さない）。当たる所を読み、比べた案と推しを書く。", "",
+              "## ゴールの要件", "- 直しの前後で、必須 2 種の刷った絵と凍結の場面が変わらない（変える時は理由を書く）。",
+              "- 直しが main に入ったら `python -m omochae.engine_loop release` で次の版を刻み、次の束の数を `compare` で並べて人が読む。", ""]
+    return "\n".join(lines)
+
+
+def decide(pid, by, accept, note=""):
+    """人の採否。Returns Failure の list。採った案は、台帳の「次の版の予定」に入り、Issue の下書きが出る。
+    決めた人の名前は git の外の案の記録にだけ残す（台帳には書かない）。決め直しはしない（別の案として起こす）。"""
+    if not (isinstance(pid, str) and PROPOSAL_ID.fullmatch(pid)):
+        return [Failure("F13.proposal", "案", "案の番号の形でない")]
+    path = _dirs()["proposals"] / f"{pid}.json"
+    if not path.exists():
+        return [Failure("F13.proposal", pid, "その番号の案が無い")]
+    if not (by or "").strip():
+        return [Failure("F13.human", pid, "決めた人の名前が要る（採否は人が決める）")]
+    p = _load(path)
+    if p["status"] != "draft":
+        return [Failure("F13.proposal", pid, f"もう決まっている（{p['status']}）")]
+    p.update(status="adopted" if accept else "rejected", decided_by=by.strip(), decided_at=_now(), note=str(note or "")[:MAX_TEXT])
+    if accept:
+        led = ledger()
+        led.setdefault("next", []).append({**_entry(p), "adopted_at": _now()[:10]})
+        ledger_path().parent.mkdir(parents=True, exist_ok=True)
+        _dump(ledger_path(), led)
+        (_dirs()["issues"] / f"{pid}.md").write_text(issue_draft(p), encoding="utf-8")
+    _dump(path, p)
+    return []
+
+
+def release(commit, by, sheet_sets=None, note=""):
+    """次の版を刻む。採った案（次の版の予定）を、直しの入った commit と、変わった刷った組と一緒に版にする。
+    Returns (版の番号か None, Failure の list)。人が、直しが main に入ったのを見てから呼ぶ。"""
+    out = []
+    if not (isinstance(commit, str) and COMMIT.fullmatch(commit)):
+        out.append(Failure("F13.version", "commit", "commit の番号（16 進の 7〜40 字）が要る"))
+    if not (by or "").strip():
+        out.append(Failure("F13.human", "by", "刻む人の名前が要る"))
+    sheet_sets = dict(sheet_sets or {})
+    if not all(isinstance(k, str) and NAME.fullmatch(k) and isinstance(v, str) and NAME.fullmatch(v) for k, v in sheet_sets.items()):
+        out.append(Failure("F13.version", "sheet_sets", "刷った組は 雛形の id=組の名"))
+    led = ledger()
+    if not led.get("next"):
+        out.append(Failure("F13.version", "次の版の予定", "採った案が無い（案が無いまま版を刻まない）"))
+    if out:
+        return None, out
+    n = max((v["version"] for v in led["versions"]), default=0) + 1
+    ids = [p["id"] for p in led["next"]]
+    led["versions"].append({"version": n, "commit": commit, "at": _now()[:10], "proposals": [{k: v for k, v in p.items() if k != "adopted_at"} for p in led["next"]],
+                            "sheet_sets": sheet_sets, "note": str(note or "")[:MAX_TEXT]})
+    led["next"] = []
+    _dump(ledger_path(), led)
+    for pid in ids:
+        path = _dirs()["proposals"] / f"{pid}.json"
+        if path.exists():  # 案の記録は git の外なので、別の機械で刻む時は無い事がある
+            _dump(path, {**_load(path), "status": "released", "version": n})
+    return n, []
+
+
+def _natural(s):
+    """刷った組の名を、数の所は数として並べる（v9 の後に v10）。"""
+    return [int(x) if x.isdigit() else x for x in re.split(r"(\d+)", s)]
+
+
+def compare(gs, led):
+    """版ごとの数を並べる（Markdown）。並べるだけで、上がった・下がったを言わない。割合にもしない（少ない件数で、確かな値のように見える）。
+    並びは雛形の id の順と、刷った組の名の順（多い順にすると、雛形に上下を付ける形になる）。"""
+    version_of = {(tid, ss): v for v in led["versions"] for tid, ss in v.get("sheet_sets", {}).items()}
+    lines = ["# 版ごとの数", "",
+             "数を並べるだけで、判定はしない。読むのは人。件数が少ない時は、差があっても偶然と分けられない。作った人も作り方も版ごとに違う。", ""]
+    by_tpl = {}
+    for (tid, ss), g in gs.items():
+        by_tpl.setdefault(tid, []).append((ss, g))
+    for tid in sorted(by_tpl):
+        lines += [f"## {tid}" + ("" if tid in TEMPLATES else "（この repo の雛形の一覧に無い）"), "",
+                  "| 刷った組 | エンジンの版 | 報告 | 動きの札 | 止まった段（札・印のある人） | やめた段（人） | 最初に動くまでの分 |", "|---|---|---|---|---|---|---|"]
+        for ss, g in sorted(by_tpl[tid], key=lambda x: _natural(x[0])):
+            v = version_of.get((tid, ss))
+            ver = f"版 {v['version']}（{'・'.join(p['id'] for p in v['proposals'])}）" if v else "—"
+            res = "・".join(f"{k} {n}" for k, n in g["results"].items()) or "—"
+            stuck = "、".join(f"手順 {k}: {s['taps']} 回・{s['people']} 人" for k, s in sorted(g["stuck_steps"].items())) or "—"
+            quit_ = "、".join(f"手順 {k}: {n}" for k, n in sorted(g["quit_steps"].items())) or "—"
+            m = g["minutes"]
+            mins = (f"{m[0]:g}" if m[0] == m[1] else f"{m[0]:g}〜{m[1]:g}") + f"（{m[2]} 件）" if m else "—"
+            lines.append(f"| {ss or '不明'} | {ver} | {g['reports']} 件 | {res} | {stuck} | {quit_} | {mins} |")
+        lines.append("")
+    lines += ["## 版と、採った案", ""]
+    for v in led["versions"]:
+        sets = "、".join(f"{k}={s}" for k, s in v.get("sheet_sets", {}).items()) or "刷った組の結び付きなし"
+        lines.append(f"- 版 {v['version']}（{v['at']}・commit {v['commit'][:7]}・{sets}）")
+        lines += [f"  - {p['id']} {p['title']}" for p in v.get("proposals", [])]
+    lines += [f"- 次の版の予定: {p['id']} {p['title']}" for p in led.get("next", [])]
+    return "\n".join(lines + [""])
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="omochae.engine_loop", description="エンジンごとの改善の輪。束を受け（take）、案を起こし（propose）、人が採り（adopt・reject）、"
+                                                                        "次の版を刻み（release）、版ごとの数を並べる（compare）。終了: 0 できた / 3 落ちた・断った / 4 できない")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("check", help="束の形と連絡先の形を確かめる（置かない）").add_argument("file")
+    sub.add_parser("take", help="束を受ける。連絡先の形のある文は落として数だけ残す").add_argument("file")
+    sub.add_parser("propose", help="置き場の束から、直しの案（下書き）を起こす")
+    sub.add_parser("list", help="案の一覧（番号・状態・行き先・題）")
+    sub.add_parser("show", help="案 1 つを、当たった文つきで出す（作る側だけが読む）").add_argument("id")
+    for name, text in (("adopt", "案を採る（次の版の予定に入り、Issue の下書きが出る）"), ("reject", "案を採らない")):
+        sp = sub.add_parser(name, help=text)
+        sp.add_argument("id")
+        sp.add_argument("--by", default="", help="決めた人の名前（git の外にだけ残す）")
+        sp.add_argument("--note", default="")
+    rl = sub.add_parser("release", help="次の版を刻む（直しが main に入った後に、人が呼ぶ）")
+    rl.add_argument("--commit", default="")
+    rl.add_argument("--by", default="")
+    rl.add_argument("--sheet-set", action="append", default=[], metavar="雛形=組", help="この版で変わった刷った組（何度でも）")
+    rl.add_argument("--note", default="")
+    sub.add_parser("compare", help="版ごとの数を並べる（判定はしない）")
+    sub.add_parser("version", help="今のエンジンの版と、次の版の予定")
+    args = ap.parse_args(argv)
+
+    def fail(fails):
+        for f in fails:
+            print(f.line(), file=sys.stderr)
+        return 3
+
+    try:
+        if args.cmd in ("check", "take"):
+            try:
+                b = _load(args.file)
+            except (OSError, ValueError, RecursionError) as e:
+                print(f"確かめられない: 束が読めない（{type(e).__name__}）", file=sys.stderr)
+                return 4
+            if args.cmd == "check":
+                fails = check_bundle(b)
+                return fail(fails) if fails else 0
+            path, fails, dropped = take(b)
+            if fails:
+                return fail(fails)
+            print(f"受けた: {path.name}（連絡先の形で落とした文 {dropped} 件）")
+            return 0
+        if args.cmd == "propose":
+            made = propose()
+            for p in made:
+                print(f"{p['id']} [{p['target']['kind']}] {p['title']}")
+            print(f"新しい案 {len(made)} 件（下書き。採るかは人が決める）")
+            return 0
+        if args.cmd == "list":
+            for p in proposals():
+                print(f"{p['id']} {p['status']} [{p['target']['kind']}] {p['title']}")
+            return 0
+        if args.cmd == "show":
+            if not PROPOSAL_ID.fullmatch(args.id) or not (_dirs()["proposals"] / f"{args.id}.json").exists():
+                return fail([Failure("F13.proposal", "案", "その番号の案が無い")])
+            print(issue_draft(_load(_dirs()["proposals"] / f"{args.id}.json")))
+            return 0
+        if args.cmd in ("adopt", "reject"):
+            fails = decide(args.id, args.by, args.cmd == "adopt", args.note)
+            if fails:
+                return fail(fails)
+            print(f"{args.id} を{'採った。次の版の予定に入れ、Issue の下書きを置いた' if args.cmd == 'adopt' else '採らないと決めた'}")
+            return 0
+        if args.cmd == "release":
+            pairs = [s.split("=", 1) for s in args.sheet_set]
+            if not all(len(p) == 2 for p in pairs):
+                return fail([Failure("F13.version", "sheet_sets", "刷った組は 雛形の id=組の名")])
+            n, fails = release(args.commit, args.by, dict(pairs), args.note)
+            if fails:
+                return fail(fails)
+            print(f"エンジンの版 {n} を刻んだ")
+            return 0
+        led = ledger()
+        if args.cmd == "compare":
+            print(compare(groups(bundles()), led))
+            return 0
+        now = max((v["version"] for v in led["versions"]), default=0)
+        print(f"エンジンの版 {now}。次の版の予定 {len(led.get('next', []))} 件")
+        for p in led.get("next", []):
+            print(f"  {p['id']} {p['title']}")
+        return 0
+    except (OSError, ValueError, KeyError) as e:
+        print(f"できない: {type(e).__name__}（置き場か台帳が読めない）", file=sys.stderr)
+        return 4
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -4,6 +4,8 @@
 *.key
 .venv/
 out/
+# 作る過程の記録の束と直しの案（omochae.engine_loop）。作った人の文を repo に入れない
+local/
 __pycache__/
 # 頼みの文（窓口からの作業の指示）は repo の中身ではないので入れない
 LANE-*.md
