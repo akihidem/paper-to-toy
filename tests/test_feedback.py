@@ -24,6 +24,23 @@ for pii in ({**OK, "motion_notes": "a.b@example.com まで"}, {**OK, "finish_not
             {**OK, "problems": [{"kind": "other", "step": None, "note": "〒123-4567 に住む"}]}, {**OK, "name": "山田"}):
     assert any(f.floor == "F12.pii" for f in fb.check(pii)), pii
 
+# 2b. 日本語に続く番号・区切りの違う番号・どの欄（params・source_id・reported_at・困り事の余分な欄）にあっても落とす
+for pii in ({**OK, "motion_notes": "電話090-1234-5678"}, {**OK, "motion_notes": "住所123-4567"}, {**OK, "motion_notes": "09012345678"},
+            {**OK, "motion_notes": "090 1234 5678"}, {**OK, "motion_notes": "090.1234.5678"}, {**OK, "motion_notes": "(090)1234-5678"},
+            {**OK, "motion_notes": "+81-90-1234-5678"}, {**OK, "motion_notes": "〒1234567"}, {**OK, "motion_notes": "090\u20101234\u20105678"},
+            {**OK, "motion_notes": "090\u20131234\u20135678"}, {**OK, "motion_notes": "a\u200b@b.jp"},
+            {**OK, "source_id": "山田太郎 090-1234-5678"}, {**OK, "params": {"name": "山田", "tel": "090-1234-5678"}},
+            {**OK, "reported_at": "a@b.jp"}, {**OK, "problems": [{"kind": "fit", "step": 1, "note": "", "tel": "090-1234-5678"}]}):
+    assert any(f.floor in ("F12.pii", "F12.report") for f in fb.check(pii)), pii
+# 2c. 普通の寸法・日付・記号は落とさない
+for fine in ("12-34mm", "2026-11-05", "糊代@3.0mm", "長さ 100-1500 mm", "03-12-150 mm", "羽 8 枚・半径 46mm"):
+    assert not [f for f in fb.check({**OK, "motion_notes": fine}) if f.floor == "F12.pii"], fine
+# 2d. 型の崩れた入力でも落ちずに F12.report を返す。落とした報告の値は知らせに出さない
+for broken in ({**OK, "template": ["spinner"]}, {**OK, "problems": [{"kind": ["fit"]}]}, {**OK, "template": "a@b.jp"},
+               {**OK, "params": "x"}, {**OK, "motion_notes": 3}):
+    fl = fb.check(broken)
+    assert fl and "a@b.jp" not in " ".join(f.line() for f in fl), broken
+
 # 3. 集めると、雛形・形ごとに動いた割合・仕上がりの点・多い困り事（手順つき）・直しの行き先が出る
 reports = [OK, {**OK, "moved": "moved", "finish": 5, "problems": []},
            {**OK, "moved": "not", "finish": 2, "problems": [{"kind": "fit", "step": 4, "note": "擦れて回らない"},
@@ -52,6 +69,13 @@ with tempfile.TemporaryDirectory() as d:
     r = run("summarize", d)
     assert r.returncode == 0 and "spinner" in r.stdout and "r2.json" in r.stderr, (r.stdout, r.stderr)
     assert "x@y.jp" not in r.stdout + r.stderr  # 落とした報告の中身を出し直さない
+    leak = pathlib.Path(d, "r3.json")
+    leak.write_text(json.dumps({**OK, "template": "z@w.jp"}), encoding="utf-8")
+    r = run("check", str(leak))
+    assert r.returncode == 3 and "z@w.jp" not in r.stderr, r.stderr  # check も値を出し直さない
+    pathlib.Path(d, "r4.json").write_text(json.dumps({**OK, "template": ["x"]}), encoding="utf-8")
+    r = run("summarize", d)
+    assert r.returncode == 0 and "spinner" in r.stdout, r.stderr  # 型の崩れた 1 つで集計が止まらない
 
 # 5. 雛形を足したら、直しの行き先の床（FLOORS）にも足す。漏れると、その雛形の案が「族の床」としか言えない
 from omochae.compose import TEMPLATES

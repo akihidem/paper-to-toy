@@ -44,57 +44,106 @@ FLOORS = {
 }
 ALLOWED = {"template", "form", "params", "source_id", "built", "moved", "finish", "motion_notes", "finish_notes",
            "problems", "reported_at"}
-# 提出物の F10.pii と同じ形。数字の並び（寸法や日付）まで落とさないよう、電話と郵便は区切りの形に限る。
-PII = [re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"), re.compile(r"\b0\d{1,4}-\d{1,4}-\d{3,4}\b"), re.compile(r"〒?\s*\b\d{3}-\d{4}\b")]
+PROBLEM_KEYS = {"kind", "step", "note"}
+# 出典の ID と時刻は決まった形だけを通す。自由な文を入れられる欄を、感想の 2 つと困り事の note に絞るため。
+SOURCE_ID = re.compile(r"NDL-\d+-R\d+-[LR](-[a-z_]+)?")
+REPORTED_AT = re.compile(r"\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?([+-]\d{2}:\d{2}|Z)?)?")
+EMAIL = re.compile(r"[\w.+-]+@[\w-]+(\.[\w-]+)*\.[A-Za-z]{2,}")
+# 電話は、数字と区切り（-・空白・点・括弧・+）の並びから数字だけを数えて見る。区切りの形を決め打つと、区切りなし・空白・点・
+# 括弧・国番号の書き方ですり抜けた（レビューの高）。\b を使わないのは、Python では漢字やかなも語の文字で、
+# 「電話090-…」のように日本語に続く番号を見逃したため。数字の数で分けるので、寸法（03-12-150 mm）は落ちない。
+PHONE_RUN = re.compile(r"\+?\(?\d[\d\s().-]{6,}\d")
+# 郵便番号は 〒 付きか、3 桁-4 桁で後ろに長さ・重さの単位が続かない物。単位まで見ないと「100-1500 mm」を落とした。
+POSTAL = re.compile(r"〒\s*\d{3}-?\d{4}|(?<!\d)\d{3}-\d{4}(?![\d.])(?!\s*(mm|cm|m|g|kg|度|°|枚|本|回))")
 
 
 def _norm(text):
-    """全角を半角にそろえ、見えない文字を消す。そろえないと、全角の電話番号や間に挟んだ見えない文字ですり抜けた。"""
+    """全角を半角にそろえ、見えない文字を消し、どのハイフンやダッシュも - にそろえる。
+    そろえないと、全角の番号・間に挟んだ見えない文字・U+2010 や en dash の区切りですり抜けた。"""
     t = unicodedata.normalize("NFKC", str(text))
-    t = t.replace("－", "-").replace("ー", "-").replace("−", "-")
+    t = "".join("-" if unicodedata.category(ch) == "Pd" or ch in "ー−" else ch for ch in t)
     return "".join(ch for ch in t if unicodedata.category(ch) != "Cf")
 
 
-def _texts(r):
-    yield r.get("motion_notes", ""), "motion_notes"
-    yield r.get("finish_notes", ""), "finish_notes"
-    for i, pr in enumerate(r.get("problems") or []):
-        if isinstance(pr, dict):
-            yield pr.get("note", ""), f"problems[{i}].note"
+def _has_pii(text):
+    t = _norm(text)
+    if EMAIL.search(t) or POSTAL.search(t):
+        return True
+    for m in PHONE_RUN.finditer(t):
+        digits = re.sub(r"\D", "", m.group())
+        # 日本の電話は 0 から 10〜11 桁、国番号 81 なら 81 の後に 9〜10 桁
+        if (digits.startswith("0") and 10 <= len(digits) <= 11) or (digits.startswith("81") and 11 <= len(digits) <= 12):
+            return True
+    return False
+
+
+def _strings(v):
+    """入れ子の中の文字列を全部出す（欄の名も）。決まった欄の外に書かれた個人の情報も見るため。"""
+    if isinstance(v, str):
+        yield v
+    elif isinstance(v, dict):
+        for k, x in v.items():
+            yield str(k)
+            yield from _strings(x)
+    elif isinstance(v, (list, tuple)):
+        for x in v:
+            yield from _strings(x)
 
 
 def check(r):
-    """報告 1 つを確かめる。Returns Failure の list（空なら通る）。"""
+    """報告 1 つを確かめる。Returns Failure の list（空なら通る）。
+    知らせの文には、報告の値を入れない（落とした報告の中身を出し直さないため。欄の名も、決まりの外の物は出さない）。"""
     out = []
     if not isinstance(r, dict):
         return [Failure("F12.report", "報告", "JSON の物（辞書）でない")]
-    extra = set(r) - ALLOWED
-    if extra:
-        # 名前・連絡先の欄は、決まりの外の欄として落とす。欄の名を知らせるだけで、値は出さない。
-        out.append(Failure("F12.pii", "欄", f"決まりの外の欄 {'・'.join(sorted(extra))}（名前や連絡先は書かない）"))
-    tpl = TEMPLATES.get(r.get("template"))
+    # 個人の情報は、欄に関わらず全部の文字列で見る。決まった欄の中だけ見ると、params や source_id に書けばすり抜けた
+    if any(_has_pii(t) for t in _strings(r)):
+        out.append(Failure("F12.pii", "報告", "メールアドレス・電話番号・郵便番号の形がある（個人の情報は書かない）"))
+    if set(r) - ALLOWED:
+        out.append(Failure("F12.pii", "欄", f"決まりの外の欄が {len(set(r) - ALLOWED)} つある（名前や連絡先は書かない）"))
+    t = r.get("template")
+    tpl = TEMPLATES.get(t) if isinstance(t, str) else None
     if tpl is None:
-        out.append(Failure("F12.report", "template", f"知らない雛形 {r.get('template')!r}"))
-    elif r.get("form") not in tpl.FORMS:
-        out.append(Failure("F12.report", "form", f"{tpl.ID} の形は {'・'.join(map(str, tpl.FORMS))}"))
+        out.append(Failure("F12.report", "template", f"知らない雛形（{'・'.join(sorted(TEMPLATES))} のどれか）"))
+    else:
+        f = r.get("form")
+        if not isinstance(f, str) or f not in tpl.FORMS:
+            out.append(Failure("F12.report", "form", f"{tpl.ID} の形は {'・'.join(map(str, tpl.FORMS))}"))
+        params = r.get("params", {})
+        if not isinstance(params, dict) or any(k not in tpl.DEFAULTS for k in params) \
+                or any(not isinstance(v, (int, float, str)) or isinstance(v, bool) for v in params.values()):
+            out.append(Failure("F12.report", "params", f"{tpl.ID} の寸法の名と、数か形の値だけ"))
+    sid = r.get("source_id")
+    if sid is not None and not (isinstance(sid, str) and SOURCE_ID.fullmatch(sid)):
+        out.append(Failure("F12.report", "source_id", "出典の ID の形（NDL-…）でない"))
+    at = r.get("reported_at")
+    if at is not None and not (isinstance(at, str) and REPORTED_AT.fullmatch(at)):
+        out.append(Failure("F12.report", "reported_at", "日付か ISO 8601 の時刻でない"))
     if not isinstance(r.get("built"), bool):
         out.append(Failure("F12.report", "built", "組み上がったかを true か false で書く"))
-    if r.get("moved") not in MOVED:
+    m = r.get("moved")
+    if not isinstance(m, str) or m not in MOVED:
         out.append(Failure("F12.report", "moved", f"動いたかは {'・'.join(MOVED)} のどれか"))
-    if not (isinstance(r.get("finish"), int) and not isinstance(r.get("finish"), bool) and r.get("finish") in FINISH):
+    fin = r.get("finish")
+    if not (isinstance(fin, int) and not isinstance(fin, bool) and fin in FINISH):
         out.append(Failure("F12.report", "finish", "仕上がりの点は 1〜5 の整数"))
+    for key in ("motion_notes", "finish_notes"):
+        if key in r and not isinstance(r[key], str):
+            out.append(Failure("F12.report", key, "文で書く"))
     probs = r.get("problems", [])
     if not isinstance(probs, list):
         out.append(Failure("F12.report", "problems", "困り事は list"))
         probs = []
     for i, pr in enumerate(probs):
-        if not isinstance(pr, dict) or pr.get("kind") not in KINDS:
+        if not isinstance(pr, dict) or not isinstance(pr.get("kind"), str) or pr["kind"] not in KINDS:
             out.append(Failure("F12.report", f"problems[{i}]", f"困り事の種類は {'・'.join(KINDS)} のどれか"))
-        elif pr.get("step") is not None and not (isinstance(pr["step"], int) and not isinstance(pr["step"], bool) and pr["step"] >= 1):
+            continue
+        if set(pr) - PROBLEM_KEYS:
+            out.append(Failure("F12.pii", f"problems[{i}]", "困り事に決まりの外の欄がある（kind・step・note だけ）"))
+        if pr.get("step") is not None and not (isinstance(pr["step"], int) and not isinstance(pr["step"], bool) and pr["step"] >= 1):
             out.append(Failure("F12.report", f"problems[{i}].step", "手順の番号は 1 からの整数か null"))
-    for text, where in _texts(r):
-        if any(p.search(_norm(text)) for p in PII):
-            out.append(Failure("F12.pii", where, "メールアドレス・電話番号・郵便番号の形がある（個人の情報は書かない）"))
+        if "note" in pr and not isinstance(pr["note"], str):
+            out.append(Failure("F12.report", f"problems[{i}].note", "文で書く"))
     return out
 
 
@@ -102,6 +151,8 @@ def summarize(reports):
     """通った報告を雛形・形ごとに集める。Returns {(template, form): 集計}。困り事は多い順で、行き先の文を付ける。"""
     out = {}
     for r in reports:
+        if not isinstance(r, dict) or check(r):
+            continue  # 通らない報告は数えない（CLI は先に check で除くが、道具として直に呼ばれても落ちないように）
         key = (r["template"], r["form"])
         g = out.setdefault(key, {"n": 0, "built": 0, "moved": Counter(), "finish": [], "kinds": {}})
         g["n"] += 1
@@ -153,7 +204,7 @@ def main(argv=None):
     def load(path):
         try:
             return json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
-        except (OSError, ValueError) as e:
+        except (OSError, ValueError, RecursionError) as e:
             return e
 
     if args.cmd == "check":
