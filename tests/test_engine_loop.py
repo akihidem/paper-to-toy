@@ -1,6 +1,7 @@
 """エンジンごとの改善の輪（omochae.engine_loop・#63）を確かめる。束の入口 → 案 → 人の採否 → 次の版 → 版ごとの数の並び。
 話した事（考え・工夫・できた後の話。#65）も束で受け、手順の番号つきの工夫から案が起きる事を見る。
-前の組の紙の記録から起きた案に、今の刷った組が並ぶ事を見る（#68）。"""
+前の組の紙の記録から起きた案に、今の刷った組が並ぶ事を見る（#68）。
+束を受けたら、人の操作なしに案と Issue の下書きが置き場に出る事を見る（#72。立てるのは人のまま）。"""
 import copy
 import json
 import os
@@ -101,6 +102,20 @@ placed = list((tmp / "local/bundles").glob("B-*.json"))
 assert len(placed) == 1 and PHONE not in placed[0].read_text(encoding="utf-8")
 kept = json.loads(placed[0].read_text(encoding="utf-8"))
 assert kept["dropped_pii"] == 1 and len(kept["groups"][0]["texts"]) == len(SAMPLE["groups"][0]["texts"])
+# 束を受けたら、続けて案が起き、Issue の下書きが置き場に出る（#72）。人が打ったのは take の 1 回だけ。propose も adopt も打っていない
+ISSUES = tmp / "local/issues"
+auto = el.proposals()
+assert len(auto) >= 6 and all(p["status"] == "draft" for p in auto)
+assert sorted(f.stem for f in ISSUES.glob("EP-*.md")) == sorted(p["id"] for p in auto)
+for p in auto:
+    md = (ISSUES / f"{p['id']}.md").read_text(encoding="utf-8")
+    assert all(h in md for h in ("## 目的", "## なぜか（根拠）", "## どうしたらいいか", "## ゴールの要件")), p["id"]
+    assert "まだ採っていない案" in md.split("## 目的")[0] and "立てるのは人" in md.split("## 目的")[0] and PHONE not in md
+assert f"新しい案 {len(auto)} 件" in r.stdout and "Issue の下書き" in r.stdout and all(p["id"] in r.stdout for p in auto)
+# この道具は、外へ何も送らない（Issue を立てるのは人）。網や外の命令を使う呼び出しを持たない
+code = (ROOT / "src/omochae/engine_loop.py").read_text(encoding="utf-8")
+for word in ("import subprocess", "import urllib", "import socket", "import http", "import requests", "os.system", "gh issue"):
+    assert word not in code, word
 # 話した事（声から字にした物）も同じ床で落ちる。話した数（craft_steps）は数なので残る
 spoken = variant(lambda b: b["groups"][0]["texts"].append({"kind": "craft", "step": 3, "text": f"分からなければ {PHONE} に聞いて", "count": 1}))
 assert [f.floor for f in el.check_bundle(spoken)] == ["F13.pii"] and PHONE not in el.check_bundle(spoken)[0].line()
@@ -113,7 +128,8 @@ gs = el.groups(el.bundles())
 assert gs[("slider_fan", "goraigo-v10")]["reports"] == 5
 
 # 5. 案: 雛形・部品（共有の所）・生成の決まり の 3 種が出る。案は数と文だけで、新しい寸法の値を持たない。2 度起こさない
-made = el.propose()
+assert el.propose() == ([], [])  # 束の中身が同じなら、新しい案も、新しくする案も無い
+made = el.proposals()
 kinds = {p["target"]["kind"] for p in made}
 assert kinds == {"template", "part", "rule"}, kinds
 by_key = {p["key"]: p for p in made}
@@ -154,7 +170,7 @@ for p in made:
     assert set(p) == allowed and p["status"] == "draft", set(p) ^ allowed
     assert all(isinstance(v, int) and not isinstance(v, bool) for v in p["numbers"].values())  # 数は件数だけ（寸法の値でない）
     assert not {"params", "to", "value", "from"} & set(p["target"])
-assert el.propose() == []
+assert el.propose() == ([], [])
 # 前の組の紙の記録（#68）: 案は今までどおり起きる（機械が「もう直った」と決めない）。「なぜか」に、今の組と、前の組の紙の物である事が並ぶ。
 # 組の分からない記録には、分からない事が並ぶ。束が今の組を持たない時は、何も足さない
 def add_old(b):
@@ -178,7 +194,8 @@ assert all("今の組" not in d["why"] and not d["current_set"] for d in no_cur.
 only_site = variant(lambda b: (b.update({"from": "other-site", "groups": [b["groups"][2]]}), b["groups"][0]["stuck_steps"].update({"4": {"taps": 2, "people": 2}})))
 assert el.take(only_site)[0] is not None
 assert el.groups(el.bundles())[("den_den", "den_den-v1")]["reports"] == 2
-extra = {p["key"]: p for p in el.propose()}
+extra = {p["key"]: p for p in el.propose()[0]}
+assert (ISSUES / f"{extra['stuck:den_den:den_den-v1:4']['id']}.md").exists()  # 手で propose を打った時も、下書きが出る
 assert extra["stuck:den_den:den_den-v1:4"]["in_engine"] is False
 assert "今の組は den_den-v2" in extra["stuck:den_den:den_den-v1:4"]["why"]
 assert "一覧に無い" in el.issue_draft(extra["stuck:den_den:den_den-v1:4"])
@@ -189,6 +206,7 @@ r = cli("adopt", sid)
 assert r.returncode == 3 and "F13.human" in r.stderr
 assert cli("adopt", "EP-9999", "--by", "作る人").returncode == 3
 assert cli("adopt", "../x", "--by", "作る人").returncode == 3
+assert "まだ採っていない案" in (ISSUES / f"{sid}.md").read_text(encoding="utf-8") and (ISSUES / f"{fid}.md").exists()
 assert cli("adopt", sid, "--by", "作る人").returncode == 0
 assert cli("reject", fid, "--by", "作る人", "--note", "次の試行を待つ").returncode == 0
 led = el.ledger()
@@ -198,6 +216,7 @@ ledger_text = (tmp / "versions.json").read_text(encoding="utf-8")
 assert "折り線の向きが分からなかった" not in ledger_text and "作る人" not in ledger_text and "evidence" not in ledger_text
 draft = (tmp / "local/issues" / f"{sid}.md").read_text(encoding="utf-8")
 assert all(h in draft for h in ("## 目的", "## なぜか（根拠）", "## どうしたらいいか", "## ゴールの要件")) and "足は山折りですか" in draft
+assert "採った案" in draft.split("## 目的")[0] and "まだ採っていない案" not in draft
 assert "止まったの札 4" in draft and "stuck_taps" not in draft  # 数は呼び方を付けて出す
 assert "話した工夫（手順 3）: 「折る前に、定規で折り線をなぞった」" in draft and "craft_talks" not in draft
 assert "話した工夫（手順 6）" in el.issue_draft(talk6) and "組み方の文" in el.issue_draft(talk6)
@@ -206,7 +225,11 @@ head, _, material = draft.partition("---")
 assert el.MATERIAL in material and "写さない" in material and "## " not in material
 assert all(t["text"] in material and t["text"] not in head for t in stuck["evidence"]) and len(stuck["evidence"]) >= 4
 assert set(el.NUMBER_JA) >= {k for p in made for k in p["numbers"]}
-assert not (tmp / "local/issues" / f"{fid}.md").exists()
+assert not (tmp / "local/issues" / f"{fid}.md").exists()  # 採らないと決めた案の下書きは、置き場から消える（立てる物と間違えないため）
+listed = cli("list").stdout
+assert f"{sid} adopted" in listed and "下書きあり" in [ln for ln in listed.splitlines() if ln.startswith(sid)][0]
+assert "下書きあり" not in [ln for ln in listed.splitlines() if ln.startswith(fid)][0]
+assert "（刷った組 goraigo-v10）" in [ln for ln in listed.splitlines() if ln.startswith(sid)][0]  # 同じ雛形の案を、組で見分ける
 assert cli("adopt", sid, "--by", "作る人").returncode == 3  # 決め直しはしない
 assert cli("adopt", fid, "--by", "作る人").returncode == 3
 
@@ -229,6 +252,30 @@ broken["next"].append({"id": sid, "target": {}, "title": "", "numbers": {}})
 assert cli("version").returncode == 4  # 同じ案が 2 度ある台帳は、読めない物として止める
 broken["next"].pop()
 (tmp / "versions.json").write_text(json.dumps(broken, ensure_ascii=False), encoding="utf-8")
+
+# 7b. 束が増えて数や文が変わったら、まだ決まっていない案と下書きを新しくする（番号は同じ）。人が決めた案は書き換えない（#72）
+def more(b):
+    b.update(exported_at="2026-11-05T17:00+09:00")
+    g = b["groups"][0]
+    g["stuck_steps"]["3"] = {"taps": 9, "people": 5}  # 採って版に刻んだ案（sid）の段
+    g["craft_steps"]["6"] = {"talks": 3, "people": 3}  # まだ決まっていない案（talk6）の段
+    g["texts"].append({"kind": "craft", "step": 6, "text": "貼る前に、内筒を一度抜いて確かめた", "count": 1})
+    g["texts"].append({"kind": "fix", "step": None, "text": "外筒 / 角を少し削った / 引っかからなくなった", "count": 1})  # 採らないと決めた案（fid）の材料
+
+
+before = {p["id"]: p for p in el.proposals()}
+r = cli("take", put("more.json", variant(more)))
+assert r.returncode == 0 and "新しくした案 1 件" in r.stdout and talk6["id"] in r.stdout, r.stdout + r.stderr
+now = {p["id"]: p for p in el.proposals()}
+assert set(now) == set(before)  # 番号は増えない
+t6 = now[talk6["id"]]
+assert t6["status"] == "draft" and t6["numbers"]["craft_talks"] == 3 and t6["numbers"]["craft_people"] == 3 and t6["made_at"] == talk6["made_at"] and t6["renewed_at"]
+md6 = (ISSUES / f"{talk6['id']}.md").read_text(encoding="utf-8")
+assert "話した工夫 3" in md6 and "貼る前に、内筒を一度抜いて確かめた" in md6 and "まだ採っていない案" in md6
+for pid in (sid, fid, mid):  # 採った・採らない・版に刻んだ案は、決めた時に見た数のまま
+    assert now[pid] == before[pid], pid
+assert "止まったの札 4" in (ISSUES / f"{sid}.md").read_text(encoding="utf-8") and not (ISSUES / f"{fid}.md").exists()
+assert "新しくした案 0 件" in cli("propose").stdout  # 同じ束でもう一度打っても、何も変わらない
 
 # 8. 並べる: 次の版の紙の束が来たら、刷った組ごとに数が並ぶ。判定の語も割合も出さない。組は名の数の順（v9 → v10 → v11）
 after = variant(lambda b: (b.update(exported_at="2026-11-06T10:00+09:00"), b["current_sets"].update(slider_fan="goraigo-v11"),
@@ -258,5 +305,11 @@ real = el.ledger()
 assert real["versions"] and real["versions"][0]["version"] == 1
 assert all(set(p) <= {"id", "target", "title", "numbers", "adopted_at"} for v in real["versions"] for p in v["proposals"])
 assert all(set(p) <= {"id", "target", "title", "numbers", "adopted_at"} for p in real["next"])
+
+# 10. 呼び方の誤り（引数なし・知らない命令・要る引数が無い・知らない印）は rc 4。1 と 2 は使わない（終了の番号の決まり。#71）。--help は rc 0
+for wrong in ((), ("no_such_command",), ("take",), ("adopt",), ("release", "--no-such-flag"), ("compare", "extra")):
+    r = cli(*wrong)
+    assert r.returncode == 4, (wrong, r.returncode, r.stderr[-200:])
+assert cli("--help").returncode == 0 and cli("take", "--help").returncode == 0
 
 print("OK test_engine_loop")
