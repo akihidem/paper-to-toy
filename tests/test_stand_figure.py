@@ -349,6 +349,38 @@ for fig in t.FIGURES:
 # 脚の絵は 3 本の線（姿・脚・つなぎ）と机の線
 assert sum(1 for q in t.diagram(10, 20, 40, 50, P) if q["kind"] == "line") == 4
 
+# 姿の大きさ（scale）だけを変えても、勧めの寸法が姿に付いて来る: 脚の長さ・貼る面・溝の長さは同じ倍率、脚の幅は小さくする時だけ、
+# 台の箱は大きくする時だけ。書いた値はそのまま勝ち、1 倍は元の勧めのまま
+small = t.filled({**t.DEFAULTS, "figure": "mimizuku", "scale": 0.75})
+assert (small["tab_length"], small["tab_glue"], small["tab_width"]) == (36.0, 33.8, 10.5), small
+assert (small["base_length"], small["base_depth"]) == (t.BASE_DEFAULTS["base_length"], t.BASE_DEFAULTS["base_depth"])
+big = t.filled({**t.DEFAULTS, "figure": "hagoita", "scale": 1.25})
+h1 = t.figure_defaults("hagoita")
+assert big["base_depth"] == h1["base_depth"] * 1.25 and big["base_length"] == h1["base_length"] * 1.25 and big["tab_width"] == h1["tab_width"]
+assert abs(big["slot_length"] - h1["slot_length"] * 1.25) < 0.051
+assert t.filled({**t.DEFAULTS, "figure": "mimizuku", "scale": 0.75, "tab_length": 40})["tab_length"] == 40
+assert t.filled({**t.DEFAULTS, "figure": "mimizuku"}) == {**t.DEFAULTS, **t.figure_defaults("mimizuku"), "figure": "mimizuku"}
+assert all(lo <= v <= hi for sc in (0.5, 1.5) for f in t.FIGURES for k, (lo, hi) in t.RANGES.items()
+           if isinstance(v := t.figure_defaults(f, sc).get(k), (int, float)))
+# 倍率が数でない時は、埋める所では止まらず、範囲の検査が 1 つだけ落とす
+assert [f.where for f in t.check_range({**t.DEFAULTS, "scale": "big"})] == ["scale"]
+# 脚で立てる姿は、0.75 倍・0.9 倍（A4）と 1.25 倍（B4。大きい姿は A4 に入らない）で、倍率だけを書いて配置まで通る。
+# 倍率を掛ける前は、0.75 倍で 35 のうち 19、1.25 倍で 21 の姿が落ちた
+for sc, page in ((0.75, "A4"), (0.9, "A4"), (1.25, "B4")):
+    for fig, f in t.FIGURES.items():
+        if f["stand"] == "easel":
+            src = json.loads((ROOT / "data/sources" / f"{f['source']}.json").read_text(encoding="utf-8"))
+            _, _, fails = compose("stand_figure", {"figure": fig, "scale": sc}, src, page)
+            assert fails == [], (sc, fig, [x.line() for x in fails])
+# 台に差す姿も、0.9 倍では魚の体の人形（足が細く、舌の横の余白が取れない）のほかは通る
+bad = []
+for fig, f in t.FIGURES.items():
+    if f["stand"] == "base":
+        src = json.loads((ROOT / "data/sources" / f"{f['source']}.json").read_text(encoding="utf-8"))
+        if compose("stand_figure", {"figure": fig, "scale": 0.9}, src)[2]:
+            bad.append(fig)
+assert bad == ["sakana"], bad
+
 # 姿の形の覚えは上限つき（高さは連続の値なので、上限が無いと場面を回すほど増える）
 assert t._shape.cache_info().maxsize is not None
 print("ok")

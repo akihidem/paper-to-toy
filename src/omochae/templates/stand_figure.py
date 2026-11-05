@@ -662,17 +662,36 @@ FORMS = tuple(FIGURES)
 SOURCES = {k: f["source"] for k, f in FIGURES.items()}
 
 
-def figure_defaults(figure):
-    """その姿の既定: 共通の出発点に、姿に勧める立て方と寸法を重ねた物。"""
+# 姿の大きさ（scale）に付いて伸び縮みする勧めの寸法。勧めは 1 倍の姿に合わせた mm の値なので、倍率だけを変えると、脚が背から
+# はみ出す・舌が足より広い・台が小さい、でほとんどの姿が落ちた（0.75 倍で 35 のうち 19、1.25 倍で 21）。
+# 脚の三角（脚の長さ・貼る面）と舌の幅（溝の長さ）は、姿に比例させる。脚の幅は、小さくする時だけ細くする（大きい姿に太い脚は要らない）。
+# 台の箱は、大きくする時だけ広げる（小さい姿に元の台は広すぎるだけで、倒れる側には効かない。縮めると余白が減る）。
+# 箱の高さ・溝の幅・糊代は紙と手の都合の寸法なので、姿の大きさでは変えない。
+_SCALE_ALWAYS = ("tab_length", "tab_glue", "slot_length")
+_SCALE_DOWN = ("tab_width",)
+_SCALE_UP = ("base_length", "base_depth")
+
+
+def figure_defaults(figure, scale=1.0):
+    """その姿の既定: 共通の出発点に、姿に勧める立て方と寸法を重ねた物。scale が 1 でなければ、姿に付いて伸び縮みする寸法を
+    同じ倍率にする（0.1mm に丸め、RANGES の内に収める）。"""
     f = FIGURES[figure]
-    return {**BASE_DEFAULTS, "stand": f["stand"], **f.get("suggest", {})}
+    d = {**BASE_DEFAULTS, "stand": f["stand"], **f.get("suggest", {})}
+    if scale != 1.0:
+        for k in _SCALE_ALWAYS + (_SCALE_DOWN if scale < 1 else _SCALE_UP):
+            lo, hi = RANGES[k]
+            d[k] = min(hi, max(lo, round(d[k] * scale, 1)))
+    return d
 
 
 def filled(p):
     """None（＝姿の勧め）の値を、その姿の既定で埋める。書いた値はそのまま勝つ。姿が一覧に無ければ埋めない（範囲の検査が落とす）。"""
     if p.get("figure") not in FIGURES:
         return dict(p)
-    base = figure_defaults(p["figure"])
+    # 倍率が数でない・範囲の外の時は、1 倍の勧めで埋める（倍率の誤りは範囲の検査が落とす。ここでは止めない）。
+    sc = p.get("scale")
+    ok = isinstance(sc, (int, float)) and not isinstance(sc, bool) and RANGES["scale"][0] <= sc <= RANGES["scale"][1]
+    base = figure_defaults(p["figure"], float(sc) if ok else 1.0)
     return {**p, **{k: base[k] for k in base if p.get(k) is None}}
 
 
@@ -690,7 +709,8 @@ def title(p):
 
 
 def spec():
-    # 姿ごとの既定も見せる（立て方と寸法は姿で変わる。None の既定だけでは何で刷られるか分からない）。
+    # 姿ごとの既定も見せる（立て方と寸法は姿で変わる。None の既定だけでは何で刷られるか分からない）。1 倍の姿の値で、
+    # scale を変えた時は figure_defaults(姿, scale) の値になる。
     return {"template_id": ID, "defaults": DEFAULTS, "ranges": RANGES, "figure": FORMS, "stand": STANDS, "back": (0, 1),
             "figures": {k: figure_defaults(k) for k in FIGURES}}
 
