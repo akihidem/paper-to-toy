@@ -19,7 +19,7 @@
 - 竹串の太さは、溝の式（slot_span）と同じ knob_width と見る。刷った穴の丸（半径 1.2mm）は竹串の先であける所の印で、竹串の太さではない
 - 行程は、内筒の上の端が口より押し上げる量だけ下にある時（静かな時）から、口に届く時（押し上げ切る）まで。
   押し上げる量は寸法から、筒の高さは折った形から取る
-- 溝の無い側の竹串の端の長さは見ない
+- 竹串の長さと端の位置は見ない（竹串は刷る部品でなく、型紙に長さが無い）。見るのは、竹串の線が溝を通るかだけ
 終了: 0 = 確かめて通った / 3 = 落ちた / 4 = 確かめられない（まだ組めない形・読めない）。
 """
 import math
@@ -208,8 +208,16 @@ def fold(part, deg=FOLD_DEG):
 
 
 def _glue_faces(part, faces):
+    """糊代とちょうど重なる面（面の 99% が糊代で、その糊代の 99% がこの面にある）。
+
+    面の側だけを見ると、糊代が隣の面へはみ出しても通った（レビューの指摘）。両側から見る。
+    """
     gs = [Polygon(g) for g in part.glue]
-    return [f for f in faces if any(f.poly.intersection(g).area >= 0.99 * f.poly.area for g in gs)]
+
+    def same(f, g):
+        a = f.poly.intersection(g).area
+        return a >= 0.99 * f.poly.area and a >= 0.99 * g.area
+    return [f for f in faces if any(same(f, g) for g in gs)]
 
 
 def _seam(part, face, ends):
@@ -257,7 +265,7 @@ def _close(part, faces):
     glued = _glue_faces(part, faces)
     # 糊代 1 つに面 1 つ。余計な折り線で糊代が分かれると、片方だけを見て、もう片方を見落とす（レビューの指摘）
     if len(glued) != len(part.glue):
-        return None, Failure("3D.close", where, f"糊代が折り線で区切られた 1 面になっておらず（糊代 {len(part.glue)} つに面 {len(glued)} つ）、折って貼れない")
+        return None, Failure("3D.close", where, f"糊代が折り線で区切られた 1 面とちょうど重なっておらず（糊代 {len(part.glue)} つに、重なる面 {len(glued)} つ）、折って貼れない")
     gi = next(i for i, f in enumerate(faces) if f is glued[0])
     g, k = faces[gi], _far_end(faces, gi)
     # 糊代の面の折り線。外形の始めの点が糊代の面にあると、その面が動かない面になり、折り線は子の面の側が持つ

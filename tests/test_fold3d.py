@@ -137,11 +137,13 @@ NEG = [
     ("tube", lambda q: q.mountain.append(q.valley[0]), "3D.close", "1 外筒", "重なる"),  # 谷と山を同じ所に重ねる
     ("tube", swap_first_points, "3D.close", "1 外筒", "自分と交わり"),        # 外形が自分と交わる
     # 糊代を余計な折り線で 2 つに分ける（糊代の真ん中では、角を落とした斜めの縁が上下 1mm 内側にある）
-    ("tube", add_fold(4 * A + p["tube_glue"] / 2, 1.0, 1.0), "3D.close", "1 外筒", "1 面になっておらず"),
+    ("tube", add_fold(4 * A + p["tube_glue"] / 2, 1.0, 1.0), "3D.close", "1 外筒", "ちょうど重なって"),
     ("pusher", scale_x(31 / 26), "3D.skewer", "2 内筒", "入らない"),  # 内筒の絵が外筒（一辺 30mm）より太い 31mm
     ("tube", move_fold(2, 2.0), "3D.close", "1 外筒", "継ぎ目"),    # 3 本目の折り線を 2mm ずらす → 90° ずつでは閉じない
     ("tube", widen_first(2.0), "3D.close", "1 外筒", "継ぎ目"),     # 1 面目だけ 2mm 広い → 継ぎ目が 1 面目の縁に来ない
     ("tube", lambda q: q.glue.clear(), "3D.close", "1 外筒", "糊代"),  # 糊代の印が無い → 継ぎ目を貼れない
+    # 糊代の印が隣の面へ 5mm はみ出す（面の側だけを見ると、糊代の面は全部が糊代なので通った）
+    ("tube", lambda q: q.glue.__setitem__(0, [(x - 5 if x == 4 * A else x, y) for x, y in q.glue[0]]), "3D.close", "1 外筒", "ちょうど重なって"),
     ("pusher", move_fold(0, 2.0), "3D.close", "2 内筒", "継ぎ目"),  # 内筒が閉じなければ、竹串の線は見ない（1 行だけ）
     ("tube", notch(dx=3.0), "3D.skewer", "竹串", "溝"),            # 溝を面の真ん中から 3mm ずらす
     ("tube", notch(narrow=1.0), "3D.skewer", "竹串", "溝"),        # 溝を竹串より細くする（幅 5mm → 3mm、竹串 4mm）
