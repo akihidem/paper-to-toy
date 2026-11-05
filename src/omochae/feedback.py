@@ -83,9 +83,10 @@ CONTACT = re.compile(r"(?i)@|アット|メアド|メール|電話|携帯|https?:
                      # （「折りライン2.5mm」「fold line bent」で落としていたので、ライン は英字で始まる名が続く時、英語の line は ID か : が続く時だけ）
                      r"|(?<![a-z])line\s*(id)?\s*[:：]|(?<![a-z])line\s*id\s*[a-z0-9_.]{3,}|ライン\s*(?:の?\s*id)?\s*(?:は|[:：=])?\s*[a-z_][a-z0-9_.]{3,}")
 # 大文字の LINE の後に名が続く形（LINE yamada）。大文字と小文字を分けて見るのは、工作の英語（line them up）と分けるため
-# 大文字小文字に関わらず、数字か _ を含む名が続く形（Line taro_123・LiNe taro_123）も当てる。数字や _ の入った名は工作の英語に出ない
+# 大文字小文字に関わらず、数字か _ を含む 4 字以上の名が続く形（Line taro_123・LiNe taro_123・Line _taro）も当てる。
+# 数字や _ の入った名は工作の英語に出ない。4 字より短い物（Line A1 の様な部品の印）は当てない
 LINE_HANDLE = re.compile(r"(?<![A-Za-z])LINE\s*(?:の?\s*ID)?\s*(?:は|[:：=])?\s*[A-Za-z_][A-Za-z0-9_.]{3,}"
-                         r"|(?i:(?<![a-z])line\s*(?:の?\s*id)?\s*(?:は|[:：=])?\s*[a-z_][a-z0-9.]*[0-9_][a-z0-9_.]*)")
+                         r"|(?i:(?<![a-z])line\s*(?:の?\s*id)?\s*(?:は|[:：=])?\s*(?=[a-z_][a-z0-9_.]{3,})(?=[a-z0-9.]*[0-9_])[a-z0-9_.]+)")
 
 
 def _norm(text):
@@ -157,6 +158,9 @@ def check(r):
     try:
         # source_id と時刻は、下で決まった形（在る出典・在る日付）だけを通すので、文の見方から外す。
         # 外さないと、出典の ID の 7 桁（1187053）を郵便番号と取り違えた
+        # 一番上の欄も先に数える。数える前に一番上を写すと、欄の多い報告を写し終えるまで断れなかった
+        if len(r) > MAX_STRINGS:
+            return [Failure("F12.report", "報告", f"欄が多すぎる（{MAX_STRINGS} まで）")]
         # 全部を集めてから上限を見ると、大きな報告を全部たどり全部持ってからでないと断れなかった。1 つずつ数え、越えた所で止める
         texts, leaves, total = [], 0, 0
         for t in _strings({k: v for k, v in r.items() if k not in ("source_id", "reported_at", "reviewed_at")}):
