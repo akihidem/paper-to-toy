@@ -39,11 +39,12 @@ pc, p = built(TAB)
 notes, fails = fold3d.check(list(pc.values()), p)
 assert not fails, [f.line() for f in fails]
 # 所見の頭には、確かめた操作が組み方の手順の何番かを添える（組んだ過程と手順書を番号で結ぶ。手順の文は同じ操作から作る）
-heads = ["閉じる 1 外筒（手順 3）: ", "外向き 1 外筒（手順 3）: ", "閉じる 2 内筒（手順 5）: ", "並ぶ 竹串（手順 6・12）: ",
-         "押し上げる 竹串（手順 13）: "]
-assert len(notes) == 5 and all(n.startswith(h) for n, h in zip(notes, heads)), notes
+# 手順の文を作る操作の並び（omochae.ops3d）を、その順に 3D で行う。1 つの操作に 1 行（外筒は閉じると色の面の向きの 2 行）
+heads = ["閉じる 1 外筒（手順 3）: ", "外向き 1 外筒（手順 3）: ", "閉じる 2 内筒（手順 5）: ", "通す 竹串（手順 6）: ",
+         "入れる 2 内筒（手順 12）: ", "押し上げる 竹串（手順 13）: "]
+assert len(notes) == 6 and all(n.startswith(h) for n, h in zip(notes, heads)), notes
 # 13 は、竹串の行程までを 3D で見た事と、扇が開く所はまだ 3D で組んでいない事を、はっきり言う（確かめたように見せない）
-assert "69mm の行程" in notes[4] and "まだ 3D で組んでいない" in notes[4], notes[4]
+assert "69mm 上がり" in notes[5] and "まだ 3D で組んでいない" in notes[5], notes[5]
 # 手順の番号を添えるのに扇などの部品は要らない。外筒と内筒だけを渡しても確かめられる
 assert not fold3d.check([pc["tube"], pc["pusher"]], p)[1]
 # 外筒は色の面を外にする山折り（見える面）。内筒は破線を刷る谷折りのまま（隠れる部品）
@@ -179,7 +180,13 @@ two = copy.deepcopy(pc)
 two["tube"].valley, two["tube"].mountain = two["tube"].mountain, []
 move_fold(0, 2.0)(two["pusher"])
 fl = fold3d.check(list(two.values()), p)[1]
-assert [(f.floor, f.where) for f in fl] == [("3D.close", "2 内筒"), ("3D.face", "1 外筒")], [f.line() for f in fl]
+assert [(f.floor, f.where) for f in fl] == [("3D.face", "1 外筒"), ("3D.close", "2 内筒")], [f.line() for f in fl]
+# 落ちた行にも、その操作の手順の番号を添える（直す所を手順で引ける）。外筒を折る 3・内筒を折る 5・通す 6・入れる 12・押し上げる 13
+assert fl[0].message.endswith("（手順 3）") and fl[1].message.endswith("（手順 5）"), [f.line() for f in fl]
+for key, fn, want in (("pusher", move_hole(1, dy=2.0), "（手順 6）"), ("pusher", scale_x(31 / 26), "（手順 12）"),
+                      ("tube", notch(dx=3.0), "（手順 12）"), ("tube", notch(down=5.0), "（手順 13）")):
+    fl = fold3d.check(tampered(key, fn), p)[1]
+    assert len(fl) == 1 and fl[0].message.endswith(want), (want, [f.line() for f in fl])
 # 崩す前の部品はそのまま通る（上の負の対照が、写し方のせいで落ちたのでない事）
 assert not fold3d.check(tampered("tube", lambda q: None), p)[1]
 print("ok 2")
@@ -242,7 +249,7 @@ def cli3d(*args, env=ENV):
 
 
 r = cli3d("--scenario", str(ROOT / "examples/fan_tab.json"))
-assert r.returncode == 0 and "並ぶ 竹串（手順 6・12）: " in r.stdout and "押し上げる 竹串（手順 13）: " in r.stdout and not r.stderr, (r.returncode, r.stdout, r.stderr)
+assert r.returncode == 0 and "通す 竹串（手順 6）: " in r.stdout and "押し上げる 竹串（手順 13）: " in r.stdout and not r.stderr, (r.returncode, r.stdout, r.stderr)
 r = cli3d("--scenario", str(ROOT / "tests/frozen/scenarios/neg_overlap.json"))
 assert r.returncode == 3 and "F5.overlap" in r.stderr, r.stderr
 with tempfile.TemporaryDirectory() as d:
