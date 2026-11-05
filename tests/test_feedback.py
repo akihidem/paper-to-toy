@@ -146,18 +146,23 @@ for fine in ("折りライン2.5mmずれた", "部品のIDが分からない", "
     assert not fb.has_pii(fine), fine
 for text in ("email me", "LINE ID: taro_123", "ライン:taro123", "ラインID taro123", "id:taro99", "taro at gmail dot com",
              "LINE ID は taro_123", "LINEのIDはtaro_123", "ID は taro_123", "ラインのIDはtaro_123",
-             "name at " + "x" * 50 + " dot com"):
+             "name at " + "x" * 50 + " dot com", "Line taro_123", "LiNe taro_123"):
     assert fb.has_pii(text), text
-# 長すぎる文は、式を当てる前に落とす（長い文で連絡先の式が 2 乗の時間をかけた）。困り事が list でなくても例外にせず落とす
-import time
-t0 = time.monotonic()
-assert [f.floor for f in fb.check({**OK, "motion_notes": "a" * 19000})] == ["F12.report"]
-assert time.monotonic() - t0 < 1
+# 長すぎる文・多すぎる葉は、連絡先の式を当てる前に落とす（長い文で式が 2 乗の時間をかけ、幅の広い list で止められた）。
+# 時間の秒数は機械に依るので見ない。式（has_pii）が 1 度も呼ばれない事で、先に断った事を見る
+real = fb.has_pii
+def _no_call(_t):
+    raise AssertionError("上限を越えた報告に連絡先の式を当てた")
+fb.has_pii = _no_call
+try:
+    for big in ({**OK, "motion_notes": "a" * 19000}, {**OK, "problems": [{"kind": "fit", "note": "a"}] * 100000},
+                {**OK, "problems": [0] * 100000}, {**OK, "finish_notes": "あ" * 600, "motion_notes": "あ" * 600,
+                                                    "problems": [{"kind": "fit", "note": "あ" * 300}] * 10}):
+        assert [f.floor for f in fb.check(big)] == ["F12.report"], [f.line() for f in fb.check(big)][:3]
+finally:
+    fb.has_pii = real
+# 困り事が list でなくても例外にせず落とす
 assert any(f.floor == "F12.report" and "problems" in f.line() for f in fb.check({**OK, "problems": 1}))
-# 短い文でも、幅の広い list に大量に並べた物は式の前に断る。困り事の文は画面と同じ 300 字まで
-t0 = time.monotonic()
-assert [f.floor for f in fb.check({**OK, "problems": [{"kind": "fit", "note": "a"}] * 100000})] == ["F12.report"]
-assert time.monotonic() - t0 < 2
 assert any("problems[0].note" in f.line() for f in fb.check({**OK, "problems": [{"kind": "fit", "note": "あ" * 301}]}))
 assert fb.check({**OK, "problems": [{"kind": "fit", "note": "あ" * 300}]}) == []
 

@@ -50,7 +50,7 @@ MAX_MINUTES = 600  # かかった時間の上限（分）。一続きの工作�
 # 2 乗の時間をかけ（1 万字で約 2 秒）、大きな報告 1 つで summarize が止まった。長い文は式を当てる前に落とす
 MAX_TEXT = 600
 MAX_NOTE = 300
-# 報告 1 つの文の数と合計の長さの上限。1 つずつ短くても、幅の広い list に大量に並べると同じく止まった。
+# 報告 1 つの葉（文・数・真偽）の数と、文の合計の長さの上限。1 つずつ短くても、幅の広い list に大量に並べると同じく止まった。
 # 画面から来る報告は、感想 2 つ（600 字）・困り事 3 つ（300 字）と短い名だけなので、この中に十分収まる
 MAX_STRINGS = 100
 MAX_TOTAL = 4000
@@ -83,7 +83,9 @@ CONTACT = re.compile(r"(?i)@|アット|メアド|メール|電話|携帯|https?:
                      # （「折りライン2.5mm」「fold line bent」で落としていたので、ライン は英字で始まる名が続く時、英語の line は ID か : が続く時だけ）
                      r"|(?<![a-z])line\s*(id)?\s*[:：]|(?<![a-z])line\s*id\s*[a-z0-9_.]{3,}|ライン\s*(?:の?\s*id)?\s*(?:は|[:：=])?\s*[a-z_][a-z0-9_.]{3,}")
 # 大文字の LINE の後に名が続く形（LINE yamada）。大文字と小文字を分けて見るのは、工作の英語（line them up）と分けるため
-LINE_HANDLE = re.compile(r"(?<![A-Za-z])LINE\s*(?:の?\s*ID)?\s*(?:は|[:：=])?\s*[A-Za-z_][A-Za-z0-9_.]{3,}")
+# 大文字小文字に関わらず、数字か _ を含む名が続く形（Line taro_123・LiNe taro_123）も当てる。数字や _ の入った名は工作の英語に出ない
+LINE_HANDLE = re.compile(r"(?<![A-Za-z])LINE\s*(?:の?\s*ID)?\s*(?:は|[:：=])?\s*[A-Za-z_][A-Za-z0-9_.]{3,}"
+                         r"|(?i:(?<![a-z])line\s*(?:の?\s*id)?\s*(?:は|[:：=])?\s*[a-z_][a-z0-9.]*[0-9_][a-z0-9_.]*)")
 
 
 def _norm(text):
@@ -118,11 +120,15 @@ def has_pii(text):
 
 
 def _strings(v, depth=0):
-    """入れ子の中の文字列を全部出す（欄の名も）。深すぎる入れ子は ValueError（再帰が止まらないように）。"""
+    """入れ子の中の文字列を全部出す（欄の名も）。文字列でない葉（数・真偽・null）は None を出す。
+    None も出すのは、呼ぶ側が葉の数を数えて上限で止められるように（[0, 0, …] の様な幅の広い数の list で、
+    文字列だけ数えると上限に掛からず、要素の数だけ知らせを作った）。深すぎる入れ子は ValueError（再帰が止まらないように）。"""
     if depth > REPORTED_AT_MAX_DEPTH:
         raise ValueError("入れ子が深すぎる")
     if isinstance(v, str):
         yield v
+    elif not isinstance(v, (dict, list, tuple)):
+        yield None
     elif isinstance(v, dict):
         for k, x in v.items():
             yield str(k)
@@ -151,11 +157,18 @@ def check(r):
     try:
         # source_id と時刻は、下で決まった形（在る出典・在る日付）だけを通すので、文の見方から外す。
         # 外さないと、出典の ID の 7 桁（1187053）を郵便番号と取り違えた
-        texts = list(_strings({k: v for k, v in r.items() if k not in ("source_id", "reported_at", "reviewed_at")}))
+        # 全部を集めてから上限を見ると、大きな報告を全部たどり全部持ってからでないと断れなかった。1 つずつ数え、越えた所で止める
+        texts, leaves, total = [], 0, 0
+        for t in _strings({k: v for k, v in r.items() if k not in ("source_id", "reported_at", "reviewed_at")}):
+            leaves += 1
+            total += len(t) if t is not None else 0
+            if leaves > MAX_STRINGS or total > MAX_TOTAL or (t is not None and len(t) > MAX_TEXT):
+                return [Failure("F12.report", "報告",
+                                f"文が長すぎるか多すぎる（1 つ {MAX_TEXT} 字・{MAX_STRINGS} 個・合わせて {MAX_TOTAL} 字まで）")]
+            if t is not None:
+                texts.append(t)
     except ValueError:
         return [Failure("F12.report", "報告", "入れ子が深すぎる")]
-    if any(len(t) > MAX_TEXT for t in texts) or len(texts) > MAX_STRINGS or sum(map(len, texts)) > MAX_TOTAL:
-        return [Failure("F12.report", "報告", f"文が長すぎるか多すぎる（1 つ {MAX_TEXT} 字・{MAX_STRINGS} 個・合わせて {MAX_TOTAL} 字まで）")]
     # 数字は、文の欄を全部合わせても数える。欄をまたいで番号を分けたり、間を空けたりすると、1 つの文の幅では通った
     # problems の形は下で見る。ここで list でない物を回すと、数（"problems": 1）で例外になり、rc 3 で落とせなかった
     plist = r.get("problems") if isinstance(r.get("problems"), list) else []
