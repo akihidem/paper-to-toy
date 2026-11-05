@@ -6,5 +6,5 @@
 out/
 __pycache__/
 # 頼みの文（窓口からの作業の指示）は repo の中身ではないので入れない
-LANE-BRIEF.md
-LANE-NOTES.md
+LANE-*.md
+lane-issues/

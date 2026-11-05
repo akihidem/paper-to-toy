@@ -268,4 +268,19 @@ body = next(x for x in pc.parts({**pc.DEFAULTS, "mount": "neck"}) if x.key == "b
 cx, cy, cw, ch = body.cuts[0]
 assert art_fail({"kind": "mark", "pts": [(cx + 1, cy + ch / 2), (cx + cw - 1, cy + ch / 2)]}, mount="neck"), "切り込みにかかる印を通した"
 
+# 作業の覚え書きは、追跡している .gitignore だけで外れる（.git/info/exclude は clone に付いてこないので、まっさらな repo で見る）
+if shutil.which("git"):
+    with tempfile.TemporaryDirectory() as d:
+        env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
+        subprocess.run(["git", "init", "-q", d], env=env, check=True)
+        shutil.copy(ROOT / ".gitignore", d)
+        names = ["LANE-BRIEF.md", "LANE-NOTES.md", "LANE-X.md", "lane-issues/a.md", "keep.md"]
+        for n in names:
+            f = pathlib.Path(d) / n
+            f.parent.mkdir(exist_ok=True)
+            f.write_text("x", encoding="utf-8")
+        r = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=d, env=env, capture_output=True, text=True, check=True)
+        shown = sorted(line[3:] for line in r.stdout.splitlines())
+        assert shown == [".gitignore", "keep.md"], f"覚え書きが git status に出た: {shown}"
+
 print("ok")
