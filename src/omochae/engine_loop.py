@@ -25,9 +25,9 @@ import pathlib
 import re
 import secrets
 import sys
-import unicodedata
 
 from .compose import TEMPLATES
+from .feedback import has_pii
 from .model import Failure
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -73,24 +73,11 @@ SHARED = {
     "text": ("字の大きさと配置（textfit・page）", re.compile(r"字が小さ|文字が小さ|読めな|読みにく")),
 }
 
-# 連絡先の形の見方。枝 engine/making の omochae.feedback（417746e）と同じ考え: 番号の書き方を式で追わず、
-# 数字の多い所と、連絡先の語と印で見る（安全の側に倒す）。向こうが main に入ったら 1 つに寄せる。
-KANJI_DIGITS = str.maketrans("〇一二三四五六七八九零壱弐参", "01234567890123")
-CONTACT = re.compile(r"(?i)@|アット|メアド|メール|電話|携帯|https?://|www\.|[a-z0-9-]+\.(com|net|org|jp|io|me|co|app|dev)\b"
-                     r"|(?<![a-z])(tel|mail)(?![a-z])|twitter|ツイッター|インスタ|instagram|tiktok|youtube|facebook"
-                     r"|フェイスブック|discord|ディスコード|gmail|yahoo|(?<![a-z])line\s*(id)?\s*[:：]|ライン\s*(id)?\s*[:：]")
-
-
 def has_contact(text):
-    """連絡先の形があるか。近く（24 文字の中）に数字が 7 つ以上あるか、連絡先の語と印がある時に真。
-    電話（10 桁〜）も郵便番号（7 桁）も数字の多さで当たる。寸法の数字の多い文も落ちる（安全の側）。
-    名前は形では見分けられない。だから文は git の外にだけ置き、人が読んでから使う。"""
-    raw = "".join(ch for ch in unicodedata.normalize("NFKC", str(text)[:MAX_TEXT])
-                  if unicodedata.category(ch) not in ("Cf", "Mn", "Me") and not ch.isspace())
-    if CONTACT.search(raw):
-        return True
-    digits = [i for i, ch in enumerate(raw.translate(KANJI_DIGITS)) if ch.isdigit()]
-    return any(digits[i + 6] - digits[i] < 24 for i in range(len(digits) - 6))
+    """連絡先の形があるか。見方は omochae.feedback.has_pii と同じ物を使う（作った人の報告と束で、見方を 1 つに保つ。
+    片方だけ直すと、片方を通った番号がもう片方ですり抜けるため）。ここでは先に文の長さを MAX_TEXT で切る
+    （長い文で探す時間が延びないように）。名前は形では見分けられない。だから文は git の外にだけ置き、人が読んでから使う。"""
+    return has_pii(str(text)[:MAX_TEXT])
 
 
 def _count(v, top=MAX_COUNT):

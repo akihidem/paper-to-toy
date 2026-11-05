@@ -58,7 +58,7 @@ ALLOWED = {"template", "form", "params", "source_id", "built", "moved", "finish"
 PROBLEM_KEYS = {"kind", "step", "note"}
 # 出典の ID と時刻は決まった形だけを通す。自由な文を入れられる欄を、感想の 2 つと困り事の note に絞るため。
 # 個人の情報の形の見方。式だけで全部の書き方は止められないので、これは補助で、受け入れの前に人が全文を読む（omochae.intake）。
-# 見方は _has_pii の docstring（数字の多い所と、連絡先の語と印）。
+# 見方は has_pii の docstring（数字の多い所と、連絡先の語と印）。omochae.engine_loop も同じ has_pii を使う（見方を 1 つに保つ）。
 REPORTED_AT = re.compile(r"\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?([+-]\d{2}:\d{2}|Z)?)?")
 REPORTED_AT_MAX_DEPTH = 8  # 報告の入れ子の深さの上限。深い入れ子で再帰が止まらないように
 KANJI_DIGITS = str.maketrans("〇一二三四五六七八九零壱弐参", "01234567890123")  # 大字（零壱弐参）も
@@ -81,7 +81,7 @@ def _norm(text):
     return re.sub(r"(?<=\w)\s*\.\s*(?=[^\W\d_])", ".", t)
 
 
-def _has_pii(text):
+def has_pii(text):
     """個人の情報の形があるか。3 回のレビューで、番号の書き方を式で追うと、区切り・空き・桁の分け方ですり抜け続けた。
     そこで書き方を追わず、次の 2 つで見る（安全の側に倒す。寸法の多い文も落ちるので、知らせで「番号は書かない」と言う）:
     - 数字の多い所: 近く（24 文字の中）に数字が 7 つ以上ある。電話（10 桁〜）も郵便番号（7 桁）も、ここに当たる。
@@ -141,7 +141,7 @@ def check(r):
     free = [r.get("motion_notes", ""), r.get("finish_notes", "")] + \
         [pr.get("note", "") for pr in (r.get("problems") or []) if isinstance(pr, dict)]
     total_digits = sum(ch.isdigit() for x in free if isinstance(x, str) for ch in _norm(x))
-    if any(_has_pii(t) for t in texts) or total_digits >= 7:
+    if any(has_pii(t) for t in texts) or total_digits >= 7:
         out.append(Failure("F12.pii", "報告", "数字の多い所か、連絡先の語（@・メール・電話・LINE・URL など）がある。番号や連絡先は書かない（寸法の数字も、近くに 7 つ以上あると落ちる）"))
     if set(r) - ALLOWED:
         out.append(Failure("F12.pii", "欄", f"決まりの外の欄が {len(set(r) - ALLOWED)} つある（名前や連絡先は書かない）"))
