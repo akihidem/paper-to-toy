@@ -30,7 +30,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 BASE = ROOT / "local" / "reports"
 MAX_PROBLEMS = 3
 MAX_BODY = 20_000  # 送られる文の上限（バイト）。長すぎる物は読まずに断る
-ID_FORM = re.compile(r"B-\d{8}-\d{6}-[0-9a-f]{4}")  # 受付の ID の形。形でない物は扱わない（../ で受付箱の外を消せた）
+ID_FORM = re.compile(r"B-\d{8}-\d{6}-[0-9a-f]{8}")  # 受付の ID の形。形でない物は扱わない（../ で受付箱の外を消せた）
 CONSENTS = {"no_pii": "名前・連絡先・ほかの人の事を書いていない", "age": "18 歳以上か、保護者の同意がある"}
 MOVED_JA = {"moved": "動いた", "partly": "少し動いた", "not": "動かない"}
 TZ = datetime.timezone(datetime.timedelta(hours=9))
@@ -45,7 +45,7 @@ def dirs(base=BASE):
 
 def new_id(now=None):
     now = now or datetime.datetime.now(TZ)
-    return f"B-{now:%Y%m%d-%H%M%S}-{secrets.token_hex(2)}"
+    return f"B-{now:%Y%m%d-%H%M%S}-{secrets.token_hex(4)}"
 
 
 def report_from_fields(f):
@@ -90,7 +90,9 @@ def submit(fields, base=BASE):
         return None, [f.line() for f in fails]
     rid = new_id()
     d = dirs(base)
-    (d["inbox"] / f"{rid}.json").write_text(json.dumps(r, ensure_ascii=False, indent=1), encoding="utf-8")
+    # 排他的に作る。接続ごとの糸で同じ秒に 2 件来ても、先の報告を黙って上書きしない
+    with open(d["inbox"] / f"{rid}.json", "x", encoding="utf-8") as fh:
+        fh.write(json.dumps(r, ensure_ascii=False, indent=1))
     return rid, []
 
 

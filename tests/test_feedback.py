@@ -53,6 +53,12 @@ for bad in ({**OK, "motion_notes": "090-123", "finish_notes": "4-5678"},
     assert any(f.floor == "F12.pii" for f in fb.check(bad)), bad
 for fine in ("折りラインがずれた", "カットラインが細い", "fold line が見えない"):
     assert not [f for f in fb.check({**OK, "motion_notes": fine}) if f.floor == "F12.pii"], fine
+# 2b6. 数の欄で番号を運ばせない。手順の番号は 40 まで、寸法は雛形の範囲の中。見えない文字を挟んだ連絡先の語も落とす
+for bad in ({**OK, "stuck_step": 9012345678}, {**OK, "problems": [{"kind": "fit", "step": 9012345678, "note": ""}]},
+            {**OK, "stuck_step": 90}, {**OK, "params": {"vane_radius": 9012345678}}):
+    assert any(f.floor == "F12.report" for f in fb.check(bad)), bad
+assert any(f.floor == "F12.pii" for f in fb.check({**OK, "motion_notes": "メ\u200bール yamada_taro"}))
+assert not [f for f in fb.check({**OK, "motion_notes": "fold line 3mm が見えない"}) if f.floor == "F12.pii"]
 # 2b3. 決まった形の欄も、値を絞る（自由な文を入れさせない）。深い入れ子は落ちずに F12.report
 for bad in ({**OK, "params": {"kind": "山田太郎 横浜市"}}, {**OK, "source_id": "NDL-1-R1-L-yamada_taro"},
             {**OK, "reported_at": "9999-99-99"}):

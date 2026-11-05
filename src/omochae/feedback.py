@@ -43,6 +43,7 @@ KINDS = {
     "site": "サイトの流れ（選ぶ・刷る・送るまでの道筋）",
 }
 SERVICE_KINDS = ("guide", "answer", "site")
+MAX_STEP = 40  # 手順の番号の上限。どの雛形の組み方も 40 手順より短い。上限が無いと、数の欄で電話番号を運べた
 MAX_MINUTES = 600  # かかった時間の上限（分）。一続きの工作で考えにくい長さは書き間違いと見る
 # 雛形ごとの動きの床。雛形を足したら、ここにも足す（test_feedback の 5 で漏れを見る）。
 FLOORS = {
@@ -65,7 +66,7 @@ CONTACT = re.compile(r"(?i)@|アット|メアド|メール|電話|携帯|https?:
                      r"|\bat\b.*\bdot\b|(?<![a-z])(tel|mail|id)(?![a-z])|twitter|ツイッター|インスタ|instagram|tiktok|youtube"
                      r"|facebook|フェイスブック|discord|ディスコード|スレッズ|gmail|yahoo"
                      # LINE は工作の語（折りライン・fold line）と重なるので、ID が続く時だけ連絡先と見る
-                     r"|(?<![a-z])line\s*(id)?\s*[:：]|(?<![a-z])line\s+[a-z0-9_.]{3,}|ライン\s*(id|ID)?\s*[:：]?\s*[a-z0-9_.]{3,}")
+                     r"|(?<![a-z])line\s*(id)?\s*[:：]|(?<![a-z])line\s+[a-z_][a-z0-9_.]{3,}|ライン\s*(id|ID)?\s*[:：]?\s*[a-z0-9_.]{3,}")
 
 
 def _norm(text):
@@ -87,7 +88,7 @@ def _has_pii(text):
     - 連絡先の語と印: @・アット・メール・電話・LINE・SNS の名・URL・ドメインの形。
     名前は式では見分けられないので、受け入れの前に人が全文を読む（omochae.intake の review）。"""
     # 連絡先の語は、長音の ー を - に直す前に見る（直した後では「メール」「ツイッター」が当たらなかった）
-    raw = unicodedata.normalize("NFKC", str(text))
+    raw = "".join(ch for ch in unicodedata.normalize("NFKC", str(text)) if unicodedata.category(ch) != "Cf")  # 見えない文字も消す
     if CONTACT.search(raw):
         return True
     t = _norm(text)
@@ -156,7 +157,9 @@ def check(r):
             if k not in tpl.DEFAULTS or isinstance(v, bool):
                 return False
             if isinstance(v, (int, float)):
-                return True
+                # 寸法は雛形の範囲（F5.range と同じ）の中だけ。範囲の外の大きな数で番号を運べた
+                lo_hi = getattr(tpl, "RANGES", {}).get(k)
+                return lo_hi is not None and lo_hi[0] <= v <= lo_hi[1]
             return isinstance(v, str) and isinstance(tpl.DEFAULTS[k], str) and re.fullmatch(r"[a-z_]{1,20}", v) is not None
         if not isinstance(params, dict) or not all(ok_param(k, v) for k, v in params.items()):
             out.append(Failure("F12.report", "params", f"{tpl.ID} の寸法の名と、数か形の値だけ"))
@@ -178,8 +181,8 @@ def check(r):
     if not (isinstance(fin, int) and not isinstance(fin, bool) and fin in FINISH):
         out.append(Failure("F12.report", "finish", "仕上がりの点は 1〜5 の整数"))
     st = r.get("stuck_step")
-    if st is not None and not (isinstance(st, int) and not isinstance(st, bool) and st >= 1):
-        out.append(Failure("F12.report", "stuck_step", "止まった手順の番号は 1 からの整数か null"))
+    if st is not None and not (isinstance(st, int) and not isinstance(st, bool) and 1 <= st <= MAX_STEP):
+        out.append(Failure("F12.report", "stuck_step", f"止まった手順の番号は 1〜{MAX_STEP} の整数か null"))
     if "gave_up" in r and not isinstance(r["gave_up"], bool):
         out.append(Failure("F12.report", "gave_up", "やめたかを true か false で書く"))
     mi = r.get("minutes")
@@ -198,8 +201,8 @@ def check(r):
             continue
         if set(pr) - PROBLEM_KEYS:
             out.append(Failure("F12.pii", f"problems[{i}]", "困り事に決まりの外の欄がある（kind・step・note だけ）"))
-        if pr.get("step") is not None and not (isinstance(pr["step"], int) and not isinstance(pr["step"], bool) and pr["step"] >= 1):
-            out.append(Failure("F12.report", f"problems[{i}].step", "手順の番号は 1 からの整数か null"))
+        if pr.get("step") is not None and not (isinstance(pr["step"], int) and not isinstance(pr["step"], bool) and 1 <= pr["step"] <= MAX_STEP):
+            out.append(Failure("F12.report", f"problems[{i}].step", f"手順の番号は 1〜{MAX_STEP} の整数か null"))
         if "note" in pr and not isinstance(pr["note"], str):
             out.append(Failure("F12.report", f"problems[{i}].note", "文で書く"))
     return out
