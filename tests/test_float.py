@@ -145,7 +145,7 @@ assert t.foot_width(small) <= 2 * 8 * 0.9 and [f.where for f in t.check_physics(
 st = " ".join(t.steps(P))
 assert all(k in st for k in ("拭く", "水を捨てる", "にじむ", "乾かす")) and "触らない" not in st
 
-# 四度目の検品（/code-review・main との差分）の指摘。配置と外形は check_params（描く前の検査の全部）で見る
+# 四度目の検品（main との差分）の指摘。配置と外形は check_params（描く前の検査の全部）で見る
 SRC = json.load(open(pathlib.Path(__file__).resolve().parents[1] / "data/sources/NDL-1187053-R0000028-R-float.json", encoding="utf-8"))
 
 
@@ -229,4 +229,51 @@ for L_ in (70, 74, 76, 78, 90):
                 assert "刻み" in " ".join(f.message for f in t.check_physics(q)), q
 fs = t.check_physics({**C, "tray_length": 76, "leaf_radius": 14.5})
 assert [f.where for f in fs] == ["葉の向きの刻み"], fs
+
+# 息で傾く角（風受けつき）。壁より上の風受けの面に掛かる息の力 × 腕 ÷ (m·g·GM)。見込みの値（息の速さ・抗力係数・余裕）は 1 か所に置き、
+# 作った人の報告（Issue #21）で直す。式を数え直して合わせる
+fo, fb = t.blow_forces(C)
+area = 2 * t.cup_radius(C) * (C["cup_height"] - C["wall_height"]) * 1e-6
+qd = 0.5 * t.AIR_DENSITY * t.BREATH_V ** 2
+assert abs(fo - qd * area * t.CD_CUP_OPEN) < 1e-12 and abs(fb - qd * area * t.CD_CUP_BACK) < 1e-12 and fo > fb > 0  # 口の側が強く押され、差が舟を回す
+hyc = t.hydro(C)
+arm = ((C["wall_height"] + C["cup_height"]) / 2 - hyc["d"] / 2) / 1000
+b_c, rim_c = t.blow_heel(C)
+# 既定の舟は長さ ≧ 幅なので、幅の向きの GM とふちの角は hydro の値（狭い向き）と同じ
+assert abs(b_c - math.degrees((fo + fb) * arm / (hyc["m"] / 1000 * t.GRAVITY * hyc["GM"] / 1000))) < 1e-9 and abs(rim_c - hyc["heel"]) < 1e-9
+assert t.blow_heel(C, hyc) == (b_c, rim_c) and 0 < b_c < 1  # 既定の舟は広く、息では 1° も傾かない
+assert t.blow_forces(P) == (0.0, 0.0) and t.blow_heel(P)[0] == 0.0  # 風受けの無い形は、息を受ける面を見ない
+assert t.blow_heel({**C, "cup_height": 50})[0] > b_c > t.blow_heel({**C, "cup_height": 30})[0]  # 高い風受けほど傾く
+# 息は幅の向きに当たる。幅が長さより長い舟では、幅の向きの GM は hydro の GM（狭い向き＝長さ）より大きく、ふちの角は幅で出すので小さい
+wide_c = {**C, "tray_width": 80, "tray_length": 70, "leaf_radius": 12, "cup_width": 14}
+hw = t.hydro(wide_c)
+b_w, rim_w = t.blow_heel(wide_c)
+gm_w = hw["KB"] + 70 * 80 ** 3 / 12 / hw["V"] - hw["KG"]
+fo_w, fb_w = t.blow_forces(wide_c)
+arm_w = ((wide_c["wall_height"] + wide_c["cup_height"]) / 2 - hw["d"] / 2) / 1000
+assert gm_w > hw["GM"] and abs(b_w - math.degrees((fo_w + fb_w) * arm_w / (hw["m"] / 1000 * t.GRAVITY * gm_w / 1000))) < 1e-9
+assert abs(rim_w - math.degrees(math.atan2(2 * hw["f"], 80))) < 1e-9 and rim_w < hw["heel"]
+# 狭い舟に高い風受けを立てると、息で傾く角（余裕 BLOW_SAFETY 倍）が、ふちが水に着く角に届く（負の場面 float_neg_blow と同じ寸法）
+blow = {**C, "tray_width": 30, "wall_height": 8, "glue": 5, "figure_height": 30, "leaf_radius": 10, "cup_width": 34, "cup_height": 60, "ballast_g": 0}
+fs = t.check_physics(blow)
+b_b, rim_b = t.blow_heel(blow)
+assert [f.where for f in fs] == ["風受け"] and fs[0].message.startswith("息（") and b_b * t.BLOW_SAFETY >= rim_b >= t.MIN_HEEL, fs
+assert floors(blow) == ["F5.float"] and floors({**blow, "cup_height": 36}) == []  # 風受けを低くすると通る
+# 余裕: 見込みの息では届かない（角 < ふちの角）が、余裕を掛けると届く寸法も落とす（息の速さは量っていない見込みで、力は速さの 2 乗）
+edge = {**blow, "cup_height": 50}
+b_e, rim_e = t.blow_heel(edge)
+assert b_e < rim_e <= b_e * t.BLOW_SAFETY and [f.where for f in t.check_physics(edge)] == ["風受け"]
+# 別の検査が落ちた舟には息の検査を重ねない（同じ舟に、別の直し方を 2 つ言わない）。3 つとも、重ねなければ息の検査に掛かる寸法:
+# 乾舷が足りない舟・GM が足りない舟・壁の上に 4mm しか出ず息を受けない風受け
+sunk = {**blow, "ballast_g": 8, "clay_side": 12}
+tippy = {**C, "tray_length": 88, "tray_width": 20, "wall_height": 30, "glue": 5, "figure_height": 30, "leaf_radius": 8, "cup_width": 16, "cup_height": 57, "ballast_g": 0, "paper_gsm": 300}
+low = {**C, "tray_length": 50, "tray_width": 20, "wall_height": 34, "glue": 5, "figure_height": 30, "leaf_radius": 8, "cup_width": 38, "cup_height": 38, "ballast_g": 0}
+hy_s, hy_t, hy_l = t.hydro(sunk), t.hydro(tippy), t.hydro(low)
+assert hy_s["f"] < t.FREEBOARD_MIN and hy_t["GM"] < t.GM_MIN <= hy_l["GM"] and min(hy_t["f"], hy_l["f"]) >= t.FREEBOARD_MIN and min(hy_t["heel"], hy_l["heel"]) >= t.MIN_HEEL
+for q, where, word in ((sunk, "舟の壁", "余裕"), (tippy, "重心", "GM"), (low, "風受け", "息を受けない")):
+    b_q, rim_q = t.blow_heel(q)
+    assert b_q * t.BLOW_SAFETY >= rim_q, q
+    fs = t.check_physics(q)
+    assert any(f.where == where and word in f.message for f in fs) and not any(f.message.startswith("息（") for f in fs), fs
+
 print("ok")
