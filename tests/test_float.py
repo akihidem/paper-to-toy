@@ -276,4 +276,79 @@ for q, where, word in ((sunk, "舟の壁", "余裕"), (tippy, "重心", "GM"), (
     fs = t.check_physics(q)
     assert any(f.where == where and word in f.message for f in fs) and not any(f.message.startswith("息（") for f in fs), fs
 
+
+# 糊代の斜線は刷った面にある。斜線の面が貼る相手に当たり、組み上がった物の見える側に斜線が残らない向きに折る:
+# 舟は谷折り（刷った面が内・底の印が内に要る）で、角の糊代はとなりの壁の外側へ。人形の足と風受けの歯は山折り（谷折りだと斜線が上を向いて残る）
+fig_p, cup_p = by["figure"], next(q for q in t.parts(C) if q.key == "cupa")
+assert fig_p.mountain and not fig_p.valley and not cup_p.valley and tray.valley and not tray.mountain
+# 風受けの山折りの線は幅いっぱいの 1 本（歯ごとの 3mm の線は、山折りの刻みより短く、実線に見える）。歯の糊代の上の辺は全部その線の上
+(fold_c,) = cup_p.mountain
+assert fold_c == ((0, C["cup_height"]), (C["cup_width"], C["cup_height"])) and all(g[0][1] == g[1][1] == C["cup_height"] for g in cup_p.glue)
+st_f = " ".join(t.steps(C))
+assert "となりの壁の外側" in st_f and "内側に貼って" not in st_f and st_f.count("山折り") >= 3 and st_f.count("斜線") >= 3 and "絵は矢印と逆" in st_f
+# 「短い壁」「長い向き」とは言わない（幅が長さより長い舟では、糊代の無い壁の方が長い）
+assert all("短い壁" not in s_ and "長い向き" not in s_ for q in (P, C, {**C, "tray_width": 80, "tray_length": 70}) for s_ in t.steps(q))
+# 雷文は、舟の内から見ると 2 枚の壁で同じ形（口が底の側・巻く向きも同じ）。壁ごとに「内から見た左右（u）とふちからの距離（v）」に直して比べる。
+# 上の壁は内から見て紙の右が右、下の壁は紙の右が左。既定の舟（ラベルが底にあり、2 枚とも同じ所から始まる）で見る
+fret = marks(tray, "fret")
+top_f = [a["pts"] for a in fret if a["pts"][0][1] < h]
+bot_f = [a["pts"] for a in fret if a["pts"][0][1] > h + W]
+
+
+def seen(pts, lower):
+    xs = [x for x, _ in pts]
+    return [(round(max(xs) - x if lower else x - min(xs), 6), round(2 * h + W - y if lower else y, 6)) for x, y in pts]
+
+
+assert len(top_f) == len(bot_f) >= 3 and all(seen(a, False) == seen(top_f[0], False) for a in top_f) and all(seen(b_, True) == seen(top_f[0], False) for b_ in bot_f)
+# 口（線の始まり）は底の折り線の側、閉じた側はふちの側。ふちからの距離で見る
+assert seen(top_f[0], False)[0][1] > seen(top_f[0], False)[1][1] and seen(bot_f[0], True)[0][1] > seen(bot_f[0], True)[1][1]
+
+# どちらの形にも、浮かべた後に動かす手順が 1 つある: 風受けつきは息、風受けの無い形は水をかき回した渦（前は浮かべて見るだけだった）
+play_n = [s_ for s_ in t.steps(P) if "渦" in s_]
+play_c = [s_ for s_ in t.steps(C) if "息を吹き" in s_]
+assert len(play_n) == 1 and len(play_c) == 1 and not any("渦" in s_ for s_ in t.steps(C)) and not any("息を吹き" in s_ for s_ in t.steps(P))
+assert f"{t.STIR_TURNS} 回" in play_n[0] and t.steps(P).index(play_n[0]) == len(t.steps(P)) - 2  # 片付けの前
+# 手順の数は形だけで決まる（重りを使わない寸法でも番号がずれない）。作った人の報告は手順の番号で来て、形ごとに集められるため
+for q in (P, C):
+    with_clay, no_clay = t.steps(q), t.steps({**q, "ballast_g": 0})
+    diff = [i for i, (a_, b_) in enumerate(zip(with_clay, no_clay)) if a_ != b_]
+    assert len(with_clay) == len(no_clay) and len(diff) == 1 and "油粘土" in with_clay[diff[0]] and "重りを使わない" in no_clay[diff[0]], diff
+# 組み方の文は、サイトの手順の紙の左の列（144mm・字 3.6mm）で STEP_LINES_MAX 行まで。前の版は風受けつきで 20 行あり、紙からはみ出していた。
+# サイトは「番号. 文」の形で刷り、同じ折り返し（textfit.wrap）を使う
+from omochae.textfit import text_width, wrap
+for q in (P, C, {**P, "ballast_g": 0}, {**C, "ballast_g": 0}, {**C, "ballast_g": 12.5}):
+    n_lines = sum(len(wrap(f"{i}. {s_}", t.STEP_SIZE, t.STEP_COL_W)) for i, s_ in enumerate(t.steps(q), 1))
+    assert n_lines <= t.STEP_LINES_MAX, (n_lines, q)
+
+# 「試した事」の欄は 1 行で、数でなく言葉で書く（サイトの手順の紙は測る欄を外している。2 行にすると紙からはみ出す）。
+# 形ごとに、動かし方（息・渦）に合わせた予想の問いと欄にする
+mc, mn = t.measures(C), t.measures(P)
+for m, word, other in ((mc, "息", "渦"), (mn, "渦", "息")):
+    (row,) = m["rows"]
+    lab = " ".join(lab_ for lab_, _ in row)
+    assert word in lab and other not in lab and "水が入ったか" in lab and not any(ch.isdigit() for ch in lab + m["predict"]) and "mm" not in lab
+    assert sum(text_width(lab_, t.STEP_SIZE) + 1.5 + w_ + 5 for lab_, w_ in row) <= 190 and text_width(m["predict"], t.STEP_SIZE) <= 190, row
+assert "息" in mc["predict"] and "かき回す" in mn["predict"]
+
+# 手順ごとの直しの行き先（step_targets）。作った人の報告の困り事は手順の番号で来るので、番号から当たる寸法・見込みの値・検査の所を引ける。
+# 文と行き先は 1 つの並びから出す。名は実際にある物だけ
+WHERES = {"舟の壁", "重心", "舟の糊代", "葉", "人形", "重り", "風受け", "粘土の印", "葉の向きの刻み"}
+for q in (P, C, {**C, "ballast_g": 0}, {**P, "ballast_g": 0}):
+    st_q, tg = t.steps(q), t.step_targets(q)
+    assert sorted(tg) == list(range(1, len(st_q) + 1)), q
+    for i, target in tg.items():
+        assert set(target) == {"params", "consts", "floors"}, target
+        assert all(k in t.RANGES for k in target["params"]) and all(hasattr(t, c) for c in target["consts"]) and set(target["floors"]) <= WHERES, (i, target)
+tc, st_c = t.step_targets(C), t.steps(C)
+blow_i, tape_i, clay_i = (next(i for i, s_ in enumerate(st_c, 1) if w in s_) for w in ("息を吹き", "透明テープ", "油粘土"))
+assert "BREATH_V" in tc[blow_i]["consts"] and "tape_gsm" in tc[tape_i]["params"] and "重り" in tc[clay_i]["floors"]
+assert t.step_targets({**C, "ballast_g": 0})[clay_i] == tc[clay_i]  # 重りを使わない寸法でも、同じ番号は同じ行き先
+assert not any(tc[i]["params"] or tc[i]["consts"] or tc[i]["floors"] for i in (1, 2, 3, len(st_c)))  # 水の注意・物差し・片付けは組み方の文だけ
+# 所の名（floors）は、check_physics が実際に出す所の名の全部。検査の所の名を変えた時にここで気づく
+seen_w = set()
+for q in (blow, sunk, narrowfig, deep, {**P, "glue": 30}, {**P, "leaf_radius": 35}, {**P, "ballast_g": 30}, {**C, "tray_length": 76, "leaf_radius": 14.5},
+          {**P, "tray_width": 28, "tray_length": 100, "clay_side": 15, "leaf_radius": 12, "ballast_g": 12, "figure_height": 40}):
+    seen_w |= {f.where for f in t.check_physics(q)}
+assert seen_w == WHERES, seen_w ^ WHERES
 print("ok")
