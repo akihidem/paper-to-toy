@@ -1,5 +1,6 @@
 """エンジンごとの改善の輪（omochae.engine_loop・#63）を確かめる。束の入口 → 案 → 人の採否 → 次の版 → 版ごとの数の並び。
-話した事（考え・工夫・できた後の話。#65）も束で受け、手順の番号つきの工夫から案が起きる事を見る。"""
+話した事（考え・工夫・できた後の話。#65）も束で受け、手順の番号つきの工夫から案が起きる事を見る。
+前の組の紙の記録から起きた案に、今の刷った組が並ぶ事を見る（#68）。"""
 import copy
 import json
 import os
@@ -51,6 +52,7 @@ TALK = ("think", "craft", "keep")
 
 
 def old_shape(b):
+    b.pop("current_sets", None)
     for g in b["groups"]:
         g.pop("craft_steps", None)
         g["texts"] = [t for t in g["texts"] if t["kind"] not in TALK]
@@ -58,6 +60,8 @@ def old_shape(b):
 
 OLD = variant(old_shape)
 assert el.check_bundle(OLD) == [] and not any("craft_steps" in g for g in OLD["groups"])
+# 今の刷った組（#68）: 束の上の段の、無くてもよい欄。雛形の id ごとの組の名
+assert "current_sets" in el.TOP_KEYS and "current_sets" not in OLD and SAMPLE["current_sets"]["slider_fan"] == "goraigo-v10"
 
 # 2. 決まりの外の欄・形は、束ごと断る（rc 3・F13.bundle）。何も置かない。知らせの文に、束の値を出さない
 bads = [variant(lambda b: b.update(name="山田")), variant(lambda b: b["groups"][0].update(who="abc12345")),
@@ -69,7 +73,9 @@ bads = [variant(lambda b: b.update(name="山田")), variant(lambda b: b["groups"
         variant(lambda b: b["groups"].append(copy.deepcopy(b["groups"][0]))), variant(lambda b: b.update(schema="other/1")), ["束でない"],
         variant(lambda b: b["groups"][0]["craft_steps"].update({"3": {"talks": 2, "people": 2, "who": ["abc12345"]}})),
         variant(lambda b: b["groups"][0]["craft_steps"].update({"41": {"talks": 1, "people": 1}})),
-        variant(lambda b: b["groups"][0].update(craft_steps=["山田"])), variant(lambda b: b["groups"][0]["texts"][0].update(kind="talk"))]
+        variant(lambda b: b["groups"][0].update(craft_steps=["山田"])), variant(lambda b: b["groups"][0]["texts"][0].update(kind="talk")),
+        variant(lambda b: b.update(current_sets={"slider_fan": "山田さんの家で刷った組"})), variant(lambda b: b.update(current_sets=["goraigo-v10"])),
+        variant(lambda b: b.update(current_sets={"slider fan": "goraigo-v10"}))]
 for bad in bads:
     fails = el.check_bundle(bad)
     assert fails and all(f.floor == "F13.bundle" for f in fails), bad
@@ -141,18 +147,40 @@ assert {d["key"] for d in el.drafts(el.groups([OLD]))} == {k for k in by_key if 
 assert "motion:pivot_counterweight:tora-v3" not in by_key
 fold = by_key["shared:fold:pivot_counterweight+slider_fan"]
 assert fold["target"]["kind"] == "part" and fold["numbers"]["templates"] == 2
-allowed = {"id", "status", "key", "target", "template", "sheet_set", "step", "title", "numbers", "why", "evidence", "record_ids", "in_engine", "made_at"}
+# 今の組と同じ組の群から起きた案には、組の並びを足さない。雛形の id が要る案は、今の組を持つ
+assert stuck["current_set"] == "goraigo-v10" and all("今の組" not in p["why"] for p in made)
+allowed = {"id", "status", "key", "target", "template", "sheet_set", "current_set", "step", "title", "numbers", "why", "evidence", "record_ids", "in_engine", "made_at"}
 for p in made:
     assert set(p) == allowed and p["status"] == "draft", set(p) ^ allowed
     assert all(isinstance(v, int) and not isinstance(v, bool) for v in p["numbers"].values())  # 数は件数だけ（寸法の値でない）
     assert not {"params", "to", "value", "from"} & set(p["target"])
 assert el.propose() == []
+# 前の組の紙の記録（#68）: 案は今までどおり起きる（機械が「もう直った」と決めない）。「なぜか」に、今の組と、前の組の紙の物である事が並ぶ。
+# 組の分からない記録には、分からない事が並ぶ。束が今の組を持たない時は、何も足さない
+def add_old(b):
+    fix = {"kind": "fix", "step": None, "text": "柄 / 先に土台を足した / 台が載せやすくなった", "count": 1}
+    b["groups"].append({"template": "slider_fan", "sheet_set": "goraigo-v7", "reports": 2, "texts": [fix]})
+    b["groups"].append({"template": "slider_fan", "sheet_set": "", "reports": 1, "texts": [fix]})
+
+
+with_old = variant(add_old)
+assert el.check_bundle(with_old) == []
+old = {d["key"]: d for d in el.drafts(el.groups([with_old]))}
+v7, unknown = old["craft:slider_fan:goraigo-v7"], old["craft:slider_fan:"]
+assert v7["current_set"] == "goraigo-v10" and "今の組は goraigo-v10" in v7["why"] and "前の組の紙の物" in v7["why"] and "先に見る" in v7["why"]
+assert "今の組は goraigo-v10" in unknown["why"] and "どの組の紙の物か分からない" in unknown["why"] and "前の組" not in unknown["why"]
+assert "今の組" not in old["craft:slider_fan:goraigo-v10"]["why"]
+assert "今の組は goraigo-v10" in el.issue_draft({**v7, "id": "EP-0000"}).split("---")[0]
+no_cur = {d["key"]: d for d in el.drafts(el.groups([variant(lambda b: (add_old(b), b.pop("current_sets")))]))}
+assert set(no_cur) == set(old) and all(no_cur[k]["numbers"] == old[k]["numbers"] for k in old)  # 鍵と数は変わらない
+assert all("今の組" not in d["why"] and not d["current_set"] for d in no_cur.values())
 # この repo に無い雛形の群も数える（サイトの側の雛形）。案には、無い事を書く。出し元が違う束の同じ群は、足して数える
 only_site = variant(lambda b: (b.update({"from": "other-site", "groups": [b["groups"][2]]}), b["groups"][0]["stuck_steps"].update({"4": {"taps": 2, "people": 2}})))
 assert el.take(only_site)[0] is not None
 assert el.groups(el.bundles())[("den_den", "den_den-v1")]["reports"] == 2
 extra = {p["key"]: p for p in el.propose()}
 assert extra["stuck:den_den:den_den-v1:4"]["in_engine"] is False
+assert "今の組は den_den-v2" in extra["stuck:den_den:den_den-v1:4"]["why"]
 assert "一覧に無い" in el.issue_draft(extra["stuck:den_den:den_den-v1:4"])
 
 # 6. 採否は人が決める。名前が無いと rc 3。採った案だけが次の版の予定に入り、Issue の下書き（4 つの見出し）が出る
@@ -203,7 +231,7 @@ broken["next"].pop()
 (tmp / "versions.json").write_text(json.dumps(broken, ensure_ascii=False), encoding="utf-8")
 
 # 8. 並べる: 次の版の紙の束が来たら、刷った組ごとに数が並ぶ。判定の語も割合も出さない。組は名の数の順（v9 → v10 → v11）
-after = variant(lambda b: (b.update(exported_at="2026-11-06T10:00+09:00"),
+after = variant(lambda b: (b.update(exported_at="2026-11-06T10:00+09:00"), b["current_sets"].update(slider_fan="goraigo-v11"),
                            b["groups"].append({**copy.deepcopy(b["groups"][0]), "sheet_set": "goraigo-v9", "reports": 1}),
                            b["groups"].append({"template": "slider_fan", "sheet_set": "goraigo-v11", "reports": 3, "results": {"動いた": 3},
                                                "moved_word": "動いた", "not_moved_word": "動かない", "stuck_steps": {"3": {"taps": 1, "people": 1}},
@@ -214,9 +242,11 @@ r = cli("compare")
 assert r.returncode == 0, r.stderr
 out = r.stdout
 rows = [ln for ln in out.splitlines() if ln.startswith("| goraigo-")]
-assert [ln.split("|")[1].strip() for ln in rows] == ["goraigo-v9", "goraigo-v10", "goraigo-v11"], rows
+# 今の組の行に印が付く。今の組は、新しい束の値で読む（前の束では v10 が今の組だった）
+assert [ln.split("|")[1].strip() for ln in rows] == ["goraigo-v9", "goraigo-v10", "goraigo-v11（今の組）"], rows
 assert "| goraigo-v10 | — | 5 件 | 動いた 2・動かない 2・わからない 1 | 手順 3: 4 回・2 人、手順 5: 1 回・1 人 | 手順 3: 1 | 20〜40（3 件） | 考え 1・工夫 5・できた後 1 |" in out, out
-assert f"| goraigo-v11 | 版 1（{sid}） | 3 件 | 動いた 3 | 手順 3: 1 回・1 人 | — | 10〜25（3 件） | 工夫 1 |" in out, out
+assert f"| goraigo-v11（今の組） | 版 1（{sid}） | 3 件 | 動いた 3 | 手順 3: 1 回・1 人 | — | 10〜25（3 件） | 工夫 1 |" in out, out
+assert "| tora-v3（今の組） |" in out
 assert "| den_den-v1 | — | 2 件 | 鳴った 2 | 手順 4: 2 回・2 人 | — | — | — |" in out, out
 assert "判定はしない" in out and "den_den（この repo の雛形の一覧に無い）" in out
 for word in ("効いた", "改善し", "良くな", "悪くな", "増えた", "減った", "上がっ", "下がっ", "%", "％", "↑", "↓", "平均"):

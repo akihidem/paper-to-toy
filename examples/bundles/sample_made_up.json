@@ -3,6 +3,7 @@
  "exported_at": "2026-11-05T15:00+09:00",
  "from": "made-up-sample",
  "dropped_pii": 0,
+ "current_sets": {"slider_fan": "goraigo-v10", "pivot_counterweight": "tora-v3", "den_den": "den_den-v2"},
  "groups": [
   {
    "template": "slider_fan",
