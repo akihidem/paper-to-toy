@@ -65,6 +65,13 @@ assert "2 内筒は破線で谷折りし、糊代で貼って角筒にする" in
 for form, want in (("tab", "のり、はさみ、定規"), ("tube", "のり、はさみ、定規、竹串（穴あけ）"), ("stick", "のり、はさみ、定規、竹串（穴あけ）")):
     assert materials({**DEFAULTS, "push_part": form})[1] == want, (form, materials({**DEFAULTS, "push_part": form}))
 assert materials({**DEFAULTS, "push_part": "tube", "hub": "rim"})[1] == "のり、はさみ、定規"
+# 道具は部品を組まずに形の値で決める。部品から決めた答え（穴があり、竹串の行が無い）と、全部の押し方 × 中心の置き方で同じ事を見る
+from omochae.templates.slider_fan import bom
+for form in ("tab", "tube", "stick"):
+    for hub in ("axle", "rim"):
+        q = {**DEFAULTS, "push_part": form, "hub": hub}
+        by_parts = any(x.holes for x in parts(q)) and not any("竹串" in r["material"] for r in bom(q))
+        assert materials(q)[1].endswith("、竹串（穴あけ）") == by_parts, (form, hub, materials(q)[1])
 # 柄の形の手順 2 も、手順 2 と同じ型の文（本人の確認 2026-11-06）。「同じように」だと、山折りの外筒と同じと読めた
 stick_steps = steps({**DEFAULTS, "push_part": "stick"})
 assert "2 土台は破線で谷折りし、糊代で貼って角筒にし、割り箸の先を下から差し込んで貼る" in stick_steps, stick_steps

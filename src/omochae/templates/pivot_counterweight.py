@@ -278,8 +278,9 @@ def bom(p):
 def materials(p):
     # 行の位置でなく key で引く。形によって部品表の行が増えるので、位置で引くと別の行を刷る。
     by = {r["key"]: r for r in bom(p)}
-    # 胴に中を切り抜く所がある形（首の形の前の壁の四角い穴）は、カッターを道具に書く（手順に「カッターは大人がする」。本人の確認 2026-11-06）
-    tools = "のり、はさみ、定規" + ("、カッター" if any(q.cuts for q in parts(p)) else "")
+    # 胴に中を切り抜く所がある形（首の形の前の壁の四角い穴）は、カッターを道具に書く（手順に「カッターは大人がする」。本人の確認 2026-11-06）。
+    # 部品を組まずに形の値で決める（切り抜きは首の形にだけある。部品から決めた答えと同じ事は試験で見る。理由は slider_fan.materials と同じ）
+    tools = "のり、はさみ、定規" + ("、カッター" if p["mount"] == "neck" else "")
     return [f"{by['body']['material']}を 1 枚", tools, by["axle"]["material"], by["weight"]["material"]]
 
 
