@@ -86,6 +86,11 @@ with tempfile.TemporaryDirectory() as d:
     c.putrequest("POST", "/report", skip_host=True); c.putheader("Host", f"127.0.0.1:{port}"); c.putheader("Content-Length", "-1"); c.endheaders()
     assert c.getresponse().status == 400
     c.close()
+    # 何も送らずに開いたままの接続があっても、ほかの送信は止まらない（遅い接続で入口を止められた）
+    import socket
+    idle = socket.create_connection(("127.0.0.1", port))
+    assert post(good, host) == 200
+    idle.close()
     srv.shutdown()
     assert srv.server_address[0] == "127.0.0.1"
 # 6. 画面は、全部の雛形を選べ、写真の欄が無く、同意の 2 つを持つ

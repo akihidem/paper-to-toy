@@ -60,10 +60,12 @@ PROBLEM_KEYS = {"kind", "step", "note"}
 # 見方は _has_pii の docstring（数字の多い所と、連絡先の語と印）。
 REPORTED_AT = re.compile(r"\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?([+-]\d{2}:\d{2}|Z)?)?")
 REPORTED_AT_MAX_DEPTH = 8  # 報告の入れ子の深さの上限。深い入れ子で再帰が止まらないように
-KANJI_DIGITS = str.maketrans("〇一二三四五六七八九", "0123456789")
+KANJI_DIGITS = str.maketrans("〇一二三四五六七八九零壱弐参", "01234567890123")  # 大字（零壱弐参）も
 CONTACT = re.compile(r"(?i)@|アット|メアド|メール|電話|携帯|https?://|www\.|[a-z0-9-]+\.(com|net|org|jp|io|me|co|app|dev)\b"
-                     r"|\bat\b.*\bdot\b|(?<![a-z])(tel|mail|line|id)(?![a-z])|twitter|ツイッター|インスタ|instagram|tiktok|youtube"
-                     r"|facebook|フェイスブック|ライン")
+                     r"|\bat\b.*\bdot\b|(?<![a-z])(tel|mail|id)(?![a-z])|twitter|ツイッター|インスタ|instagram|tiktok|youtube"
+                     r"|facebook|フェイスブック|discord|ディスコード|スレッズ|gmail|yahoo"
+                     # LINE は工作の語（折りライン・fold line）と重なるので、ID が続く時だけ連絡先と見る
+                     r"|(?<![a-z])line\s*(id)?\s*[:：]|(?<![a-z])line\s+[a-z0-9_.]{3,}|ライン\s*(id|ID)?\s*[:：]?\s*[a-z0-9_.]{3,}")
 
 
 def _norm(text):
@@ -84,6 +86,10 @@ def _has_pii(text):
     - 数字の多い所: 近く（24 文字の中）に数字が 7 つ以上ある。電話（10 桁〜）も郵便番号（7 桁）も、ここに当たる。
     - 連絡先の語と印: @・アット・メール・電話・LINE・SNS の名・URL・ドメインの形。
     名前は式では見分けられないので、受け入れの前に人が全文を読む（omochae.intake の review）。"""
+    # 連絡先の語は、長音の ー を - に直す前に見る（直した後では「メール」「ツイッター」が当たらなかった）
+    raw = unicodedata.normalize("NFKC", str(text))
+    if CONTACT.search(raw):
+        return True
     t = _norm(text)
     idx = [i for i, ch in enumerate(t) if ch.isdigit()]
     if any(idx[i + 6] - idx[i] < 24 for i in range(len(idx) - 6)):
@@ -128,7 +134,11 @@ def check(r):
         texts = list(_strings({k: v for k, v in r.items() if k not in ("source_id", "reported_at", "reviewed_at")}))
     except ValueError:
         return [Failure("F12.report", "報告", "入れ子が深すぎる")]
-    if any(_has_pii(t) for t in texts):
+    # 数字は、文の欄を全部合わせても数える。欄をまたいで番号を分けたり、間を空けたりすると、1 つの文の幅では通った
+    free = [r.get("motion_notes", ""), r.get("finish_notes", "")] + \
+        [pr.get("note", "") for pr in (r.get("problems") or []) if isinstance(pr, dict)]
+    total_digits = sum(ch.isdigit() for x in free if isinstance(x, str) for ch in _norm(x))
+    if any(_has_pii(t) for t in texts) or total_digits >= 7:
         out.append(Failure("F12.pii", "報告", "数字の多い所か、連絡先の語（@・メール・電話・LINE・URL など）がある。番号や連絡先は書かない（寸法の数字も、近くに 7 つ以上あると落ちる）"))
     if set(r) - ALLOWED:
         out.append(Failure("F12.pii", "欄", f"決まりの外の欄が {len(set(r) - ALLOWED)} つある（名前や連絡先は書かない）"))

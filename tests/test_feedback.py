@@ -44,6 +44,15 @@ for t in ("090 の 1234 の 5678 山田太郎", "090(携帯)1234-5678", "090、�
           "123-4567本町", "123-4567 本郷3丁目", "a at b dot jp", "a(at)b(dot)jp", "a@gmail", "メアドは yamada アット gmail",
           "LINE yamada", "Twitter: yamada", "インスタ yamada_taro", "x.com/yamada"):
     assert any(f.floor == "F12.pii" for f in fb.check({**OK, "motion_notes": t})), t
+# 2b5. 欄をまたいで分けた番号・間を空けた番号・大字・長音を含む連絡先の語。工作の語「ライン」は落とさない
+for bad in ({**OK, "motion_notes": "090-123", "finish_notes": "4-5678"},
+            {**OK, "motion_notes": "〒123", "problems": [{"kind": "other", "step": None, "note": "4567"}]},
+            {**OK, "motion_notes": "090-12" + "あ" * 20 + "34-56" + "い" * 20 + "78"},
+            {**OK, "motion_notes": "零九零壱弐参四五六七八"}, {**OK, "motion_notes": "メールは yamada"},
+            {**OK, "motion_notes": "ツイッターは yamada_taro"}):
+    assert any(f.floor == "F12.pii" for f in fb.check(bad)), bad
+for fine in ("折りラインがずれた", "カットラインが細い", "fold line が見えない"):
+    assert not [f for f in fb.check({**OK, "motion_notes": fine}) if f.floor == "F12.pii"], fine
 # 2b3. 決まった形の欄も、値を絞る（自由な文を入れさせない）。深い入れ子は落ちずに F12.report
 for bad in ({**OK, "params": {"kind": "山田太郎 横浜市"}}, {**OK, "source_id": "NDL-1-R1-L-yamada_taro"},
             {**OK, "reported_at": "9999-99-99"}):

@@ -20,7 +20,7 @@ import pathlib
 import re
 import secrets
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 
 from .compose import TEMPLATES
@@ -174,6 +174,7 @@ class Handler(BaseHTTPRequestHandler):
     # 画面に埋めて、送る時に返させる合言葉。ほかのサイトが手元のブラウザーから送り込むのを止める（Host と Origin も見る）
     token = secrets.token_urlsafe(16)
     port = 0
+    timeout = 10  # 1 つの接続の読み込みの待ち（秒）
 
     def _same_site(self):
         host = self.headers.get("Host", "")
@@ -216,7 +217,9 @@ class Handler(BaseHTTPRequestHandler):
         pass  # 送った人の IP や時刻の記録を残さない
 
 
-class QuietServer(HTTPServer):
+class QuietServer(ThreadingHTTPServer):
+    # 接続ごとに糸を分け、読み込みの待ちに上限を置く。1 本の糸だと、何も送らない接続 1 本で入口が止まった
+    daemon_threads = True
     def handle_error(self, request, client_address):
         pass  # 既定は送った人の IP と traceback（送られた値を含みうる）を stderr に出すので、出さない
 
