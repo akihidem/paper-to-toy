@@ -6,12 +6,14 @@
   同じ床で落とす（式と絵のずれそのものなので）
 - 3D.face: 見える面の部品（折り線を刷らず色の境で折る外筒）の刷った面（色の面）が、閉じた筒の外を向く。本人の答え（2026-11-06
   「色がついている所が外を向くよう折った」）で足した。隠れる部品（破線を刷る内筒）は、向きが組み立てに効かないので見ない
+- 3D.fan: 押し上げて扇が口から出て開く所（最後の手順の後半）。台と扇は折らずに置き、静かな時に扇が隠れる・押し上げると要が口より上に出る・
+  開いた扇形が横の面の口の縁に当たらない、を見る（本人の追加 2026-11-06）
 - 3D.skewer: 折った内筒が外筒の中に入り、内筒の 2 つの穴が向かい合い（高さも横もずれない）、穴を通す竹串が水平で、
   内筒を外筒に入れて静かな時から押し上げ切るまで、外筒の溝の中を通る
 判断の芯:
 - 寸法の式（check_physics・slot_span）でなく、刷る部品（外形・折り線・糊代・穴・溝の切り込み）から形を組む。式と絵がずれた時に見つけるため
 - 面は硬い板、折り線は蝶番と見る。紙の厚み・たわみ・摩擦は入れないので、通っても紙で動く保証ではない
-- 入口は python -m omochae.fold3d だけで、型紙の検査（compose）には繋がない。3D.close・3D.face・3D.skewer は凍結の基準
+- 入口は python -m omochae.fold3d だけで、型紙の検査（compose）には繋がない。3D.close・3D.face・3D.skewer・3D.fan は凍結の基準
   （tests/frozen/criteria.md）の床（2026-11-05 と 11-06 の本人の決定で足した。試験は tests/test_fold3d.py）
 前提と限り:
 - 谷と山の向き（どちらの面が筒の外を向くか）は、見える面の部品だけを 3D.face で見る。3D.close は向きを見ない（谷を全部山に替えても、
@@ -53,7 +55,10 @@ EPS = 1e-6
 # 糊代が相手の面に重なる割合の下限。角を落とした糊代は面の中に収まるので、ほぼ全部が重なる。
 GLUE_COVER = 0.95
 FOLD_DEG = 90  # 角筒は 4 面なので、折り線ごとに 90°
-OUTER, INNER = "tube", "pusher"
+OUTER, INNER, FAN = "tube", "pusher", "fan"
+# 扇が開く面（外筒の何面目に平行か）。型紙のデータの向き: 雛形の注「扇は 1 面目に平行に開く」と、外筒の 2・4 面目の開く糸の穴。
+# 本人に確かめている（違う答えなら、ここを替える）。角筒では、横の面までの距離はどちらの面でも同じ
+FAN_PLANE_PANEL = 1
 
 
 def _sub(a, b):
@@ -475,8 +480,78 @@ def _op_push(st):
         stop = "。押し上げ切ると溝の上の端に届いて止まる"
     rest_h, push_h = sl["h"]
     return [(f"押し上げる 竹串: 竹串の中心は底から {rest_h:.1f}mm から {push_h:.1f}mm まで {sl['travel']:g}mm 上がり、行程の全部で溝の中を通る"
-             f"（押し上げ切った時の紙までの余り {c_push:.2f}mm{stop}）。扇が口から出て開く所は、まだ 3D で組んでいない"
-             "（寸法の式 F5.fan_height・F5.fan_clearance が見ている）", None)]
+             f"（押し上げ切った時の紙までの余り {c_push:.2f}mm{stop}）", None)] + _fan(st)
+
+
+def _fan_shape(fan_part):
+    """扇の部品の形から読む値。Returns (板の高さ h, 帯の長さ, 要の穴の x, 足の折り線の x) か、足が無ければ None。
+
+    頁の x は要の側の縁（x = 0）から先の縁（x = h）へ、y は帯の長さの向き。足は真ん中の板から要の側（x < 0）へ伸び、
+    足の糊代の境の折り線（x 一定）が台の上の面に乗る。寸法の式でなく描いた形から読む（式と絵のずれを見つけるため）。
+    """
+    legs = [a[0] for a, b in fan_part.valley + fan_part.mountain if abs(a[0] - b[0]) < EPS and a[0] < 0]
+    if not legs or not fan_part.holes:
+        return None
+    h = max(x for x, _ in fan_part.outline)
+    ys = [y for _, y in fan_part.outline]
+    return h, max(ys) - min(ys), min(hx for hx, _, _ in fan_part.holes), legs[0]
+
+
+def _fan(st):
+    """押し上げて扇が開く所（手順 13 の後半）。台と扇は折らずに置いた形で見る。Returns [(所見の文, 失敗)]。
+
+    台の上の面は内筒の上の端の高さ、扇は足の折り線が台の上の面に乗る高さに置く。畳んだ扇は箱（上の端の高さだけを見る）、
+    開いた扇は要のまわりの扇形（半径は要の穴から先の縁まで、開く角は帯の長さ÷板の高さ。雛形の F5.fan_clearance と同じ見込み）。
+    見る事: 静かな時に扇の上の端が口より下（隠れる）・押し上げ切ると要が口より上・開いた扇形が横の面の口の縁に当たらない。
+    見ない事: 蛇腹の折り・開く仕組み（糸・紙のばね）・畳んだ扇の厚さが断面に収まるか（台の奥の縁に寄るので、式の床と食い違いうる）。
+    """
+    by, p = st["by"], st["p"]
+    if FAN not in by:
+        return []
+    shape = _fan_shape(by[FAN])
+    if shape is None:
+        # 口の台の形（hub rim）は、扇の端を台に貼る別の作り。まだ置いていないと言う（黙って通さない）
+        return [("開く 4 扇: 口の台の形の扇は、まだ置いていない（要と足が無い作り）", None)]
+    h, strip, hole_x, leg_x = shape
+    outer_part, outer = by[OUTER], st["folded"][OUTER]
+    up, c, bot, top = tube_axis(outer)
+    H, s = top - bot, p["push_amount"]
+    where = by[FAN].label
+    # 静かな時は内筒の上の端（＝台の上の面）が口より押し上げる量だけ下。畳んだ扇の上の端は、台の上の面から h − 足の折り線の x
+    hidden = s - (h - leg_x)
+    if hidden < -EPS:
+        return [(None, Failure("3D.fan", where, f"静かな時に、畳んだ扇の上の端が口より {-hidden:.1f}mm 上に出る（隠れない）"))]
+    d = hole_x - leg_x  # 押し上げ切った時の、要の口からの高さ（台の上の面が口の高さに来る）
+    if d <= EPS:
+        return [(None, Failure("3D.fan", where, f"押し上げ切っても、要が口より上に出ない（口から {d:.1f}mm）"))]
+    R, theta = h - hole_x, min(360.0, math.degrees(strip / h))
+    sides = sorted((f for f in outer if f not in _glue_faces(outer_part, outer)), key=lambda f: f.poly.bounds[0])
+    fan_n = sides[FAN_PLANE_PANEL - 1].normal
+    mouth = _add(c, _mul(up, top))
+    margins = []
+    for f in sides:
+        if abs(_dot(f.normal, fan_n)) > EPS:
+            continue  # 扇の面と平行な面には、扇は当たらない（扇はその面に平行に開く）
+        off = _dot(_sub(f.at(f.poly.exterior.coords[0]), mouth), f.normal)
+        a = abs(off)  # 軸から横の面までの距離
+        out_dir = _mul(f.normal, 1 if off > 0 else -1)
+        if R <= a:
+            continue  # 扇の先が横の面まで届かない
+        half = math.radians(theta / 2)
+        phi = math.asin(a / R)
+        if half <= phi:
+            continue  # 開いても横の面まで届かない角
+        reach = math.sqrt(R * R - a * a)
+        low = d + a / math.tan(half) if half < math.pi - phi else d - reach
+        seg = [f.flat(_add(_add(mouth, _mul(out_dir, a)), _mul(up, z)))[0] for z in (low, d + reach)]
+        margins.append(f.poly.distance(LineString(seg)) if low < 0 else low)
+    margin = min(margins, default=None)
+    if margin is not None and margin <= EPS:
+        return [(None, Failure("3D.fan", where, f"開いた扇（{theta:.0f}°）が、横の面の口の縁に当たる"))]
+    edge = "横の面の口の縁に当たらない" + (f"（縁までの余り {margin:.1f}mm）" if margin is not None else "（横の面まで届かない）")
+    return [(f"開く {where}: 静かな時、畳んだ扇の上の端は口より {hidden:.1f}mm 下（隠れる）。押し上げ切ると、要が口より {d:.1f}mm 上に出て、"
+             f"扇は {FAN_PLANE_PANEL} 面目に平行に {theta:.0f}° 開き、{edge}。台と扇は折らずに置いた形で見る（畳んだ扇は箱、開いた扇は要の"
+             "まわりの扇形）。蛇腹の折りと、開く仕組み（糸・紙のばね）は見ない", None)]
 
 
 # 操作の種類ごとに、3D で行う事。並びは omochae.ops3d の操作の並び（手順の文と同じ元）で決める
