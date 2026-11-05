@@ -167,6 +167,12 @@ NEG = [
 for key, fn, floor, where, word in NEG:
     fl = fold3d.check(tampered(key, fn), p)[1]
     assert [(f.floor, f.where) for f in fl] == [(floor, where)] and word in fl[0].message, (floor, where, [f.line() for f in fl])
+# 2 つの崩れが別の部品にある時は、それぞれ 1 行ずつ出る。外筒の色の面の向き（外筒は閉じる）は、内筒が閉じなくても捨てない
+two = copy.deepcopy(pc)
+two["tube"].valley, two["tube"].mountain = two["tube"].mountain, []
+move_fold(0, 2.0)(two["pusher"])
+fl = fold3d.check(list(two.values()), p)[1]
+assert [(f.floor, f.where) for f in fl] == [("3D.close", "2 内筒"), ("3D.face", "1 外筒")], [f.line() for f in fl]
 # 崩す前の部品はそのまま通る（上の負の対照が、写し方のせいで落ちたのでない事）
 assert not fold3d.check(tampered("tube", lambda q: None), p)[1]
 print("ok 2")
