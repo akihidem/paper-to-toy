@@ -15,7 +15,14 @@ from omochae.paper_words import BANNED, BOARD, COPY, DRAWING, NAMES, THICK, pape
 
 REQUIRED = {"slider_fan", "pivot_counterweight"}  # 必須 2 種の雛形。外すのはここだけ
 # 紙の行の見分け: 用意する物か部品表の材料で、紙そのものを名指しする行（紙用の割ピン・紙やすり・紙の玉などは紙の行でない）
-PAPER_LINE = re.compile(r"^(紙(?!用|やすり)|厚紙|薄い紙|厚めの紙|空き箱|コピー用紙|画用紙)")
+# 行の頭の名詞（「を」「（」「。」「、」より前）に紙を含む行を、紙の行と見る。書き出しを列べるだけだと「白い紙」「ケント紙」「板紙」を
+# 拾えなかった。紙用の割ピン・紙やすり・安全の文（飛ばすのは紙の玉だけ）は紙の行でない
+NOT_PAPER = ("紙用", "紙やすり", "飛ばすのは")
+
+
+def is_paper_line(s):
+    head = re.split(r"[を（。、]", s, maxsplit=1)[0]
+    return "紙" in head and not head.startswith(NOT_PAPER)
 
 # 1. 名前の選び方: 重さがあれば重さ、無ければ厚さ。4 つの名前の外は返さない
 assert paper_name(gsm=80) == COPY and paper_name(gsm=150) == DRAWING and paper_name(gsm=250) == THICK
@@ -38,19 +45,29 @@ for tid, tpl in sorted(TEMPLATES.items()):
     for f in tpl.FORMS:
         p = ways._params(tpl, f)
         cases.append((tid, str(f), p))
-        if "wheel_layers" in tpl.DEFAULTS:  # 車輪の芯（空き箱の厚紙）が出る寸法
-            cases.append((tid, str(f), {**p, "wheel_layers": 3}))
+        if "wheel_layers" in tpl.DEFAULTS:  # 車輪の芯が出る寸法。芯の厚さの範囲の両端も見る
+            for ct in tpl.RANGES["card_thickness"]:
+                cases.append((tid, str(f), {**p, "wheel_layers": 3, "card_thickness": ct}))
 bad = []
 for tid, f, p in cases:
     ls = lines(tid, p)
     for s in ls:
-        if PAPER_LINE.match(s) and (not s.startswith(NAMES) or BANNED.search(s)):
+        if is_paper_line(s) and (not s.startswith(NAMES) or BANNED.search(s)):
             bad.append((tid, f, s[:60]))
         if re.search(r"#[0-9a-fA-F]{6}", s):  # 色の番号が字に混ざらない（名前のぶつかりで色が刷られた事がある）
             bad.append((tid, f, s[:60]))
     assert any(s.startswith(NAMES) for s in ls), (tid, f)  # どの形も、刷る紙を 4 つの名前で言う行を持つ
 assert not bad, bad[:10]
 assert len({(t, f) for t, f, _ in cases}) == sum(len(t.FORMS) for k, t in TEMPLATES.items() if k not in REQUIRED)
+
+# 2b. 見分けの式が、列べた書き出しの外の紙の書き方も拾う
+assert all(is_paper_line(s) for s in ("白い紙を 1 枚", "ケント紙を 1 枚", "板紙（厚さ 1mm）", "厚紙を 1 枚"))
+assert not any(is_paper_line(s) for s in ("紙用の割ピンを 2 本", "竹串を切るニッパーと紙やすり", "飛ばすのは紙の玉だけ", "のり、はさみ"))
+# 2c. 芯の名前は計算に使う厚さに従う（薄い芯で「空き箱の厚紙」と言わない）
+wc = TEMPLATES["wheel_cart"]
+for ct in wc.RANGES["card_thickness"]:
+    p = {**ways._params(wc, wc.FORMS[0]), "wheel_layers": 3, "card_thickness": ct}
+    assert any(s.startswith(paper_name(thickness=ct)) for s in wc.materials(p)), (ct, wc.materials(p))
 
 # 3. 外すのは必須 2 種だけ（雛形が足されても、黙って外れない）
 assert REQUIRED <= set(TEMPLATES)
