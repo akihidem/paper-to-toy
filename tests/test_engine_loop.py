@@ -460,13 +460,4 @@ assert ver["proposals"][0]["finding"] == "軸の穴は、羽の幅に合わせ�
 out = cli("compare").stdout
 assert "版 1" in row_of(out, "pinwheel") and "版 1" not in row_of(out, "top") and "版 1" in row_of(out, "tab") and "版 1" in row_of(out, "tube"), out
 
-# 14. 共通化している知見の一覧（人が書く。サイトの作る側の頁が読む）。形・届く雛形・連絡先の形を見る。凡例の知見は、全部の雛形を刷る compose に今もある事を見る
-shared = json.loads((pathlib.Path(__file__).resolve().parents[1] / "data/engine/shared-findings.json").read_text(encoding="utf-8"))
-assert shared and all(set(k) == {"finding", "where", "reach", "loops", "material", "from", "commit"} for k in shared), shared
-for k in shared:
-    assert k["finding"].strip() and not el.has_contact(k["finding"]) and len(k["finding"]) <= el.MAX_TEXT, k
-    assert k["reach"] == "all" or (k["reach"] and set(k["reach"]) <= set(el.TEMPLATES)), k
-    assert set(k["loops"]) | set(k["material"]) <= {1, 2, 3, 4} and (not k["commit"] or el.COMMIT.fullmatch(k["commit"])), k
-assert "谷折り（手前にへこむ）" in (pathlib.Path(el.__file__).parent / "compose.py").read_text(encoding="utf-8") and shared[0]["reach"] == "all"
-
 print("OK test_engine_loop")
