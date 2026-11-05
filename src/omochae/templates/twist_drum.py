@@ -349,7 +349,7 @@ def _wrap(p):
 
 # 幣の房（コマ 29）。上の帯を柄の先に巻いて貼り、下の 3 本の房を垂らす。房の幅と長さは図の比の目測。
 # 房は 50mm あり、止まっている時は胴の上から面の前へ垂れる（玉が打つ所にかかる）。回している間は外へ広がると見て、長さは図の比のままにした。
-# 元の図（コマ 29）では、房は胴の上へ長く出た柄の先から、胴の横へ下がっている。面の邪魔になるかは実物で確かめていないので、報告の問いに入れた（report_checks）。
+# 元の図（コマ 29）では、房は胴の上へ長く出た柄の先から、胴の横へ下がっている。面の邪魔になるかは実物で確かめていない。
 STREAMER_TEETH, STREAMER_W, STREAMER_GAP, STREAMER_TOP, STREAMER_LEN = 3, 5, 2.5, 8, 50
 
 
@@ -432,49 +432,27 @@ def materials(p):
     return [f"{by['band']['material']}を 1 枚", "のり、はさみ、定規、まち針", CUT_TOOL, by["stick"]["material"], f"{by['cord']['material']}を 2 本", f"{by['bead']['material']}を 2 つ"]
 
 
-def _to(params=(), consts=(), floors=()):
-    """手順 1 つの直しの行き先。params は RANGES の寸法の名、consts はこの雛形の見込みの値の名、floors は F5.drum の所の名。"""
-    return {"params": list(params), "consts": list(consts), "floors": list(floors)}
-
-
-def _steps(p):
-    """(組み方の文, その手順の困り事が当たる直しの行き先) の並び。文と行き先を 1 つの並びで持つのは、手順を直した時に、
-    作った人の報告の手順の番号（報告の problems の step）が別の寸法を指さないようにするため（float の雛形と同じ形）。
-    手順の数は形（face）だけで決まる。3 つとも空の行き先は、組み方の文だけの手順。"""
-    return _steps_kanko(p) if p["face"] == "kanko" else _steps_hand(p)
-
-
 def steps(p):
     """組み方の文。でんでん太鼓は、サイトの手順の紙に収まる行数（STEP_LINES_MAX）に詰める。"""
-    return [text for text, _ in _steps(p)]
-
-
-def step_targets(p):
-    """手順の番号（1 から）ごとの、直しの行き先。作った人の報告の困り事（手順の番号つき）を、当たる寸法・見込みの値・検査の所へ引くための表。
-    値は直さない。直しは人が採る。報告の集計の側からは、まだ呼んでいない。困り事の種類から引く表は feedback_targets。"""
-    return {i: target for i, (_, target) in enumerate(_steps(p), 1)}
-
-
-def _steps_hand(p):
+    if p["face"] == "kanko":
+        return steps_kanko(p)
     # 糸は、帯を丸める前に帯の裏で結んで留める。面を貼った後は胴の中に手が入らず、1 つの小さい穴に外から糸を留める手が無い
     # （前は面を 2 枚貼ってから「穴に結ぶ」と書いていて、その順では組めなかった）。糸の長さは、後で玉を付ける所で決める（直せる）。
-    cord = ("cord_length", "bead_d", "depth", "radius")
-    top = ("STREAMER_TOP",) if p["face"] == "tori" else ("TOP_OUT",)  # 胴の上へ出す長さを決める値（top_out）。鳥の面は房の帯の幅から決まる
-    out = [("刷った物差しに定規を当て、10cm か確かめる", _to()),
-           ("部品を実線で切る。3 胴の帯の歯の間も切り込む", _to(("tab",), ("TAB_PITCH",), ("糊代の歯",))),
-           ("帯の穴は大人があける（厚い紙を敷く）。太い 2 つの穴は竹串の先であける。菱形の小さい穴はまち針で刺す", _to(("stick_d", "depth"), ("HOLE_MARGIN",), ("柄の穴",))),
-           ("糸を菱形の穴に 1 本ずつ通し、帯の裏で 2 回重ねて結び、糊で留める（丸める前に）", _to((), ("CORD_SPARE",))),
-           ("3 胴の帯を丸め、終わりの糊代を頭の下に入れて貼る（絵が外。糸は外へ垂らす）", _to(("radius", "seam_glue", "paper_thickness"), (), ("柄の穴",))),
-           ("上下の歯を一点鎖線で内へ山折りし（絵が外）、1 表の面と 2 裏の面を歯に外から貼る", _to(("tab", "radius", "paper_thickness"), ("TAB_PITCH",), ("糊代の歯",))),
-           (f"帯の穴をあけた竹串の{CUT_POINTS}。その竹串を {stick_cut(p):g}mm に切る", _to(("handle_length", "radius"), ("SKEWER_LEN", "SKEWER_POINT") + top, ("柄",))),
-           (f"竹串を太い 2 つの穴に通し、上へ {top_out(p):g}mm 出す。穴の所を糊で留める", _to(("stick_d", "depth"), top, ("柄の穴",))),
-           (f"糸に玉を付ける（帯の表から玉の中心まで {p['cord_length']:g}mm。左右 2 本）。余った糸は切る", _to(cord, ("STRIKE_ZONE",), ("糸",))),
-           ("4 柄の巻き紙を、糊を薄く付けた胴の下の竹串に巻いて貼る（絵が外）", _to(("wrap_glue", "handle_length", "stick_d")))]
+    out = ["刷った物差しに定規を当て、10cm か確かめる",
+           "部品を実線で切る。3 胴の帯の歯の間も切り込む",
+           "帯の穴は大人があける（厚い紙を敷く）。太い 2 つの穴は竹串の先であける。菱形の小さい穴はまち針で刺す",
+           "糸を菱形の穴に 1 本ずつ通し、帯の裏で 2 回重ねて結び、糊で留める（丸める前に）",
+           "3 胴の帯を丸め、終わりの糊代を頭の下に入れて貼る（絵が外。糸は外へ垂らす）",
+           "上下の歯を一点鎖線で内へ山折りし（絵が外）、1 表の面と 2 裏の面を歯に外から貼る",
+           f"帯の穴をあけた竹串の{CUT_POINTS}。その竹串を {stick_cut(p):g}mm に切る",
+           f"竹串を太い 2 つの穴に通し、上へ {top_out(p):g}mm 出す。穴の所を糊で留める",
+           f"糸に玉を付ける（帯の表から玉の中心まで {p['cord_length']:g}mm。左右 2 本）。余った糸は切る",
+           "4 柄の巻き紙を、糊を薄く付けた胴の下の竹串に巻いて貼る（絵が外）"]
     if p["face"] == "tori":
-        out.append(("5 幣の房の上の帯を、胴の上に出た竹串に巻いて貼る", _to((), ("STREAMER_TOP", "STREAMER_LEN"))))
+        out.append("5 幣の房の上の帯を、胴の上に出た竹串に巻いて貼る")
     rng = tune_range(p)
     span = f"（帯の表から玉の中心まで {rng[0]:g}〜{rng[1]:g}mm の間）" if rng else ""
-    out.append((f"柄を両手で挟んで左右に回し、玉が面に当たるか見る。当たらなければ糸を長く、柄に絡めば短くする{span}", _to(cord + ("stick_d",), ("STRIKE_ZONE",), ("糸",))))
+    out.append(f"柄を両手で挟んで左右に回し、玉が面に当たるか見る。当たらなければ糸を長く、柄に絡めば短くする{span}")
     return out
 
 
@@ -509,97 +487,6 @@ def measures(p):
     if p["face"] == "kanko":
         return {"predict": "棒をどう引くと、花車と玉はどう動くと思いますか（言葉か絵で）", "rows": [[("引き方（速さ・長さ）", 40)]]}
     return {"predict": "柄をどう回すと、玉はどう動くと思いますか（言葉か絵で）", "rows": [[("回し方（速さ・向き）", 40)]]}
-
-
-# ---- 作った人の報告を、この雛形の直す所へ結ぶ ----
-# 報告の集計（main に入る omochae.feedback。この枝にはまだ無い）は、困り事の種類ごとの行き先を、族の床の名（F5.drum）までしか言わない。
-# 直す人がこの雛形で開く所（寸法の名・式・部品を作る関数）を、種類ごとに書いておく。
-# 値は書かない（少ない報告から寸法を決め打つと、仮説の違いと作り方の違いが混ざる。直しは人が採る）。
-# 書いた名前が今の code に在る事は試験で見る（寸法や関数の名を変えたら、ここも直す）。
-# 種類は集計の道具と同じ 9 つ（other も持つ。種類で引いた時に、表に無い種類で落ちないように）。
-FEEDBACK_KINDS = ("cut", "fold", "glue", "fit", "motion", "mark", "material", "finish", "other")
-_FEEDBACK_OTHER = "ほかの種類に当たらない困り事。雛形の冒頭に書いた動きの見込みの前提から、人が読んで決める"
-_FEEDBACK_HAND = {
-    "cut": "歯の間の切り込み（_band）・穴をあける手順（steps）・竹串を切る長さ stick_cut と先を落とす長さ SKEWER_POINT",
-    "fold": "歯の山折り（_band）",
-    "glue": "糊代の歯 tab・TAB_PITCH（tab_teeth）・継ぎ目 seam_glue・柄の巻き紙 wrap_glue",
-    "fit": "柄の穴 stick_hole_r・穴の余白 HOLE_MARGIN・帯の長さ circumference（面の縁と帯の外をそろえる見込み）",
-    "motion": "糸の長さ cord_length の窓（cord_window・free_cord・tangle_limit・far_limit）・玉 bead_d・面の真ん中で鳴るという見込み STRIKE_ZONE・刷る直しの幅 tune_range",
-    "mark": "糸の穴と柄の穴の位置 hole_positions・菱形の印（_band）",
-    "material": "竹串の長さ SKEWER_LEN・糸の余り CORD_SPARE・玉（bom）",
-    "finish": "面の絵 _face_art・胴の色 BAND・幣の房 _streamer",
-    "other": _FEEDBACK_OTHER,
-}
-_FEEDBACK_KANKO = {
-    "cut": "台と帯の四角い穴 rod_cut・POST_FIT・竹串の長さ rod_length と peg_cut・先を落とす長さ SKEWER_POINT",
-    "fold": "台と柱の山折り・柱の足の谷折り（_base・_post）・留め具の旗の山折りと巻く向き（_rodtab）・軸受けの山折り（_bearing）",
-    "glue": "台の角の糊代 BASE_TAB・柱の足 POST_TAB・留め具の糊の印（_rodtab）・軸受けの糊代 BEARING_LIFT・歯 tab",
-    "fit": "留め具の旗と天井・壁（flag_tip_z・ceiling_z・rod_off）・棒の穴 rod_cut・柱の穴の遊び POST_FIT・軸の穴（_base・_bearing）・軸受けの高さ BEARING_LIFT",
-    "motion": "糸 k_cord の窓（kanko_window）・花車の高さ peg_height と柱 post_height・面までの face_gap・軸の回る数 pull_turns"
-              "（pull_travel・rod_off）・巻く糸の長さ pull_cord と巻く回数 wind_wraps・刷る直しの幅 tune_range",
-    "mark": "柱の足の印（_base）・留め具の位置 rodtab_pos・花車の高さの紙 _gauge・方角の言い方（steps_kanko）",
-    "material": "竹串 3 本（bom_kanko）・巻く糸 pull_cord・玉の糸の余り CORD_SPARE",
-    "finish": "巴の絵 _tomoe_art・花車 _wheel と WHEEL_PETALS・台と柱の色 WOOD",
-    "other": _FEEDBACK_OTHER,
-}
-
-
-def feedback_targets(p):
-    """困り事の種類 → この形で開く所。Returns {種類: 文}（FEEDBACK_KINDS の全部）。"""
-    return dict(_FEEDBACK_KANKO if p["face"] == "kanko" else _FEEDBACK_HAND)
-
-
-def report_checks(p):
-    """作った人に聞くと、この雛形の見込み（式の前提）を 1 つずつ確かめられる問い。
-    Returns [{"ask": 問い, "expect": 今の式が見込む答え, "checks": その見込みを持つ式・寸法の名}]。
-
-    今の検査は式と配置だけを見ていて、実物で確かめた値が 1 つも無い。報告が「動いた・動かない」だけだと、どの見込みが外れたかが分からない。
-    問いを見込みごとに分け、式の見込む答えを並べておくと、答えが食い違った所がそのまま直す所（checks の名）になる。
-    報告の入口（サイトの側）が問いとして出し、答えは報告の motion_notes か problems の note に書いてもらう想定。
-    見込む答えの数は、渡した寸法で式から出す（寸法を変えた型紙には、その型紙の見込みが出る）。検査で落ちる寸法では、問いだけを返し、見込みは出さない。"""
-    fails = check_physics(p)
-    if p["face"] == "kanko":
-        asks = [("棒を 1 回引き切ると、花車は何回まわりましたか", "pull_turns"),
-                ("玉は鼓の面に当たりましたか。当たった所はどこですか（真ん中の近く・縁の近く・当たらない）", "kanko_window"),
-                ("棒を引いた時、花車の軸は傾きましたか", "_bearing"),
-                ("棒の留め具の旗は、台の天井・東の壁・軸のどれかに当たりましたか", "flag_tip_z"),
-                ("棒を引き切った時、棒の先が北の壁の穴から抜けましたか", "rod_north_out"),
-                ("巻く糸は、軸の上で滑ったり、ほどけたりしましたか", "pull_cord")]
-    else:
-        asks = [("柄を回した時、玉は面に当たりましたか。当たった所はどこですか（真ん中の近く・縁の近く・当たらない）", "strike_offset"),
-                ("面を打った時、音は鳴りましたか（鳴った・鈍い・鳴らない）", "STRIKE_ZONE"),
-                ("玉や糸が、胴の下の柄に絡みましたか", "tangle_limit"),
-                ("胴の帯を丸めた時、面の縁と帯はぴったり合いましたか（帯が余った・足りない・合った）", "circumference"),
-                ("回した時、柄だけが回って胴が遅れる事はありましたか", "stick_hole_r")]
-        if p["face"] == "tori":
-            asks.append(("幣の房は、回している時に玉や面の邪魔になりましたか", "STREAMER_LEN"))
-    if fails:
-        # 落ちる寸法の型紙は刷れない。式は数を返すが、面の外を打つ・天井まで負の長さ、のような見込みを「当たる」「当たらない」と並べると食い違うので出さない。
-        why = "・".join(sorted({f.where for f in fails}))
-        return [{"ask": a, "checks": c, "expect": f"この寸法は検査で落ちるので、見込みを出さない（{why}）"} for a, c in asks]
-    if p["face"] == "kanko":
-        _, _, dz = kanko_window(p)
-        rho, g = wheel_anchor(p) + p["k_cord"], p["face_gap"] - p["bead_d"] / 2
-        hit = math.hypot(math.sqrt(rho * rho - g * g), dz)
-        east = p["base_width"] / 2 - rod_off(p) - (TAB_FLAG + p["paper_thickness"])
-        expects = [f"{pull_turns(p):.1f}〜{pull_turns(p, favorable=True):.1f} 回（巻く向きと旗の倒れ方で変わる）",
-                   f"当たる。面の中心から約 {hit:.0f}mm の所（面の半径は {p['k_radius']:g}mm）",
-                   "傾かない（台の上の面の穴と軸受けの穴の 2 つで支える）",
-                   f"当たらない（天井まで {ceiling_z(p) - flag_tip_z(p):.1f}mm、倒れても東の壁まで {east:.1f}mm、軸に巻いた糸まで {ROD_GAP:g}mm 空く見込み）",
-                   f"抜けない（引き切っても {rod_north_out(p) - pull_travel(p):.1f}mm 残る）",
-                   "滑らない（軸に結んで糊で留め、引き切っても 1 周以上残る）"]
-    else:
-        x = strike_offset(p)
-        side = "結び目の側" if x >= 0 else "結び目の反対の側"
-        expects = [f"当たる。面の中心から{side}へ約 {abs(x):.0f}mm の所（面の半径は {p['radius']:g}mm）",
-                   f"鳴る（面の中心から半径の {STRIKE_ZONE:g} 倍の内を打てば鳴ると見込んでいる。この見込みは実物で確かめていない）",
-                   # 上限ちょうどは落ちるので、刷る数は 0.1mm 切り捨てる（四捨五入だと、刷った数を満たすのに検査で落ちる糸がある）
-                   f"絡まない（糸が {math.floor(tangle_limit(p) * 10) / 10:g}mm 以下なら、玉が柄に届かない見込み）",
-                   f"合う（帯は糊代を除いて {circumference(p):.1f}mm。面の縁と帯の外の面がそろう長さ）",
-                   "無い（穴は竹串より少し大きいだけで、穴の所を糊で留める）"]
-        if p["face"] == "tori":
-            expects.append("ならない見込み（回している間、房は外へ広がる。止まっている時は面の前に垂れる。実物では確かめていない）")
-    return [{"ask": a, "checks": c, "expect": e} for (a, c), e in zip(asks, expects)]
 
 
 def diagram(x, y, w, h, p):
@@ -1051,55 +938,37 @@ def bom_kanko(p):
 
 
 def steps_kanko(p):
-    """諫鼓の組み方の文（行き先を除いた文だけ）。"""
-    return [text for text, _ in _steps_kanko(p)]
-
-
-def _steps_kanko(p):
-    """諫鼓の (組み方の文, 直しの行き先)。部品が多く、サイトの手順の紙 1 枚には収まらない（STEP_LINES_KANKO）。理由を短く添え、言い回しは詰める。"""
+    """諫鼓の組み方の文。部品が多く、サイトの手順の紙 1 枚には収まらない（STEP_LINES_KANKO）。理由を短く添え、言い回しは詰める。"""
     rng = tune_range(p)
     span = "（花車の小さい穴から玉の中心まで {:g}〜{:g}mm の間）".format(*rng) if rng else ""
-    return [("刷った物差しに定規を当て、10cm か確かめる", _to()),
-            ("部品を実線で切る。胴の帯の歯の間・帯の四角い穴・台の壁の四角い穴も切る（カッターは大人がする）",
-             _to(("tab", "post_side", "k_length", "stick_d", "base_height", "base_width"), ("POST_FIT", "TAB_PITCH"), ("柱の穴", "棒の穴", "糊代の歯"))),
-            ("穴は大人があける（厚い紙を敷く）。台の丸い穴・18 軸受けの穴・花車の真ん中の穴は目打ちか竹串の先で、旗の穴と花車の穴（糸の小さい穴）はまち針で刺す",
-             _to(("stick_d",), ("TAB_HOLE_R", "HOLE_MARGIN"))),
-            ("3 胴の帯を丸めて貼り、歯を一点鎖線で内へ山折りして、1 表の面（巴）と 2 裏の面を貼る", _to(("k_radius", "k_length", "tab", "seam_glue", "paper_thickness"), ("TAB_PITCH",), ("糊代の歯",))),
-            ("10 柱を一点鎖線で山折りして四角い筒に貼り（絵が外）、足を破線で外へ谷折りする。頭を胴の四角い穴に差して貼る",
-             _to(("post_side", "post_height"), ("POST_INSERT", "POST_GLUE", "POST_FIT"), ("柱の穴",))),
+    return ["刷った物差しに定規を当て、10cm か確かめる",
+            "部品を実線で切る。胴の帯の歯の間・帯の四角い穴・台の壁の四角い穴も切る（カッターは大人がする）",
+            "穴は大人があける（厚い紙を敷く）。台の丸い穴・18 軸受けの穴・花車の真ん中の穴は目打ちか竹串の先で、旗の穴と花車の穴（糸の小さい穴）はまち針で刺す",
+            "3 胴の帯を丸めて貼り、歯を一点鎖線で内へ山折りして、1 表の面（巴）と 2 裏の面を貼る",
+            "10 柱を一点鎖線で山折りして四角い筒に貼り（絵が外）、足を破線で外へ谷折りする。頭を胴の四角い穴に差して貼る",
             # 方角の言い方（北・南・東・西）は紙に刷っていないので、台の上の印と穴で決める（前は説明なしに「南の壁」「北の壁」と書いていた）。
-            ("11 台を一点鎖線で山折りし（絵が外）、角の糊代を壁の内に貼る（底は無い）。柱の印の端を北、丸い穴の端を南、壁の四角い穴が寄る側を東と呼ぶ",
-             _to(("base_length", "base_width", "base_height"), ("BASE_TAB",))),
-            ("柱の足の裏（刷っていない側）に糊を付け、印の四角に貼る。表の面を南（花車の側）に向ける", _to(("post_pos", "post_side"), ("POST_TAB",), ("柱",))),
-            (f"13・14 に使う竹串 3 本とも、{CUT_POINTS}", _to(("base_length",), ("SKEWER_POINT", "SKEWER_LEN", "ROD_GRIP"), ("棒",))),
-            (f"竹串 13 を {peg_cut(p):g}mm に切り、台の丸い穴に通して、下の端を机に着ける", _to(("base_height", "peg_height", "stick_d", "post_pos", "k_length", "face_gap", "base_length"), ("PEG_TOP",), ("軸",))),
-            (f"17 を軸の横に立て、12 花車を台の上の面から {p['peg_height']:g}mm（17 の上の端の印）に貼る。軸の上の端からは {PEG_TOP}mm 下。貼れたら 17 は外す",
-             _to(("peg_height", "post_height", "k_radius", "wheel_r"), ("PEG_TOP",), ("花車",))),
-            (f"花車の小さい穴に糸を通して花弁の先に結び、穴から玉の中心まで {p['k_cord']:g}mm の所に玉を付ける。余った糸は切る",
-             _to(("k_cord", "bead_d", "wheel_r", "face_gap"), ("STRIKE_ZONE", "CORD_SPARE"), ("糸",))),
-            (f"竹串 2 本を {rod_length(p):g}mm に切り、縦に重ねてセロハンテープで 3 か所束ねて 14 引く棒にする（真ん中は留め具を巻く所を避ける）",
-             _to(("base_length", "stick_d"), ("ROD_GRIP", "SKEWER_LEN"), ("棒",))),
-            (f"【解釈】14 を南の壁の穴から北の壁の穴へ通し、北の壁から {rod_north_out(p):g}mm 出す。南の壁の所で、棒にえんぴつで印を付ける（押し込む時の目印）",
-             _to(("base_length", "base_height", "stick_d"), ("HOLE_MARGIN",), ("棒の穴", "棒"))),
-            (f"【解釈】台の下から、棒の北の端から {rodtab_pos(p):g}mm の所に、16 棒の留め具の北の縁を合わせ、刷った面を内にして（真ん中の糊の印を棒に当てて）"
-             "棒に巻いて貼る。両端を一点鎖線で山折りして棒の真上に立て、2 枚の穴を合わせる",
-             _to(("stick_d", "paper_thickness", "base_width", "base_height"), ("TAB_FLAG", "TAB_W", "ROD_GAP", "WIND_D"), ("留め具",))),
-            ("【解釈】巻く糸の端を、合わせた 2 枚の穴に通して結ぶ。結んでから 2 枚を貼り合わせて旗にする（穴は糊の印の中にある）", _to((), ("TAB_HOLE_R", "HOLE_MARGIN"))),
+            "11 台を一点鎖線で山折りし（絵が外）、角の糊代を壁の内に貼る（底は無い）。柱の印の端を北、丸い穴の端を南、壁の四角い穴が寄る側を東と呼ぶ",
+            "柱の足の裏（刷っていない側）に糊を付け、印の四角に貼る。表の面を南（花車の側）に向ける",
+            f"13・14 に使う竹串 3 本とも、{CUT_POINTS}",
+            f"竹串 13 を {peg_cut(p):g}mm に切り、台の丸い穴に通して、下の端を机に着ける",
+            f"17 を軸の横に立て、12 花車を台の上の面から {p['peg_height']:g}mm（17 の上の端の印）に貼る。軸の上の端からは {PEG_TOP}mm 下。貼れたら 17 は外す",
+            f"花車の小さい穴に糸を通して花弁の先に結び、穴から玉の中心まで {p['k_cord']:g}mm の所に玉を付ける。余った糸は切る",
+            f"竹串 2 本を {rod_length(p):g}mm に切り、縦に重ねてセロハンテープで 3 か所束ねて 14 引く棒にする（真ん中は留め具を巻く所を避ける）",
+            f"【解釈】14 を南の壁の穴から北の壁の穴へ通し、北の壁から {rod_north_out(p):g}mm 出す。南の壁の所で、棒にえんぴつで印を付ける（押し込む時の目印）",
+            f"【解釈】台の下から、棒の北の端から {rodtab_pos(p):g}mm の所に、16 棒の留め具の北の縁を合わせ、刷った面を内にして（真ん中の糊の印を棒に当てて）"
+            "棒に巻いて貼る。両端を一点鎖線で山折りして棒の真上に立て、2 枚の穴を合わせる",
+            "【解釈】巻く糸の端を、合わせた 2 枚の穴に通して結ぶ。結んでから 2 枚を貼り合わせて旗にする（穴は糊の印の中にある）",
             # 巻く糸は軸に結んで糊で留める。巻くだけでは、引いた時に糸が軸の上を滑って軸が回らない（前は「軸に 2 回巻く」としか書いていなかった）。
-            (f"【解釈】糸のもう一方の端を、旗の穴から {pull_cord(p):g}mm の所で、台の下から軸（竹串 13）に結ぶ"
-             f"（高さは旗の穴と同じ。机から約 {flag_hole_z(p):.0f}mm）。結び目に糊を付けて留め（留めないと滑る）、余りは切る", _to(("stick_d",), ("WIND_D", "CORD_SPARE"))),
+            f"【解釈】糸のもう一方の端を、旗の穴から {pull_cord(p):g}mm の所で、台の下から軸（竹串 13）に結ぶ"
+            f"（高さは旗の穴と同じ。机から約 {flag_hole_z(p):.0f}mm）。結び目に糊を付けて留め（留めないと滑る）、余りは切る",
             # 軸受けは、軸に糸を結んだ後で付ける（先に付けると、腕が邪魔で台の下から軸に手が届かない）。
-            ("18 軸受けの糊代を一点鎖線で山折りし、台を横に倒して、軸の下の端を 18 の穴に通し、糊代を西の壁（棒の反対の側）の内に貼る。糊代の下の縁を壁の下の縁にそろえる",
-             _to(("base_width", "stick_d"), ("BEARING_LIFT", "HOLE_MARGIN"))),
+            "18 軸受けの糊代を一点鎖線で山折りし、台を横に倒して、軸の下の端を 18 の穴に通し、糊代を西の壁（棒の反対の側）の内に貼る。糊代の下の縁を壁の下の縁にそろえる",
             # 巻く向きは、台の中の糸を見ずに確かめられる言い方にする（糸は上の面の下にあり、下からは軸受けの腕に隠れる）。
             # 上から見て時計と反対回りに巻くと、糸は軸の鼓の側（北）を通る（pull_unwind の多い側）。
-            (f"【解釈】棒を印まで押し込み、鼓を奥・棒を右にして上から見て、花車を時計と反対回りに回し、糸が張るまで巻き取る（約 {wind_wraps(p)} 回）",
-             _to(("stick_d", "base_length"), ("WIND_D",), ("棒",))),
-            (f"棒を、旗が南の壁に当たるまで（{pull_travel(p):g}mm）すばやく引く。軸が約 {pull_turns(p):.1f}〜{pull_turns(p, favorable=True):.1f} 回まわり、玉が面に当たるか見る。"
-             "もう一度する時は、棒を印まで押し込み、同じ向きに巻き直す",
-             _to(("base_length", "face_gap", "k_length", "post_pos", "stick_d", "base_height", "base_width", "paper_thickness"), ("TAB_FLAG", "WIND_D"), ("棒", "留め具"))),
-            (f"玉が面に届かない時は糸を長く、面の縁を打つ時は短くする{span}。軸が回らない時は、結び目の糊と留め具の糊を確かめる",
-             _to(("k_cord", "bead_d", "face_gap", "peg_height"), ("STRIKE_ZONE",), ("糸", "花車")))]
+            f"【解釈】棒を印まで押し込み、鼓を奥・棒を右にして上から見て、花車を時計と反対回りに回し、糸が張るまで巻き取る（約 {wind_wraps(p)} 回）",
+            f"棒を、旗が南の壁に当たるまで（{pull_travel(p):g}mm）すばやく引く。軸が約 {pull_turns(p):.1f}〜{pull_turns(p, favorable=True):.1f} 回まわり、玉が面に当たるか見る。"
+            "もう一度する時は、棒を印まで押し込み、同じ向きに巻き直す",
+            f"玉が面に届かない時は糸を長く、面の縁を打つ時は短くする{span}。軸が回らない時は、結び目の糊と留め具の糊を確かめる"]
 
 
 def _diagram_kanko(x, y, w, h, p):
