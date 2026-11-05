@@ -1,5 +1,5 @@
 {
- "criteria.md": "887c0b0f5b7e5ecc62916dbbeb815900079fe0442b1a0d42aeba9baab4b8dd2b",
+ "criteria.md": "49948012717b1c02197921bd8027301eb17ad0db9d21a3e0e788de54ac423efe",
  "scenarios": {
   "balance_neg.json": {
    "floors": [
@@ -910,8 +910,10 @@
  },
  "tests": [
   "test_balance",
+  "test_engine_loop",
   "test_exit_codes",
   "test_fan_model",
+  "test_feedback",
   "test_float",
   "test_foldsim",
   "test_frozen_manifest",
@@ -932,6 +934,7 @@
   "test_template_contract",
   "test_tool_timeouts",
   "test_twist_drum",
+  "test_ways",
   "test_wheel_cart",
   "test_whistle"
  ]

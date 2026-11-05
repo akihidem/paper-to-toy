@@ -216,6 +216,26 @@ PYTHONPATH=src .venv/bin/python -m omochae.ways --json   # サイトの絞り込
 - 当時の材料: 紙のほかの材料が、江戸の頃にもあった物（竹・糸・粘土・木）だけ（本人の言葉「竹とか糸は江戸時代にもあったし使ったらよく再現できるということ」）。今の物で代えた材料（テープ・割ピン・ビーズ・厚紙など）は、一覧に出す。
 - 本人の決定で「紙一枚」と「折るだけ」は別の印で持つ。印は雛形に宣言させず、部品表・用意する物・部品から出す。
 
+## 作った人の報告から型紙を直す
+
+型紙は、組み上がった物の完成度と動きの完成度を高めるように直していく（本人の方針・Issue #21）。材料は作った人の報告。
+報告の入口・確認・公開はサイト（提出物の側）が受け持ち、この repo は報告の形・検査・集計を受け持つ。
+
+```bash
+PYTHONPATH=src .venv/bin/python -m omochae.feedback check examples/reports/spinner_pinwheel.json   # 0 通る / 3 落ちる
+PYTHONPATH=src .venv/bin/python -m omochae.feedback summarize examples/reports           # 雛形・形ごとの集計（Markdown）
+```
+
+- 報告の欄:
+  - `template`・`form`: 雛形と形
+  - `built`: 組み上がったか
+  - `moved`: `moved` 動いた・`partly` 少し・`not` 動かない
+  - `finish`: 仕上がりの点 1〜5
+  - `motion_notes`・`finish_notes`: 動きと仕上がりの感想
+  - `problems`: 困り事の list。`kind`（cut・fold・glue・fit・motion・mark・material・finish・other）、`step`（手順の番号）、`note`
+- 名前・連絡先は書かない。決まりの外の欄と、メールアドレス・電話番号・郵便番号の形は落とす（F12.pii）。
+- 集計は、困り事が当たる行き先（寸法・床・組み方の文）を出すだけで、型紙も寸法も変えない。直しは人が採る。
+
 ## 折れる様子を Origami Simulator で見る
 
 型紙の折りのある部品を、[Origami Simulator](https://origamisimulator.org)（ブラウザーで折り線図を折って見せる道具）が読める SVG に書き出す。入口は型紙と同じ（`--scenario`、または `--template` と `--params`）で、書き出す前に型紙と同じ検査を通す（落ちれば 3）。
