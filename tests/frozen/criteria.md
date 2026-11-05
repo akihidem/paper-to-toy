@@ -81,6 +81,8 @@ F5.fan_height は、軸の形では「中心の高さ＋折りの高さ ≦ 押�
 - **F1.marks**: 所蔵の頭の語・「改変」「仮説」の短い語だけでなく、出典の記録の所蔵の文（holding）と改変の注記（modification_note）、仮説の文を、空白を除いてそのまま探す。短い語だけだと、本文が欠けても化けても通った。試験は `tests/test_guards.py` の 4
 - **F2.bom**: 型紙に刷る部品の番号が全部、部品表にある。虎の首の形の部品 5（重りの腕）が部品表に無いまま通った。試験は `tests/test_guards.py` の 3
 - **F5.image_box**: 線の絵が糊代を横切るのも落とす（交わりの面積でなく長さで見る）。試験は `tests/test_guards.py` の 2
+- **F5.pivot**: 元の repo と同じ見方にした。首の形は、帯の幅が穴の中で縦に並ぶとして、10° 傾いても帯が穴の縁に当たらない（軸は壁の 6mm 後ろ）。前は帯の幅の 2 割しか引かず、穴より広い帯も通した。吊る形は、`axle_height` が刷る耳の穴の高さ（胴の高さ − 4）と同じで、重りの位置が頭の中にある。試験は `tests/test_pivot_neck_opening.py`・`tests/test_pivot_hang_model.py`
+- **F5.stroke**: 元の repo と同じ見方にした。内筒を下から押す形は、押し上げる量 ≦ 筒の高さ（静かな時に内筒の上の端が筒の中にある）。試験は `tests/test_slider_tube_stroke.py`
 
 ## 元の repo にあって、ここに無い床
 

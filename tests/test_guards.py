@@ -203,7 +203,7 @@ for tpl in TEMPLATES.values():
 
 # 8. 虎の吊る形の組み方の文（steps が返す文。この repo の型紙には刷らない）は、頭を帯に重ねて貼る長さを言う。重ねた後の軸から頭の上までが、式の見込み（axle_to_head_top）と合う
 hang = {**pc.DEFAULTS, "mount": "hang"}
-assert any(f"2 頭を {pc.HEAD_OVERLAP}mm 重ねて貼る" in s for s in pc.steps(hang))
+assert any(f"2 頭の上の端に {pc.HEAD_OVERLAP}mm 重ねて貼る" in s for s in pc.steps(hang))
 strip = next(q for q in pc.parts(hang) if q.key == "strip")
 assert strip.height - strip.holes[0][1] - pc.HEAD_OVERLAP == pc.axle_to_head_top(hang)
 
@@ -248,14 +248,14 @@ def parts_with_mark(p):
     return qs
 pc.parts = parts_with_mark
 try:
-    _, lay, fl = compose(pc.ID, {"mount": "hang"}, tiger)
+    _, lay, fl = compose(pc.ID, {"mount": "hang", "axle_height": 50}, tiger)
     assert fl == [], [f.line() for f in fl]
     assert any(t.text and "位置の印" in t.text for t in lay["texts"])
     svg = render.to_svg(lay)
     assert render.MARK_COLOR in svg and f'stroke-dasharray="{render.MARK_DASH}"' in svg
 finally:
     pc.parts = orig_parts
-_, lay, _ = compose(pc.ID, {"mount": "hang"}, tiger)
+_, lay, _ = compose(pc.ID, {"mount": "hang", "axle_height": 50}, tiger)
 assert not any(t.text and "位置の印" in t.text for t in lay["texts"])
 # 閉じた印は戻る辺も刷るので、検査も戻る辺まで見る。印は描く所が決めた太さと丸い端で見る。穴や中の切り込みにかかる印は、切ると消えるので落とす
 from omochae.floors import check_art
