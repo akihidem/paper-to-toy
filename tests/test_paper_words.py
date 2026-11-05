@@ -68,6 +68,9 @@ wc = TEMPLATES["wheel_cart"]
 for ct in wc.RANGES["card_thickness"]:
     p = {**ways._params(wc, wc.FORMS[0]), "wheel_layers": 3, "card_thickness": ct}
     assert any(s.startswith(paper_name(thickness=ct)) for s in wc.materials(p)), (ct, wc.materials(p))
+    # 組み方の手順も、用意する物と同じ名前で芯を言う（手順だけ別の名前だと、どの紙を切るか分からない）
+    core_steps = [s for s in wc.steps(p) if "芯を切り" in s]
+    assert core_steps and all(paper_name(thickness=ct) in s for s in core_steps), (ct, core_steps)
 
 # 3. 外すのは必須 2 種だけ（雛形が足されても、黙って外れない）
 assert REQUIRED <= set(TEMPLATES)
