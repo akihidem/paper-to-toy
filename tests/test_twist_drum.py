@@ -388,22 +388,82 @@ for f in sorted(pathlib.Path(__file__).parent.glob("frozen/scenarios/twist_drum_
         assert len(fs) == 1, (f.name, [x.line() for x in fs])
 # ---- 9 回目（2026-11-05・動きの読み直しの続き）を押さえる行 ----
 # 38. でんでん太鼓の糸は胴の中を通れない。結び目（帯の幅の真ん中）から帯の縁まで奥行きの半分を使い、縁で曲がって面の上へ出る。
-#     結び目 → 帯の縁 → 面に触れた玉の中心、の道のりが糸の長さになる
+#     式とは別に数える: 面に触れた玉の中心（面の中心から x、面から玉の半径だけ外）まで、縁を回る道のりが糸の長さになる x を、2 分法で探す
+R_, D_, b_ = P["radius"], P["depth"], P["bead_d"] / 2
+
+
+def strike_by_search(L):
+    lo, hi = -R_, R_  # x が大きい（縁に近い）ほど道のりは短い
+    for _ in range(80):
+        mid = (lo + hi) / 2
+        if D_ / 2 + math.hypot(R_ - mid, b_) > L:
+            lo = mid
+        else:
+            hi = mid
+    return (lo + hi) / 2
+
+
 for L in (23, 27, 31):
     q = {**P, "cord_length": L}
-    x = t.strike_offset(q)
-    assert abs(P["depth"] / 2 + math.hypot(P["radius"] - x, P["bead_d"] / 2) - L) < 1e-9, L
-    #   結び目と玉の中心を結ぶまっすぐな線は、帯の縁の高さ（奥行きの半分）で面の縁より内を通る ＝ 胴を突き抜けるので、その形では張れない
-    at_rim = P["radius"] - (P["radius"] - x) * (P["depth"] / 2) / (P["depth"] / 2 + P["bead_d"] / 2)
-    assert at_rim < P["radius"]
+    assert abs(t.strike_offset(q) - strike_by_search(L)) < 1e-6, L
     #   前の式（結び目を中心に糸の全長で回る）は、打つ点を面の中心の側へ寄せて出していた
-    assert P["radius"] - math.sqrt(L * L - (P["depth"] / 2 + P["bead_d"] / 2) ** 2) < x
+    assert P["radius"] - math.sqrt(L * L - (P["depth"] / 2 + P["bead_d"] / 2) ** 2) < t.strike_offset(q)
+#     手で数えた値: 既定（半径 26・奥行き 18・玉 8・糸 27）で、打つ点は 26 − √(18² − 4²) ≒ 8.45mm、下限は 9 + √(13² + 4²) ≒ 22.60mm
+assert abs(t.strike_offset(P) - 8.4501) < 1e-3 and abs(t.cord_window(P)[0] - 22.6015) < 1e-3
 #     前の式が通していた短い糸（18.4〜22.6mm）は、縁の近く（半径の半分より外）を打つので落ちる。既定の糸は窓の真ん中の近く
 for L in (19, 22):
     fs = t.check_physics({**P, "cord_length": L})
     assert [f.where for f in fs] == ["糸"] and t.strike_offset({**P, "cord_length": L}) > t.STRIKE_ZONE * P["radius"], L
 low, high = t.cord_window(P)
-assert abs(P["cord_length"] - (low + high) / 2) < 1 and t.free_cord(P) == P["cord_length"] - P["depth"] / 2
-#     奥行きが深いほど、同じ糸でも面の上へ出る分が減り、打つ点が縁へ寄る
-assert t.strike_offset({**P, "depth": 24}) > t.strike_offset(P)
+assert abs(P["cord_length"] - (low + high) / 2) < 1
+#     奥行きが深いほど、同じ糸でも面の上へ出る分が減り、打つ点が縁へ寄る。縁から先の糸が玉の半径に届かないと、玉は面の上へ出ない
+assert t.strike_offset({**P, "depth": 24}) > t.strike_offset(P) and t.strike_offset({**P, "cord_length": P["depth"] / 2 + P["bead_d"] / 2}) is None
+#     柄の側の上限（まっすぐの距離。厳しい側の下限）は変えていない。反対の縁の側の上限（far_limit）は、範囲のどの端でもそれより長い（今は先に効かない）
+assert abs(high - (math.sqrt(2) * P["radius"] - P["stick_d"] / 2 - P["bead_d"] / 2)) < 1e-9
+for R2 in t.RANGES["radius"]:
+    for D2 in t.RANGES["depth"]:
+        for b2 in t.RANGES["bead_d"]:
+            for sd in t.RANGES["stick_d"]:
+                c = {**P, "radius": R2, "depth": D2, "bead_d": b2, "stick_d": sd}
+                assert t.far_limit(c) > t.tangle_limit(c), c
+# 39. 報告で確かめたい見込みの問い（report_checks）: どの問いも、見込みを持つ式・寸法の名（今の code に在る）と、式が見込む答えを持つ。
+#     答えの数は式から出る（寸法を変えると変わる）
+for p in (P, {**P, "face": "tori"}, K):
+    rc = t.report_checks(p)
+    assert len(rc) >= 5 and all(set(c) == {"ask", "expect", "checks"} and c["ask"].endswith(("か", "）")) and c["expect"] for c in rc)
+    assert all(hasattr(t, c["checks"]) or c["checks"] in t.RANGES for c in rc), [c["checks"] for c in rc]
+    assert len({c["checks"] for c in rc}) == len(rc), "同じ見込みを 2 度聞いている"
+by = {c["checks"]: c["expect"] for c in t.report_checks(K)}
+assert nums(by["pull_turns"], r"(\d+\.\d)〜") == [round(t.pull_turns(K), 1)] and nums(by["pull_turns"], r"〜(\d+\.\d) 回") == [round(t.pull_turns(K, favorable=True), 1)]
+assert t.report_checks({**K, "base_length": 88})[0]["expect"] != by["pull_turns"]
+#     諫鼓の当たる所: 玉は軸から 穴の距離＋糸 ＝ 17mm の円を回り、面は軸から 20 − 4 ＝ 16mm。横のずれは √(17² − 16²) ≒ 5.7mm（手で数えた値）
+assert nums(by["kanko_window"], r"約 (\d+)mm") == [6] and abs(math.sqrt(17 ** 2 - 16 ** 2) - 5.745) < 1e-3
+#     旗の余白は、問いに出した 3 つ（天井・東の壁・軸）を全部言う。既定で、天井まで 18.85 − 17.15 ＝ 1.7mm、東の壁まで 18 − 10.15 − 7.15 ＝ 0.7mm
+assert nums(by["flag_tip_z"], r"天井まで (\d+\.\d)mm") == [1.7] and nums(by["flag_tip_z"], r"東の壁まで (\d+\.\d)mm") == [0.7] and "軸に巻いた糸まで 1mm" in by["flag_tip_z"]
+assert nums(by["rod_north_out"], r"引き切っても (\d+\.\d)mm") == [3.5]
+by = {c["checks"]: c["expect"] for c in t.report_checks(P)}
+assert nums(by["strike_offset"], r"約 (\d+)mm") == [8] and "結び目の側へ" in by["strike_offset"]
+#     打つ点が中心を越える糸では、向きを言い分ける（同じ 13mm でも、結び目の側と反対の側は別の所）
+far = {**P, "radius": 28, "depth": 10, "bead_d": 4, "cord_length": 34}
+assert t.check_physics(far) == [] and t.strike_offset(far) < 0 and "結び目の反対の側へ" in t.report_checks(far)[0]["expect"]
+#     刷る上限の数は切り捨てる: 刷った長さの糸は検査を通る（四捨五入の 31.3 は、満たしても検査で落ちる糸があった）
+lim = nums(by["tangle_limit"], r"糸が (\d+\.\d)mm 以下")[0]
+assert lim == 31.2 and t.check_physics({**P, "cord_length": lim}) == [] and t.check_physics({**P, "cord_length": 31.3}) != []
+#     検査で落ちる寸法では、問いは同じまま、見込みを出さない（面の外を打つ・余白が負、のような数を「当たる」「当たらない」と並べない）
+for bad in ({**K, "peg_height": 20}, {**K, "k_cord": 3}, {**K, "base_height": 8}, {**K, "base_length": 70}, {**P, "cord_length": 5}, {**P, "cord_length": 51}):
+    rcb = t.report_checks(bad)
+    assert t.check_physics(bad) != [] and [c["ask"] for c in rcb] == [c["ask"] for c in t.report_checks({**P, "face": bad["face"]})]
+    assert all("検査で落ちる" in c["expect"] and not re.search(r"\d", c["expect"]) for c in rcb), rcb
+# 40. 組み方の文は、サイトの手順の紙の左の列（144mm・字 3.6mm・「番号. 文」）で数えて、でんでん太鼓は STEP_LINES_MAX 行まで（紙に収まる行数）。
+#     糸を留める手順と直しの幅を足した版は 22〜23 行で、紙の下へはみ出していた。諫鼓は前から収まらないので、今の行数を上限にして増やさない
+from omochae.textfit import wrap
+
+
+def step_lines(p):
+    return sum(len(wrap(f"{i}. {s_}", t.STEP_SIZE, t.STEP_COL_W)) for i, s_ in enumerate(t.steps(p), 1))
+
+
+for p in (P, {**P, "face": "tori"}, {**P, "cord_length": 23.5, "handle_length": 95.5}, {**P, "face": "tori", "cord_length": 23.5, "handle_length": 95.5}):
+    assert step_lines(p) <= t.STEP_LINES_MAX, (step_lines(p), p)
+assert step_lines(K) <= t.STEP_LINES_KANKO and t.STEP_LINES_MAX == 16
 print("ok")
