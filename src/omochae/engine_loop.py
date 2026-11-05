@@ -15,6 +15,9 @@
   数だけ残す。落とした文は、画面にも置き場にも出し直さない。名前は形では見分けられないので、作った人の文は git の外
   （local/ の下）にだけ置き、git に入る台帳（data/engine/versions.json）には、数と行き先と決まった形の題だけを書く。
 - 今の雛形・床・刷り方のコードは呼ばない（雛形の一覧を見るだけ）。必須 2 種の刷った絵を動かさないため。
+- 話した事（#65）: 作る前の考え・作りながらの工夫・できた後の話を、声から字にした物として束で受ける（声そのものは束に無い）。
+  手順の番号つきの工夫は、止まった所を別の人がどう越えたかの材料なので、止まった段の案に付ける。止まったの札が重なっていない段でも、
+  同じ段で工夫を話した人が重なれば案にする。作る前の考えは仮説についての言葉なので、それだけでは案にしない。
 終了: 0 = できた / 3 = 落ちた・断った / 4 = できない（置き場や束が読めない）。
 """
 import argparse
@@ -35,16 +38,23 @@ SCHEMA = "omochae.making-bundle/1"
 TZ = datetime.timezone(datetime.timedelta(hours=9))
 
 # 束の欄。足す時は、誰の記録かを辿れる物でない事を確かめてから足す（tests/test_engine_loop.py が鍵の一致を見る）。
-TOP_KEYS = {"schema", "exported_at", "from", "dropped_pii", "groups"}
-GROUP_KEYS = {"template", "sheet_set", "reports", "results", "moved_word", "not_moved_word", "stuck_steps", "quit_steps",
+# current_sets（#68）: 雛形の id ごとの、今の刷った組の名。無くてもよい。この repo の雛形は組の名を持たない（刷るのはサイトの側）ので、
+# サイトが束に書く。前の組の紙の記録から起きた案を、人が見分けるために使う。
+TOP_KEYS = {"schema", "exported_at", "from", "dropped_pii", "current_sets", "groups"}
+GROUP_KEYS = {"template", "sheet_set", "reports", "results", "moved_word", "not_moved_word", "stuck_steps", "quit_steps", "craft_steps",
               "minutes", "measures", "record_ids", "texts"}
 TEXT_KEYS = {"kind", "step", "text", "count"}
 # 文の種類: 止まった所・直した点（工夫）・次の思いつき（工夫）・感想・聞く口の質問・試した記録への人の説明。
-TEXT_KINDS = ("stuck", "fix", "idea", "impression", "question", "explain")
-TEXT_JA = {"stuck": "止まった所", "fix": "直した点", "idea": "思いつき", "impression": "感想", "question": "質問", "explain": "人の説明"}
+# 話した事の 3 つ（#65）: think 作る前の考え・craft 作りながらの工夫（手順の番号つき）・keep できた後の話。
+# 報告の欄の案（#62）の when とは、idea = think・making = craft・made = keep で対応する（idea はここでは試した後の思いつきなので、名を分けた）。
+TEXT_KINDS = ("stuck", "fix", "idea", "impression", "question", "explain", "think", "craft", "keep")
+TEXT_JA = {"stuck": "止まった所", "fix": "直した点", "idea": "思いつき", "impression": "感想", "question": "質問", "explain": "人の説明",
+           "think": "作る前の考え", "craft": "話した工夫", "keep": "できた後の話"}
+TALK_JA = {"think": "考え", "craft": "工夫", "keep": "できた後"}  # 版ごとの数の並びで、話した事の列に出す短い呼び方
 # 案が持つ数の呼び方（Issue の下書きで使う）。どれも件数で、寸法の値ではない。
 NUMBER_JA = {"stuck_taps": "止まったの札", "stuck_people": "止まった人（印のある分）", "quit_people": "その段でやめた人", "reports": "報告",
-             "fixes": "直した点", "ideas": "思いつき", "not_moved": "動かない側の札", "moved": "動いた側の札", "templates": "雛形", "texts": "当たった文"}
+             "fixes": "直した点", "ideas": "思いつき", "not_moved": "動かない側の札", "moved": "動いた側の札", "templates": "雛形", "texts": "当たった文",
+             "craft_talks": "話した工夫", "craft_people": "工夫を話した人（印のある分）", "keeps": "できた後の話"}
 MAX_TEXT = 300  # 文 1 つの長さ。上限を先に見てから連絡先の形を探す（長い文で探す時間が延びないように）
 MAX_TEXTS = 2000
 MAX_GROUPS = 500
@@ -63,6 +73,10 @@ STUCK_PEOPLE = 2  # 同じ手順で止まった人（その場限りの印のあ
 STUCK_TAPS = 3  # 印の無い記録だけの時は、止まったの札がこの数から（1 人が続けて押した分と分けられないので、人より高く置く）
 NOT_MOVED = 2  # 検査を通った紙で、動かない側の札がこの数から
 SHARED_TEMPLATES = 2  # 同じ種類の困り事がこの数の雛形で出たら、雛形ごとでなく共有の所を見る
+CRAFT_PEOPLE = 2  # 同じ手順で工夫を話した人（印のある人）がこの数から。止まった段と同じ置き方
+CRAFT_TALKS = 3  # 印の無い記録だけの時は、話した工夫がこの数から（1 人が続けて話した分と分けられないので、人より高く置く）
+MOTION_TEXTS = 10  # 動きの床の案に付ける文の上限（感想は数が多く、全部を付けると読めない）
+MATERIAL = "手元の材料"  # Issue の下書きの中で、作った人の言葉を分けて置く所の呼び名
 # 文から拾う、雛形をまたぐ困り事の種類と、当たる共有の所。語は少なく保つ（広げるほど、関係の無い文を拾う）。拾い方は荒いので、
 # 案には当たった文をそのまま付け、人が読んで確かめる。
 SHARED = {
@@ -120,6 +134,10 @@ def check_bundle(b):
         bad("from", "出し元の名は英数字と . - _ で 80 字まで")
     if "dropped_pii" in b and not _count(b["dropped_pii"]):
         bad("dropped_pii", "落とした文の数は 0 以上の整数")
+    cur = b.get("current_sets", {})
+    if not (isinstance(cur, dict) and len(cur) <= MAX_GROUPS
+            and all(isinstance(k, str) and NAME.fullmatch(k) and isinstance(v, str) and NAME.fullmatch(v) for k, v in cur.items())):
+        bad("current_sets", "今の刷った組は、雛形の id と組の名の組")
     groups = b.get("groups")
     if not isinstance(groups, list) or len(groups) > MAX_GROUPS:
         bad("groups", f"群は list で {MAX_GROUPS} まで")
@@ -152,6 +170,10 @@ def check_bundle(b):
         if not (isinstance(st, dict) and all(_step(k) and isinstance(v, dict) and set(v) == {"taps", "people"}
                                             and _count(v["taps"]) and _count(v["people"]) for k, v in st.items())):
             bad(f"{w}.stuck_steps", f"止まった段は、手順の番号（1〜{MAX_STEP}）と taps・people の数")
+        cs = g.get("craft_steps", {})
+        if not (isinstance(cs, dict) and all(_step(k) and isinstance(v, dict) and set(v) == {"talks", "people"}
+                                            and _count(v["talks"]) and _count(v["people"]) for k, v in cs.items())):
+            bad(f"{w}.craft_steps", f"工夫を話した段は、手順の番号（1〜{MAX_STEP}）と talks・people の数")
         qs = g.get("quit_steps", {})
         if not (isinstance(qs, dict) and all(_step(k) and _count(v) for k, v in qs.items())):
             bad(f"{w}.quit_steps", f"やめた段は、手順の番号（1〜{MAX_STEP}）と人の数")
@@ -250,13 +272,18 @@ def bundles():
 
 
 def groups(bs):
-    """束の群を、雛形と刷った組ごとに合わせる（出し元が違う束の、同じ雛形・同じ組を足す）。"""
+    """束の群を、雛形と刷った組ごとに合わせる（出し元が違う束の、同じ雛形・同じ組を足す）。
+    今の刷った組は、新しい束の値で読む（組は進むので、前の束の「今」は古い）。"""
     out = {}
+    now = {}
+    for b in sorted(bs, key=lambda b: b["exported_at"]):
+        now.update(b.get("current_sets", {}))
     for b in bs:
         for g in b["groups"]:
             key = (g["template"], g.get("sheet_set", ""))
-            m = out.setdefault(key, {"template": key[0], "sheet_set": key[1], "reports": 0, "results": {}, "moved_word": "", "not_moved_word": "",
-                                     "stuck_steps": {}, "quit_steps": {}, "minutes": None, "measures": {}, "record_ids": [], "texts": []})
+            m = out.setdefault(key, {"template": key[0], "sheet_set": key[1], "current_set": now.get(key[0], ""),
+                                     "reports": 0, "results": {}, "moved_word": "", "not_moved_word": "",
+                                     "stuck_steps": {}, "quit_steps": {}, "craft_steps": {}, "minutes": None, "measures": {}, "record_ids": [], "texts": []})
             m["reports"] += g.get("reports", 0)
             for k, v in g.get("results", {}).items():
                 m["results"][k] = m["results"].get(k, 0) + v
@@ -268,6 +295,10 @@ def groups(bs):
                 s["people"] += v["people"]
             for k, v in g.get("quit_steps", {}).items():
                 m["quit_steps"][_step(k)] = m["quit_steps"].get(_step(k), 0) + v
+            for k, v in g.get("craft_steps", {}).items():
+                c = m["craft_steps"].setdefault(_step(k), {"talks": 0, "people": 0})
+                c["talks"] += v["talks"]
+                c["people"] += v["people"]
             m["minutes"] = _join(m["minutes"], g.get("minutes"))
             for k, v in g.get("measures", {}).items():
                 m["measures"][k] = _join(m["measures"].get(k), v)
@@ -282,6 +313,16 @@ def _join(a, b):
     return [min(a[0], b[0]), max(a[1], b[1]), a[2] + b[2]]
 
 
+def _set_note(ss, cur):
+    """記録の紙の組と、今の組の並び（#68）。違う時だけ文を返す。前の組の記録から起きた案は、もう直っている事がある。
+    機械は「もう直った」と決めず、案も捨てない（直っていない事もある）。並べて、人が先に見る所を言うだけ。"""
+    if not cur or ss == cur:
+        return ""
+    if not ss:
+        return f"今の組は {cur}。この記録は、どの組の紙の物か分からない。"
+    return f"今の組は {cur}。この記録は前の組の紙の物（もう直っているかを、先に見る）。"
+
+
 def drafts(gs):
     """群から直しの案（下書き）を起こす。Returns 案の list（まだ置かない）。key は同じ案を 2 度起こさないための鍵。
     案は行き先・題・数・当たった文だけを持つ。新しい寸法の値は持たない。"""
@@ -290,32 +331,55 @@ def drafts(gs):
     for (tid, ss), g in sorted(gs.items()):
         where = f"{tid}（刷った組 {ss or '不明'}）"
         here = tid in TEMPLATES
-        # 雛形: 同じ手順で止まった人が重なった所。
+        cur = g.get("current_set", "")
+        note = _set_note(ss, cur)
+        first = len(out)
+        # 雛形: 同じ手順で止まった人が重なった所。その段で話された工夫も付ける（止まった所を、別の人がどう越えたかが並ぶ）。
+        stuck_here = set()
         for step, s in sorted(g["stuck_steps"].items()):
             if s["people"] >= STUCK_PEOPLE or (s["people"] == 0 and s["taps"] >= STUCK_TAPS):
+                c = g["craft_steps"].get(step, {"talks": 0, "people": 0})
+                stuck_here.add(step)
                 out.append({"key": f"stuck:{tid}:{ss}:{step}", "target": {"kind": "template", "name": tid}, "template": tid, "sheet_set": ss, "step": step,
                             "title": f"{tid}: 手順 {step} の文と、その段の部品の形を見直す",
-                            "numbers": {"stuck_taps": s["taps"], "stuck_people": s["people"], "quit_people": g["quit_steps"].get(step, 0), "reports": g["reports"]},
+                            "numbers": {"stuck_taps": s["taps"], "stuck_people": s["people"], "quit_people": g["quit_steps"].get(step, 0),
+                                        "craft_talks": c["talks"], "craft_people": c["people"], "reports": g["reports"]},
                             "why": f"{where}の手順 {step} で、止まったの札が {s['taps']} 回（印のある人 {s['people']} 人）。",
-                            "evidence": [t for t in g["texts"] if t["step"] == step and t["kind"] in ("stuck", "question")],
+                            "evidence": [t for t in g["texts"] if t["step"] == step and t["kind"] in ("stuck", "question", "craft")],
                             "record_ids": g["record_ids"], "in_engine": here})
-        # 雛形: 工夫の言葉（作った人が直した点と、次の思いつき）。1 件でも案にする（直した人は、型紙の足りない所を実物で見つけている）。
-        craft = [t for t in g["texts"] if t["kind"] in ("fix", "idea")]
+        # 雛形: 止まったの札は重なっていないが、同じ手順で工夫を話した人が重なった所。止まった段の案が起きる段では、
+        # 工夫はその案に付けてあるので、同じ段に 2 つの案を起こさない。
+        for step, c in sorted(g["craft_steps"].items()):
+            if step not in stuck_here and (c["people"] >= CRAFT_PEOPLE or (c["people"] == 0 and c["talks"] >= CRAFT_TALKS)):
+                s = g["stuck_steps"].get(step, {"taps": 0, "people": 0})
+                out.append({"key": f"talk:{tid}:{ss}:{step}", "target": {"kind": "template", "name": tid}, "template": tid, "sheet_set": ss, "step": step,
+                            "title": f"{tid}: 手順 {step} で話された工夫を、組み方の文に入れるか見る",
+                            "numbers": {"craft_talks": c["talks"], "craft_people": c["people"], "stuck_taps": s["taps"], "stuck_people": s["people"], "reports": g["reports"]},
+                            "why": f"{where}の手順 {step} で、作りながら話された工夫が {c['talks']} 件（印のある人 {c['people']} 人）。",
+                            "evidence": [t for t in g["texts"] if t["step"] == step and t["kind"] == "craft"],
+                            "record_ids": g["record_ids"], "in_engine": here})
+        # 雛形: 工夫の言葉（作った人が直した点・次の思いつき・作りながら話した工夫・できた後の話）。1 件でも案にする
+        # （直した人は、型紙の足りない所を実物で見つけている）。
+        craft = [t for t in g["texts"] if t["kind"] in ("fix", "idea", "craft", "keep")]
         if craft:
-            n_fix, n_idea = (sum(t["count"] for t in craft if t["kind"] == k) for k in ("fix", "idea"))
+            n_fix, n_idea, n_talk, n_keep = (sum(t["count"] for t in craft if t["kind"] == k) for k in ("fix", "idea", "craft", "keep"))
             out.append({"key": f"craft:{tid}:{ss}", "target": {"kind": "template", "name": tid}, "template": tid, "sheet_set": ss, "step": None,
                         "title": f"{tid}: 作った人の工夫（直した点と思いつき）を、雛形に入れるか見る",
-                        "numbers": {"fixes": n_fix, "ideas": n_idea, "reports": g["reports"]},
-                        "why": f"{where}で、作った人が直した点が {n_fix} 件、思いつきが {n_idea} 件。",
+                        "numbers": {"fixes": n_fix, "ideas": n_idea, "craft_talks": n_talk, "keeps": n_keep, "reports": g["reports"]},
+                        "why": f"{where}で、作った人が直した点が {n_fix} 件、思いつきが {n_idea} 件、作りながら話した工夫が {n_talk} 件、できた後の話が {n_keep} 件。",
                         "evidence": craft, "record_ids": g["record_ids"], "in_engine": here})
         # 生成の決まり: 検査を通って刷られた紙なのに、動かない側の札が重なった所。「わからない」は動かない側に数えない。
+        # 作る前の考え（仮説を見て、どう動くと思ったか）もここに付ける。考えだけでは案にしない。
         not_moved = g["results"].get(g["not_moved_word"], 0) if g["not_moved_word"] else 0
         if not_moved >= NOT_MOVED:
             out.append({"key": f"motion:{tid}:{ss}", "target": {"kind": "rule", "name": f"{tid} の動きの床と既定の寸法"}, "template": tid, "sheet_set": ss, "step": None,
                         "title": f"{tid}: 動きの床の式と既定の寸法を見直す",
                         "numbers": {"not_moved": not_moved, "moved": g["results"].get(g["moved_word"], 0), "reports": g["reports"]},
                         "why": f"{where}は検査を通って刷られた紙で、「{g['not_moved_word']}」の札が {not_moved} 件（報告 {g['reports']} 件）。",
-                        "evidence": [t for t in g["texts"] if t["kind"] in ("stuck", "impression", "explain")][:10], "record_ids": g["record_ids"], "in_engine": here})
+                        "evidence": [t for t in g["texts"] if t["kind"] in ("stuck", "impression", "explain", "think")][:MOTION_TEXTS],
+                        "record_ids": g["record_ids"], "in_engine": here})
+        for d in out[first:]:
+            d.update(current_set=cur, why=d["why"] + note)
         for t in g["texts"]:
             for kind, (_, words) in SHARED.items():
                 if words.search(t["text"]):
@@ -324,7 +388,8 @@ def drafts(gs):
     for kind, by_tpl in sorted(shared.items()):
         if len(by_tpl) >= SHARED_TEMPLATES:
             texts = [t for tid in sorted(by_tpl) for t in by_tpl[tid]]
-            out.append({"key": f"shared:{kind}:{'+'.join(sorted(by_tpl))}", "target": {"kind": "part", "name": SHARED[kind][0]}, "template": None, "sheet_set": None, "step": None,
+            out.append({"key": f"shared:{kind}:{'+'.join(sorted(by_tpl))}", "target": {"kind": "part", "name": SHARED[kind][0]}, "template": None, "sheet_set": None,
+                        "current_set": None, "step": None,  # 雛形をまたぐ案なので、組は当たった文ごとに持つ
                         "title": f"共有の所: {SHARED[kind][0]}を見直す",
                         "numbers": {"templates": len(by_tpl), "texts": sum(t["count"] for t in texts)},
                         "why": f"同じ種類の困り事が {len(by_tpl)} つの雛形（{'・'.join(sorted(by_tpl))}）で出た。雛形ごとでなく共有の所に当たるかを見る。",
@@ -367,19 +432,22 @@ def _entry(p):
 
 
 def issue_draft(p):
-    """採った案の Issue の下書き（4 つの見出し）。git の外に置く。立てるのは人（外に出る操作なので、ここからは立てない）。"""
+    """採った案の Issue の下書き（4 つの見出し）。git の外に置く。立てるのは人（外に出る操作なので、ここからは立てない）。
+    作った人の言葉（当たった文）は、4 つの見出しの外の「手元の材料」に分ける（#65）。声から字にした話は、作る側だけが読む約束で
+    残した言葉なので、公開の Issue にそのまま写すと約束の外に出る。Issue に書くのは、数と、人が読んで自分の言葉でまとめた事。"""
     ja = {"template": "雛形", "part": "部品（共有の所）", "rule": "生成の決まり"}[p["target"]["kind"]]
-    lines = [f"# {p['title']}", "", "（下書き。立てる前に、文の中に名前や連絡先が無いかを人が読む）", "",
+    lines = [f"# {p['title']}", "", f"（下書き。立てるのは人。末尾の「{MATERIAL}」は作った人の言葉なので、Issue にそのまま写さず、読んで自分の言葉でまとめる）", "",
              "## 目的", f"{ja}「{p['target']['name']}」を、作る過程の記録に合わせて直す。", "",
              "## なぜか（根拠）", f"- {p['why']}", f"- 案の番号 {p['id']}。数: " + "、".join(f"{NUMBER_JA.get(k, k)} {v}" for k, v in p["numbers"].items())]
-    lines += [f"- {TEXT_JA[t['kind']]}" + (f"（手順 {t['step']}）" if t.get("step") else "") + (f"（{t['template']}）" if t.get("template") else "")
-              + f": 「{t['text']}」× {t['count']}" for t in p["evidence"]]
     if not p.get("in_engine"):
         lines.append("- この雛形は、この repo の雛形の一覧に無い（サイトの側の雛形）。当たる雛形を人が決める。")
     lines += ["", "## どうしたらいいか", "- 直し方は、この下書きでは決めていない（機械は寸法の値を出さない）。当たる所を読み、比べた案と推しを書く。", "",
               "## ゴールの要件", "- 直しの前後で、必須 2 種の刷った絵と凍結の場面が変わらない（変える時は理由を書く）。",
-              "- 直しが main に入ったら `python -m omochae.engine_loop release` で次の版を刻み、次の束の数を `compare` で並べて人が読む。", ""]
-    return "\n".join(lines)
+              "- 直しが main に入ったら `python -m omochae.engine_loop release` で次の版を刻み、次の束の数を `compare` で並べて人が読む。", "",
+              "---", f"{MATERIAL}（Issue に写さない。作った人の言葉。名前や連絡先が無いかも、人が読む）:"]
+    lines += [f"- {TEXT_JA[t['kind']]}" + (f"（手順 {t['step']}）" if t.get("step") else "") + (f"（{t['template']}）" if t.get("template") else "")
+              + f": 「{t['text']}」× {t['count']}" for t in p["evidence"]] or ["- （当たった文は無い）"]
+    return "\n".join(lines + [""])
 
 
 def decide(pid, by, accept, note=""):
@@ -451,7 +519,7 @@ def compare(gs, led):
         by_tpl.setdefault(tid, []).append((ss, g))
     for tid in sorted(by_tpl):
         lines += [f"## {tid}" + ("" if tid in TEMPLATES else "（この repo の雛形の一覧に無い）"), "",
-                  "| 刷った組 | エンジンの版 | 報告 | 動きの札 | 止まった段（札・印のある人） | やめた段（人） | 最初に動くまでの分 |", "|---|---|---|---|---|---|---|"]
+                  "| 刷った組 | エンジンの版 | 報告 | 動きの札 | 止まった段（札・印のある人） | やめた段（人） | 最初に動くまでの分 | 話した事 |", "|---|---|---|---|---|---|---|---|"]
         for ss, g in sorted(by_tpl[tid], key=lambda x: _natural(x[0])):
             v = version_of.get((tid, ss))
             ver = f"版 {v['version']}（{'・'.join(p['id'] for p in v['proposals'])}）" if v else "—"
@@ -460,7 +528,9 @@ def compare(gs, led):
             quit_ = "、".join(f"手順 {k}: {n}" for k, n in sorted(g["quit_steps"].items())) or "—"
             m = g["minutes"]
             mins = (f"{m[0]:g}" if m[0] == m[1] else f"{m[0]:g}〜{m[1]:g}") + f"（{m[2]} 件）" if m else "—"
-            lines.append(f"| {ss or '不明'} | {ver} | {g['reports']} 件 | {res} | {stuck} | {quit_} | {mins} |")
+            said = "・".join(f"{ja} {n}" for ja, n in ((ja, sum(t["count"] for t in g["texts"] if t["kind"] == k)) for k, ja in TALK_JA.items()) if n) or "—"
+            mark = "（今の組）" if ss and ss == g.get("current_set") else ""
+            lines.append(f"| {ss or '不明'}{mark} | {ver} | {g['reports']} 件 | {res} | {stuck} | {quit_} | {mins} | {said} |")
         lines.append("")
     lines += ["## 版と、採った案", ""]
     for v in led["versions"]:

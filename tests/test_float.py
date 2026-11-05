@@ -116,7 +116,7 @@ assert any("切り込み" in s for s in t.steps(C))
 # 風受けの印は端から 1mm 内なので、使える長さは L − 2。葉・風受け・粘土の四角は底で重ならない
 assert any(f.where == "風受け" for f in t.check_physics({**C, "tray_length": 79}))  # 端の 1mm と外へ折る歯の分で、葉に重なる
 assert any(f.where == "粘土の印" for f in t.check_physics({**P, "tray_length": 60, "tray_width": 60, "leaf_radius": 29}))
-# 水よけ（テープかろう）は必ず貼るので、面密度 0 は範囲の外
+# 水よけは必ず貼るので、面密度 0 は範囲の外
 assert [f.floor for f in t.check_range({**P, "tape_gsm": 0})] == ["F5.range"]
 
 # 粘土の四角が重なるか底から出ると、実の面積は 4 × 辺² より狭く、粘土は厚くなる。重なりと収まりを見て、
@@ -397,4 +397,15 @@ for q in (blow, sunk, narrowfig, deep, {**P, "glue": 30}, {**P, "leaf_radius": 3
           {**P, "tray_width": 28, "tray_length": 100, "clay_side": 15, "leaf_radius": 12, "ballast_g": 12, "figure_height": 40}):
     seen_w |= {f.where for f in t.check_physics(q)}
 assert seen_w == WHERES, seen_w ^ WHERES
+
+# 紙に刷る文は、紙を持つ人が読んで動ける言葉だけ。寸法を変える人向けの話（ろうの面密度）は README に置く。
+# 重りが 0 の寸法は、用意する物に粘土の行を出さない。手順は数を変えず「使わない」と言う（報告の手順の番号をずらさない）
+for q in (P, C):
+    lines, zero_q = t.materials(q), {**q, "ballast_g": 0}
+    printed = lines + t.materials(zero_q) + t.steps(q) + t.steps(zero_q) + [t.measures(q)["predict"]]
+    assert not any("寸法" in s or "0 なら" in s or "ろう" in s for s in printed), printed
+    assert f"油粘土 {q['ballast_g']:g}g" in lines, lines
+    assert not any("粘土" in m for m in t.materials(zero_q)) and len(t.materials(zero_q)) == len(lines) - 1, t.materials(zero_q)
+    assert {r["key"] for r in t.bom(q)} - {r["key"] for r in t.bom(zero_q)} == {"ballast"}
+    assert len(t.steps(zero_q)) == len(t.steps(q)), t.steps(zero_q)
 print("ok")

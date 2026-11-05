@@ -12,7 +12,7 @@
 - 質量は刷る部品の面積 × 紙の面密度、外側に貼るテープの面積 × テープの面密度、油粘土の重り。糊の重さは入れない。
   テープは底と壁の外側に、ふちから内へ折り返す帯（幅 TAPE_FOLD・壁の上端にあるので G を上げる）を足して数える。
 - 紙は水を吸うと重くなり柔らかくなるが、この式は吸水を入れない（乾いた紙の重さと形のまま見る）。
-  テープかろうで外側をふさぐのはそのため。濡れた後の浮き方は実物で確かめていない。
+  テープで外側をふさぐのはそのため。濡れた後の浮き方は実物で確かめていない。
   水よけは必ず貼る物として、その面密度（tape_gsm）を下限つきで持つ。ろうを塗る時は、塗ったろうの g/m² をここに入れる。
 - 粘土の重りは、底の四隅の四角（辺 clay_side）に同じ重さずつ平たく押し付ける。厚み ＝ 体積 ÷ 実の面積
   （四角 4 つを合わせて底の内に切った面。下の箇条）、重心の高さはその半分（密度 CLAY_DENSITY は油粘土の見込み・未確認）。厚く積むと崩れやすく、重心も上がる。
@@ -592,9 +592,10 @@ def bom(p):
         {"number": 1, "key": "tray", "name": "舟", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（図では葉が直に浮く。木か葉の浮きと推定）", "reason": "紙で浮きを作るため、箱にして水をはじく"},
         {"number": 2, "key": "leaf", "name": "葉", "qty": 1, "material": paper, "substituted": True, "original_guess": "蓮の葉か葉の形の木（図の葉脈からの推定）", "reason": why},
         {"number": 3, "key": "figure", "name": "人形", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（紙か木の人形と推定）", "reason": why},
-        {"number": 7, "key": "tape", "name": "水よけ", "qty": 1, "material": f"透明の梱包テープ（{p['tape_gsm']:g}g/m² の見込み）で舟の外側の底と壁を覆う。ろうを塗る時は、塗ったろうの重さを g/m² で寸法に入れる", "substituted": True, "original_guess": "なし（紙の舟は昔の物に無い翻案）", "reason": "紙は濡れると水を吸って弱るため"},
-        {"number": 8, "key": "ballast", "name": "重り", "qty": 1, "material": f"油粘土 {p['ballast_g']:g}g（0 なら使わない）", "substituted": True, "original_guess": "不明", "reason": "重心を下げて倒れにくくし、量を変えて試しやすいため"},
+        {"number": 7, "key": "tape", "name": "水よけ", "qty": 1, "material": f"透明の梱包テープ（{p['tape_gsm']:g}g/m² の見込み）で舟の外側の底と壁を覆う", "substituted": True, "original_guess": "なし（紙の舟は昔の物に無い翻案）", "reason": "紙は濡れると水を吸って弱るため"},
     ]
+    if p["ballast_g"] > 0:
+        rows.append({"number": 8, "key": "ballast", "name": "重り", "qty": 1, "material": f"油粘土 {p['ballast_g']:g}g", "substituted": True, "original_guess": "不明", "reason": "重心を下げて倒れにくくし、量を変えて試しやすいため"})
     if p["vane"] == "cups":
         rows.insert(3, {"number": 4, "key": "cupa", "name": "風受け（右）", "qty": 1, "material": paper, "substituted": True, "original_guess": "なし（回すための翻案）", "reason": "息で回すため"})
         rows.insert(4, {"number": 5, "key": "cupb", "name": "風受け（左）", "qty": 1, "material": paper, "substituted": True, "original_guess": "なし（同じ）", "reason": "息で回すため"})
@@ -604,7 +605,8 @@ def bom(p):
 def materials(p):
     # 行の位置でなく key で引く。形によって部品表の行が増えるので、位置で引くと別の行を刷る。
     by = {r["key"]: r for r in bom(p)}
-    return [f"{by['tray']['material']}を 1 枚", "のり、はさみ、定規", by["tape"]["material"], by["ballast"]["material"], "水を張った洗面器か深い皿"]
+    clay = [by["ballast"]["material"]] if "ballast" in by else []
+    return [f"{by['tray']['material']}を 1 枚", "のり、はさみ、定規", by["tape"]["material"], *clay, "水を張った洗面器か深い皿"]
 
 
 def _steps(p):
@@ -632,7 +634,7 @@ def _steps(p):
     if p["ballast_g"] > 0:
         out.append((f"油粘土 {p['ballast_g']:g}g を 4 等分し、底の四隅の印に平たく押し付ける（片寄ると傾く）", clay))
     else:
-        out.append(("この寸法は重りを使わない（油粘土は載せない）", clay))
+        out.append(("この型紙は重りを使わない（油粘土は載せない）", clay))
     out.append(("水に浮かべ、傾きと沈み方を見る（内側はテープが無く、水が入ると色がにじむ）",
                 to(("paper_gsm", "tape_gsm", "wall_height", "tray_length", "tray_width", "ballast_g", "figure_height"), ("FREEBOARD_MIN", "MIN_HEEL", "GM_MIN"), ("舟の壁", "重心"))))
     if cups:
