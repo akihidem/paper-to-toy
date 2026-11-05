@@ -554,8 +554,8 @@ def materials(p):
     # 行の位置でなく key で引く。形によって部品表の行が違うので、位置で引くと別の行を刷る。
     by = {r["key"]: r for r in bom(p)}
     if p["form"] == "crossbow":
-        return [f"{by['stock']['material']}を 1 枚", "のり、はさみ、定規（溝はカッターで大人が切る）", "穴あけ用の竹串 1 本（大人が穴をあけたら片づけ、玩具と一緒に置かない）", by["string"]["material"], "腕の硬さを確かめる 10 円玉 5 枚", f"飛ばすのは紙の玉だけ。{SAFETY}"]
-    return [f"{by['stave']['material']}を 1 枚", "のり、はさみ、定規（物差しの穴はカッターで大人が切る）", "穴あけ用の竹串 1 本（大人が穴をあけたら片づけ、玩具と一緒に置かない）", by["string"]["material"], by["tether"]["material"], "弓の硬さを確かめる 10 円玉 5 枚", f"飛ばすのは紙の毛玉だけ。{SAFETY}"]
+        return [f"{by['stock']['material']}を 1 枚", "のり、はさみ、定規（台の細い溝と切れ込み、玉の物差しの穴はカッターで大人が切る）", "穴あけ用の竹串 1 本（大人が穴をあけたら片づけ、玩具と一緒に置かない）", by["string"]["material"], "腕の硬さを確かめる 10 円玉 5 枚", f"飛ばすのは紙の玉だけ。{SAFETY}"]
+    return [f"{by['stave']['material']}を 1 枚", "のり、はさみ、定規（玉の物差しの穴はカッターで大人が切る）", "穴あけ用の竹串 1 本（大人が穴をあけたら片づけ、玩具と一緒に置かない）", by["string"]["material"], by["tether"]["material"], "弓の硬さを確かめる 10 円玉 5 枚", f"飛ばすのは紙の毛玉だけ。{SAFETY}"]
 
 
 def steps(p):
