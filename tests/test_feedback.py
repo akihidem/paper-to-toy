@@ -98,4 +98,19 @@ assert set(TEMPLATES) <= set(fb.FLOORS), sorted(set(TEMPLATES) - set(fb.FLOORS))
 # 例の報告（examples/reports/spinner_pinwheel.json）は通る
 assert fb.check(json.loads((ROOT / "examples/reports/spinner_pinwheel.json").read_text(encoding="utf-8"))) == []
 
+# 6. 作る様子の欄（#23）: どの手順で止まったか・やめたか・かかった時間。型紙の外の行き先（案内・聞く口・サイトの流れ）
+MK = {**OK, "stuck_step": 4, "gave_up": False, "minutes": 35,
+      "problems": [{"kind": "guide", "step": 4, "note": "折る向きの説明が分からなかった"},
+                   {"kind": "answer", "step": None, "note": "聞く口の答えが長かった"}]}
+assert fb.check(MK) == [], [f.line() for f in fb.check(MK)]
+for bad in ({**MK, "stuck_step": 0}, {**MK, "gave_up": "no"}, {**MK, "minutes": 0}, {**MK, "minutes": 9999}):
+    assert any(f.floor == "F12.report" for f in fb.check(bad)), bad
+sv = fb.service_summary([MK, {**MK, "stuck_step": 4, "gave_up": True, "minutes": 60},
+                         {**OK, "template": "balance", "form": "okiagari", "problems": [{"kind": "site", "step": None, "note": "送る所が分かりにくい"}]}])
+assert sv["n"] == 3 and sv["gave_up"] == 1 and sv["stuck"][("spinner", "pinwheel", 4)] == 2, sv
+assert [k["kind"] for k in sv["problems"]] == ["guide", "answer", "site"] or {k["kind"] for k in sv["problems"]} == {"guide", "answer", "site"}
+assert sv["minutes"]["median"] == 47.5, sv["minutes"]
+# サービスの困り事は、雛形の集計に混ぜない（型紙の直しの行き先と分ける）
+assert all(p["kind"] not in fb.SERVICE_KINDS for p in fb.summarize([MK])[("spinner", "pinwheel")]["problems"])
+
 print("ok")

@@ -44,11 +44,22 @@ with tempfile.TemporaryDirectory() as d:
     r = subprocess.run([sys.executable, "-m", "omochae.intake", "--base", str(base), "review", "accept", rid4], input=rid4 + "\n",
                        cwd=ROOT, capture_output=True, text=True, env={"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin"})
     assert r.returncode == 3 and (base / "inbox" / f"{rid4}.json").exists(), r.stderr
+# 5b. 作る様子の欄（#23）も送れ、空なら報告に入らない
+with tempfile.TemporaryDirectory() as d:
+    rid, msgs = intake.submit({**GOOD, "stuck_step": ["4"], "gave_up": ["no"], "minutes": ["35"], "p1_kind": ["guide"],
+                               "p1_note": ["折る向きの説明が分からない"]}, pathlib.Path(d))
+    assert rid, msgs
+    rep = json.loads((pathlib.Path(d) / "inbox" / f"{rid}.json").read_text(encoding="utf-8"))
+    assert rep["stuck_step"] == 4 and rep["gave_up"] is False and rep["minutes"] == 35 and rep["problems"][1]["kind"] == "guide"
+    rid2, _ = intake.submit(GOOD, pathlib.Path(d))
+    rep2 = json.loads((pathlib.Path(d) / "inbox" / f"{rid2}.json").read_text(encoding="utf-8"))
+    assert "stuck_step" not in rep2 and "minutes" not in rep2 and "gave_up" not in rep2
 # 6. 画面は、全部の雛形を選べ、写真の欄が無く、同意の 2 つを持つ
 page = intake.form_page()
 from omochae.compose import TEMPLATES
 assert all(f'value="{t}"' in page for t in TEMPLATES) and 'type="file"' not in page
 assert all(f'name="{k}"' in page for k in intake.CONSENTS)
+assert all(f'name="{k}"' in page for k in ("stuck_step", "gave_up", "minutes")) and 'value="guide"' in page
 # 7. 置き場は git の外（local/ を .gitignore が持つ）
 assert "local/" in (ROOT / ".gitignore").read_text(encoding="utf-8").split()
 print("ok")

@@ -37,7 +37,13 @@ KINDS = {
     "material": "部品表・用意する物",
     "finish": "描き直しの絵・部品の形（仕上がり・見た目）",
     "other": "人が読んで決める",
+    # 型紙の外の行き先（#23 本人の決定「子どもの工作の様子を蓄積して、サービス全体の改善をする」）
+    "guide": "案内（組み方の説明・手順の紙・画面の文）",
+    "answer": "聞く口の答え（質問への返事）",
+    "site": "サイトの流れ（選ぶ・刷る・送るまでの道筋）",
 }
+SERVICE_KINDS = ("guide", "answer", "site")
+MAX_MINUTES = 600  # かかった時間の上限（分）。一続きの工作で考えにくい長さは書き間違いと見る
 # 雛形ごとの動きの床。雛形を足したら、ここにも足す（test_feedback の 5 で漏れを見る）。
 FLOORS = {
     "slider_fan": "F5.fan_clearance・F5.slide_clearance ほか", "pivot_counterweight": "F5.pivot",
@@ -46,7 +52,8 @@ FLOORS = {
     "pull_nod": "F5.pull_nod", "lever_link": "F5.link", "launcher": "F5.launch", "stand_figure": "F5.stand",
 }
 ALLOWED = {"template", "form", "params", "source_id", "built", "moved", "finish", "motion_notes", "finish_notes",
-           "problems", "reported_at", "reviewed_at"}  # reviewed_at は入口（omochae.intake）で人が受け入れた時刻
+           "problems", "reported_at", "reviewed_at",
+           "stuck_step", "gave_up", "minutes"}  # 作る様子（#23）: 止まった手順・やめたか・かかった時間（分）  # reviewed_at は入口（omochae.intake）で人が受け入れた時刻
 PROBLEM_KEYS = {"kind", "step", "note"}
 # 出典の ID と時刻は決まった形だけを通す。自由な文を入れられる欄を、感想の 2 つと困り事の note に絞るため。
 # 個人の情報の形の見方。式だけで全部の書き方は止められないので、これは補助で、受け入れの前に人が全文を読む（omochae.intake）。
@@ -198,6 +205,14 @@ def check(r):
     fin = r.get("finish")
     if not (isinstance(fin, int) and not isinstance(fin, bool) and fin in FINISH):
         out.append(Failure("F12.report", "finish", "仕上がりの点は 1〜5 の整数"))
+    st = r.get("stuck_step")
+    if st is not None and not (isinstance(st, int) and not isinstance(st, bool) and st >= 1):
+        out.append(Failure("F12.report", "stuck_step", "止まった手順の番号は 1 からの整数か null"))
+    if "gave_up" in r and not isinstance(r["gave_up"], bool):
+        out.append(Failure("F12.report", "gave_up", "やめたかを true か false で書く"))
+    mi = r.get("minutes")
+    if mi is not None and not (isinstance(mi, int) and not isinstance(mi, bool) and 1 <= mi <= MAX_MINUTES):
+        out.append(Failure("F12.report", "minutes", f"かかった時間は 1〜{MAX_MINUTES} 分の整数か null"))
     for key in ("motion_notes", "finish_notes"):
         if key in r and not isinstance(r[key], str):
             out.append(Failure("F12.report", key, "文で書く"))
@@ -231,6 +246,8 @@ def summarize(reports):
         g["moved"][r["moved"]] += 1
         g["finish"].append(r["finish"])
         for pr in r.get("problems") or []:
+            if pr["kind"] in SERVICE_KINDS:
+                continue  # サービスの困り事は service_summary で見る（型紙の直しの行き先と分ける）
             k = g["kinds"].setdefault(pr["kind"], {"count": 0, "steps": Counter(), "notes": []})
             k["count"] += 1
             if pr.get("step") is not None:
@@ -246,6 +263,46 @@ def summarize(reports):
                           "target": KINDS[kind].format(floor=floor), "notes": v["notes"][:5]}
                          for kind, v in sorted(g.pop("kinds").items(), key=lambda kv: -kv[1]["count"])]
     return out
+
+
+def service_summary(reports):
+    """サービス全体の集計（#23）。作る様子（止まった手順・やめた・かかった時間）と、案内・聞く口・サイトの流れの困り事。
+    雛形をまたいで見るのは、止まる所や分かりにくい案内は、どの型紙でも同じ所に出る事があるため。"""
+    good = [r for r in reports if isinstance(r, dict) and not check(r)]
+    stuck = Counter((r["template"], r["form"], r["stuck_step"]) for r in good if r.get("stuck_step") is not None)
+    mins = sorted(r["minutes"] for r in good if r.get("minutes") is not None)
+    med = None
+    if mins:
+        h = len(mins) // 2
+        med = mins[h] if len(mins) % 2 else (mins[h - 1] + mins[h]) / 2
+    kinds = {}
+    for r in good:
+        for pr in r.get("problems") or []:
+            if pr["kind"] in SERVICE_KINDS:
+                k = kinds.setdefault(pr["kind"], {"count": 0, "steps": Counter(), "notes": []})
+                k["count"] += 1
+                if pr.get("step") is not None:
+                    k["steps"][pr["step"]] += 1
+                if pr.get("note"):
+                    k["notes"].append(pr["note"])
+    return {"n": len(good), "gave_up": sum(1 for r in good if r.get("gave_up")), "stuck": dict(stuck.most_common()),
+            "minutes": {"n": len(mins), "median": med, "min": mins[0] if mins else None, "max": mins[-1] if mins else None},
+            "problems": [{"kind": kind, "count": v["count"], "steps": dict(v["steps"].most_common()), "target": KINDS[kind],
+                          "notes": v["notes"][:5]} for kind, v in sorted(kinds.items(), key=lambda kv: -kv[1]["count"])]}
+
+
+def _service_markdown(sv):
+    m = sv["minutes"]
+    lines = ["# サービス全体（作る様子と、案内・聞く口・サイトの流れ）", "",
+             f"- 報告 {sv['n']} 件、やめた {sv['gave_up']} 件",
+             f"- かかった時間（書いた {m['n']} 件）: 中央 {m['median']} 分・最短 {m['min']}・最長 {m['max']}" if m["n"] else "- かかった時間: 書いた報告なし"]
+    for (tid, form, step), c in list(sv["stuck"].items())[:10]:
+        lines.append(f"- 止まった所: {tid} / {form} の手順 {step} × {c}")
+    for p in sv["problems"]:
+        steps = "・".join(f"手順 {k}×{v}" for k, v in p["steps"].items()) or "手順の番号なし"
+        lines.append(f"- {p['kind']} {p['count']} 件（{steps}）→ 行き先: {p['target']}")
+        lines += [f"  - 「{n}」" for n in p["notes"]]
+    return "\n".join(lines + [""])
 
 
 def _markdown(s):
@@ -301,10 +358,14 @@ def main(argv=None):
         else:
             good.append(r)
     s = summarize(good)
+    sv = service_summary(good)
     if args.json:
-        print(json.dumps([{"template": t, "form": f, **g} for (t, f), g in sorted(s.items())], ensure_ascii=False, indent=1))
+        sv_json = {**sv, "stuck": [{"template": t, "form": f, "step": st, "count": c} for (t, f, st), c in sv["stuck"].items()]}
+        print(json.dumps({"templates": [{"template": t, "form": f, **g} for (t, f), g in sorted(s.items())], "service": sv_json},
+                         ensure_ascii=False, indent=1))
     else:
         print(_markdown(s))
+        print(_service_markdown(sv))
     return 0
 
 

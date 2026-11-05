@@ -232,9 +232,11 @@ PYTHONPATH=src .venv/bin/python -m omochae.feedback summarize examples/reports  
   - `moved`: `moved` 動いた・`partly` 少し・`not` 動かない
   - `finish`: 仕上がりの点 1〜5
   - `motion_notes`・`finish_notes`: 動きと仕上がりの感想
-  - `problems`: 困り事の list。`kind`（cut・fold・glue・fit・motion・mark・material・finish・other）、`step`（手順の番号）、`note`
+  - `problems`: 困り事の list。`kind`（cut・fold・glue・fit・motion・mark・material・finish・other、型紙の外は guide 案内・answer 聞く口の答え・site サイトの流れ）、`step`（手順の番号）、`note`
+  - 作る様子（#23）: `stuck_step` 止まった手順・`gave_up` やめたか・`minutes` かかった時間（分）
 - 名前・連絡先は書かない。決まりの外の欄と、メールアドレス・電話番号・郵便番号の形は落とす（F12.pii）。
 - 集計は、困り事が当たる行き先（寸法・床・組み方の文）を出すだけで、型紙も寸法も変えない。直しは人が採る。
+- 集計の後半は、サービス全体の節（#23・本人の決定「子どもの工作の様子を蓄積して、サービス全体の改善をする」）。止まった手順の多い所・やめた数・かかった時間・案内と聞く口とサイトの流れの困り事を、雛形をまたいで出す。
 
 報告の入口（本人の決定でエンジンの側に置く・Issue #22）:
 

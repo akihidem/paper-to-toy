@@ -56,6 +56,13 @@ def report_from_fields(f):
         r["finish"] = int(one("finish"))
     except ValueError:
         r["finish"] = None
+    # 作る様子（#23）。空なら欄を入れない（書かなかったのと、0 と書いたのを分ける）
+    for key in ("stuck_step", "minutes"):
+        v = one(key)
+        if v:
+            r[key] = int(v) if v.isdigit() else v
+    if one("gave_up"):
+        r["gave_up"] = one("gave_up") == "yes"
     probs = []
     for i in range(MAX_PROBLEMS):
         kind, note, step = one(f"p{i}_kind"), one(f"p{i}_note"), one(f"p{i}_step")
@@ -137,13 +144,16 @@ def form_page(messages=(), done_id=None):
 <title>型紙の報告</title><style>body{{font-family:sans-serif;max-width:40rem;margin:1rem auto;padding:0 1rem}}
 fieldset{{margin:.6rem 0}}.ok{{color:#185}}.ng{{color:#a22}}label{{display:inline-block;margin:.2rem .6rem .2rem 0}}</style>
 <h1>型紙で作った物の報告</h1>
-<p>組み上がりの感想と、動いた様子を教えてください。型紙を直す材料にします。名前・連絡先・ほかの人の事は書かないでください。写真は受け付けていません。</p>
+<p>組み上がりの感想と、動いた様子、どこで止まったかを教えてください。型紙と、案内・サイトを直す材料にします。名前・連絡先・ほかの人の事は書かないでください。写真は受け付けていません。</p>
 {msg}<form method="post" action="/report">
 <label>雛形 <select name="template" id="t">{_options(forms)}</select></label>
 <label>形 <select name="form" id="f"></select></label><br>
 <label>組み上がった <select name="built"><option value="yes">はい</option><option value="no">いいえ</option></select></label>
 <label>動いた <select name="moved">{_options(MOVED, MOVED_JA)}</select></label>
 <label>仕上がり（1 悪い〜5 良い） <select name="finish">{_options(FINISH)}</select></label><br>
+<label>止まった手順の番号（止まらなければ空） <input name="stuck_step" size="3" inputmode="numeric"></label>
+<label>途中でやめた <select name="gave_up"><option value="">—</option><option value="no">いいえ</option><option value="yes">はい</option></select></label>
+<label>かかった時間（分・およそ） <input name="minutes" size="4" inputmode="numeric"></label><br>
 <label>動きの感想<br><textarea name="motion_notes" rows="3" cols="50" maxlength="600"></textarea></label><br>
 <label>仕上がり・見た目の感想<br><textarea name="finish_notes" rows="3" cols="50" maxlength="600"></textarea></label>
 {rows}{consents}<button>送る</button></form>
