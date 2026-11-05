@@ -319,7 +319,14 @@ assert any(f"机に着く縁から {e['h']:.1f}〜{e['s']:.1f}mm の高さ" in s
 # 裏の印は切る線と紛れない位置の印で刷り、凡例に行が出る。裏の姿が無い時は印も無く、線を引く鉛筆を用意する物に言う
 assert not any(a["kind"] == "line" and a.get("stroke") == t.INK and len(a["pts"]) >= 5 for a in next(q for q in t.parts(P) if q.key == "back").art)
 assert not any(a["kind"] == "mark" for q in t.parts({**P, "back": 0}) for a in q.art)
+# 印の色と同じ地の姿でも見えるように、印のすぐ下に薄い地を敷く
+for fig in ("inu", "uma", "tawara"):
+    art_back = next(q for q in t.parts(t.filled({**t.DEFAULTS, "figure": fig, "stand": "easel"})) if q.key == "back").art
+    assert art_back[-1]["kind"] == "mark" and art_back[-2]["kind"] == "poly" and art_back[-2]["fill"] == t.PAPER, fig
+    ground_x, mark_x = [x for x, _ in art_back[-2]["pts"]], [x for x, _ in art_back[-1]["pts"]]
+    assert abs(min(ground_x) - min(mark_x)) < 1e-6 and abs(max(ground_x) - max(mark_x)) < 1e-6, fig  # 地は印と同じ所（裏は左右を返してある）
 assert "鉛筆" in "".join(t.materials({**P, "back": 0})) and "鉛筆" not in "".join(t.materials(P))
+assert "鉛筆" not in "".join(t.materials({**t.DEFAULTS, "figure": "hagoita", "stand": "base", "back": 0}))
 assert any("部品 2 は無い" in s for s in t.steps({**P, "back": 0})) and not any("部品 2 は無い" in s for s in t.steps(P))
 # 貼る面を先に背に貼り、後で三角を閉じる（閉じる糊代の折り目を、貼った面の下の端にそろえる）
 st = t.steps(P)
@@ -329,10 +336,11 @@ assert i_glue < i_close
 assert "乾くまで立てない" in st[i_close] and any("定規を当てて線の真上で山折り" in x for x in st)
 # 台の形: 舌が底の溝を通った事を、持ち上げて見させる（外れて箱の床で止まっても、浮きの差は紙の厚みだけで見分けられない）
 st_b = t.steps(B)
-assert any("底の溝から舌の先が出ている" in x and "押し込まず" in x for x in st_b)
+assert any("箱を持ち上げて、底の溝から舌の先が出ている" in x for x in st_b)
 # 箱は左右の壁の糊代を先に貼り、上の面を後で閉じる（先に閉じると残りの糊代に指が届かない）。のりは舌の先まで、付け根の角は切り過ぎない
 box_step = next(x for x in st_b if "台の箱を一点鎖線" in x)
-assert box_step.index("左右の壁の糊代 4 枚") < box_step.index("上の面を閉じて") < box_step.index("箱のゆがみを直す")
+assert box_step.index("左右の壁の糊代 4 枚") < box_step.index("上の面を閉じて") < box_step.index("箱のゆがみを直して")
+assert box_step.index("通し") < box_step.index("押し込まず") < box_step.index("箱のゆがみを直して")  # 舌を最初に通す所で、きつい時の事を言う
 assert any("舌の先までのりを塗って" in x and "角で止める" in x for x in st_b)
 assert any("角で止める" in x and "部品 2 は無い" in x for x in t.steps({**B, "back": 0}))
 assert not any("舌" in x for x in t.steps(P))
@@ -371,18 +379,19 @@ for fig in t.FIGURES:
 # 脚の絵は 3 本の線（姿・脚・つなぎ）と机の線
 assert sum(1 for q in t.diagram(10, 20, 40, 50, P) if q["kind"] == "line") == 4
 
-# 姿の大きさ（scale）だけを変えても、勧めの寸法が姿に付いて来る: 脚の長さ・貼る面・溝の長さは同じ倍率、脚の幅は小さくする時だけ、
-# 台の箱は大きくする時だけ。書いた値はそのまま勝ち、1 倍は元の勧めのまま
+# 姿の大きさ（scale）だけを変えても、勧めの寸法が姿に付いて来る: 脚の長さ・貼る面・溝の長さは同じ倍率（溝は舌の検査が通る窓の内）、
+# 脚の幅は小さくする時だけ、台の奥行きは大きくする時だけ。書いた値はそのまま勝ち、1 倍は元の勧めのまま
 small = t.filled({**t.DEFAULTS, "figure": "mimizuku", "scale": 0.75})
 assert (small["tab_length"], small["tab_glue"], small["tab_width"]) == (36.0, 33.8, 10.5), small
 assert (small["base_length"], small["base_depth"]) == (t.BASE_DEFAULTS["base_length"], t.BASE_DEFAULTS["base_depth"])
 big = t.filled({**t.DEFAULTS, "figure": "hagoita", "scale": 1.25})
 h1 = t.figure_defaults("hagoita")
-assert big["base_depth"] == h1["base_depth"] * 1.25 and big["base_length"] == h1["base_length"] * 1.25 and big["tab_width"] == h1["tab_width"]
+assert big["base_depth"] == h1["base_depth"] * 1.25 and big["base_length"] == h1["base_length"] and big["tab_width"] == h1["tab_width"]
 assert abs(big["slot_length"] - h1["slot_length"] * 1.25) < 0.051
+assert abs(t.filled({**t.DEFAULTS, "figure": "hagoita", "scale": 0.8})["slot_length"] - h1["slot_length"] * 0.8) < 0.051
 assert t.filled({**t.DEFAULTS, "figure": "mimizuku", "scale": 0.75, "tab_length": 40})["tab_length"] == 40
 assert t.filled({**t.DEFAULTS, "figure": "mimizuku"}) == {**t.DEFAULTS, **t.figure_defaults("mimizuku"), "figure": "mimizuku"}
-assert all(lo <= v <= hi for sc in (0.5, 1.5) for f in t.FIGURES for k, (lo, hi) in t.RANGES.items()
+assert all(lo <= v <= hi for sc in t.RANGES["scale"] for f in t.FIGURES for k, (lo, hi) in t.RANGES.items()
            if isinstance(v := t.figure_defaults(f, sc).get(k), (int, float)))
 # 倍率が数でない時は、埋める所では止まらず、範囲の検査が 1 つだけ落とす
 assert [f.where for f in t.check_range({**t.DEFAULTS, "scale": "big"})] == ["scale"]
@@ -394,14 +403,55 @@ for sc, page in ((0.75, "A4"), (0.9, "A4"), (1.25, "B4")):
             src = json.loads((ROOT / "data/sources" / f"{f['source']}.json").read_text(encoding="utf-8"))
             _, _, fails = compose("stand_figure", {"figure": fig, "scale": sc}, src, page)
             assert fails == [], (sc, fig, [x.line() for x in fails])
-# 台に差す姿も、0.9 倍では魚の体の人形（足が細く、舌の横の余白が取れない）のほかは通る
+# 台に差す姿も、0.9 倍では全部通る（魚の体の人形は、倍率どおりの溝だと重心が舌の窓をわずかに外れるので、窓の下限まで広げる）
 bad = []
 for fig, f in t.FIGURES.items():
     if f["stand"] == "base":
         src = json.loads((ROOT / "data/sources" / f"{f['source']}.json").read_text(encoding="utf-8"))
         if compose("stand_figure", {"figure": fig, "scale": 0.9}, src)[2]:
             bad.append(fig)
-assert bad == ["sakana"], bad
+assert bad == [], bad
+# 溝の窓の式を、本物の検査と比べる: 窓の内の溝で舌の検査（つながり・またぐ・重心が舌の幅の内）は落ちない。窓の外へ出ると落ちる。
+# 窓が空の姿と倍率（溝をどうしても通らない）は勧めのままで舌の検査に落ちる
+tongue_fails = lambda fig, sc, sl: [f for f in t.check_physics({**t.DEFAULTS, "figure": fig, "stand": "base", "scale": sc, "slot_length": sl}) if f.where == "舌"]
+for fig, f in t.FIGURES.items():
+    if f["stand"] == "base":
+        for sc in (0.75, 0.8, 0.85, 0.9, 0.95, 1.05, 1.1, 1.2, 1.25, 1.35, 1.5):
+            lo, hi = t._slot_window(fig, sc)
+            lo, hi = max(lo, t.RANGES["slot_length"][0]), min(hi, t.RANGES["slot_length"][1])
+            if lo <= hi:
+                assert tongue_fails(fig, sc, lo) == [] and tongue_fails(fig, sc, hi) == [], (fig, sc, lo, hi)
+                assert lo <= t.figure_defaults(fig, sc)["slot_length"] <= hi, (fig, sc)
+                if lo - 0.5 >= t.RANGES["slot_length"][0]:
+                    assert tongue_fails(fig, sc, lo - 0.5), (fig, sc, lo)
+                if hi + 0.5 <= t.RANGES["slot_length"][1]:
+                    assert tongue_fails(fig, sc, hi + 0.5), (fig, sc, hi)
+            else:
+                assert tongue_fails(fig, sc, t.figure_defaults(fig, sc)["slot_length"]), (fig, sc, lo, hi)
+# 首人形の 0.87 倍以下は足の間が狭く、細い鳥の竿の 0.75 倍は足が細く、溝をどう書いても舌の検査を通らない（README の限り）。少し大きければ通る
+assert all(tongue_fails(fig, sc, sl) for fig, sc in (("kubi", 0.87), ("torisao_hoso", 0.75)) for sl in (6, 6.5, 8, 12, 20, 40, 60))
+assert tongue_fails("kubi", 0.88, 6) == [] and tongue_fails("torisao_hoso", 0.76, 6) == []
+# 大きくする時の台の姿: 溝を窓に収めるので、覆面の人形・破魔弓・鳥の竿・魚の体の人形は B4 の 1.25 倍で勧めのまま通る
+for fig in ("fukumen", "hamayumi", "torisao", "sakana"):
+    src = json.loads((ROOT / "data/sources" / f"{t.FIGURES[fig]['source']}.json").read_text(encoding="utf-8"))
+    assert compose("stand_figure", {"figure": fig, "scale": 1.25}, src, "B4")[2] == [], fig
+assert [f.where for f in t.check_range({**t.DEFAULTS, "scale": 0.5})] == ["scale"]
+
+# null は「勧めを使う」の意味なのは立て方と脚・台の寸法だけ。倍率と紙の厚みの null は名前を言って落とす。文字以外の姿の名も止まらない
+for bad_p in ({"figure": "inu", "paper_thickness": None}, {"figure": "inu", "scale": None}, {"figure": "fukumen", "paper_thickness": None}):
+    src = json.loads((ROOT / "data/sources" / f"{t.FIGURES[bad_p['figure']]['source']}.json").read_text(encoding="utf-8"))
+    assert [f.floor for f in compose("stand_figure", bad_p, src)[2]] == ["F5.range"], bad_p
+assert t.check_range({"figure": "inu", "stand": None, "tab_length": None}) == []  # 勧めで埋まる
+assert [f.where for f in t.check_range({**t.DEFAULTS, "figure": ["inu"]})] == ["figure"]
+# 舌を足の端へ寄せると、つながる長さは下限ちょうどになる。丸めで落ちない（下の 3 つは、許しを外すと丸めだけで落ちる）
+for fig, sc, sl in (("chigibako", 0.86, 25.8), ("hebi", 0.77, 7.7), ("hebi", 1.11, 11.1)):
+    assert not any("つながらず" in f.message for f in t.check_physics({**t.DEFAULTS, "figure": fig, "stand": "base", "scale": sc, "slot_length": sl})), (fig, sc, sl)
+# 重心が舌の窓の端にある時の文は小数 2 桁（丸めた数だと「22.7mm が 20.5〜22.7mm に無い」と読める）
+assert any(re.search(r"左の端から \d+\.\d\dmm）が舌の幅の内.*\d+\.\d\d〜\d+\.\d\dmm", f.message)
+           for f in t.check_physics({**t.DEFAULTS, "figure": "sakana", "stand": "base", "scale": 0.9, "slot_length": 7.2}))
+# 溝が下限の時は、短くしろと言わない（言われたとおりにすると範囲の検査で落ちる）
+thin = [f.message for f in t.check_physics({**t.DEFAULTS, "figure": "kubi", "stand": "base", "slot_length": 6, "scale": 0.75})]
+assert any("姿を大きく" in x for x in thin) and not any("溝を短く" in x for x in thin), thin
 
 # 姿の形の覚えは上限つき（高さは連続の値なので、上限が無いと場面を回すほど増える）
 assert t._shape.cache_info().maxsize is not None

@@ -85,9 +85,11 @@ DEFAULTS = {
     **{k: None for k in BASE_DEFAULTS},
 }
 RANGES = {
-    "scale": (0.5, 1.5),
+    # 下限 0.75: 手のずれと紙の幅は倍率で縮まないので、これより小さいと細い所（餅花の枝のつなぎは 0.5 倍で 1.2mm）が紙で切れる見込みが無く、
+    # 脚の三角も手のずれで倒れる。
+    "scale": (0.75, 1.5),
     "paper_thickness": (0.05, 0.5),
-    # 貼る面の下限 10 は、閉じる糊代（CLOSE_GLUE 8mm）より長く取るため（組み方の文が「短い糊代」「長い糊代の面」で見分けさせる）。
+    # 貼る面の下限 10 は、閉じる糊代（CLOSE_GLUE 8mm）より長く取るため（組み方の文が「短い糊代」「長い糊代」で見分けさせる）。
     "tab_width": (6, 30), "tab_length": (10, 120), "tab_glue": (10, 60), "tab_angle": (10, 60),
     "base_length": (30, 150), "base_depth": (15, 80), "base_height": (6, 30), "base_glue": (4, 12),
     # 溝の長さの下限 6 は、舌の幅（溝 − 2·SLOT_END）から両側の余白 MIN_MARGIN を引いて 1mm の窓が残る長さ。5 だと窓が 0 で、重心が舌の真ん中に
@@ -114,6 +116,7 @@ CLOSE_GLUE = 8  # 脚の三角を閉じる糊代の長さ（背に貼る面よ�
 SLOT_EDGE = 5  # 溝の端から箱の縁までの紙。これより狭いと溝の端が裂ける
 SLOT_END = 0.5  # 舌の左右と溝の端の隙間
 TONGUE_ATTACH = 0.5  # 舌の上の縁のうち、姿とつながっている割合の下限
+ROUND_TOL = 1e-6  # tongue() が舌を足の端へ寄せると、つながる長さは下限ちょうどになる。計算の丸めで偽の失敗を出さない
 CONTACT_UP = 0.3  # 床に触れる所は、姿の一番下からこの高さの横線で姿を切った所と見る（点で取った下の縁のわずかな傾きを許す）
 PAPER, INK, STAND_FILL = "#ece6d6", "#3b3a34", "#d9d0b8"
 
@@ -136,7 +139,7 @@ def _src(canvas, side):
 # height はその玩具の既定の高さ（mm）。図の比から、A4 に表と裏と台が並ぶ大きさを選んだ見込み。
 # 台で立てる姿のうち、紙雛・舌出し面・首人形・覆面の人形・蓑人形・魚・餅花・筒は、重心（舌の先＝机から 箱の高さ + TONGUE_EXTRA の上から
 # 測る）が既定の台（奥行き 30・高さ 16）に、溝の横の傾きを足しても余白を持って入る高さまで下げた。台の奥行きを広げる勧め（base_depth 40）
-# で通した姿もある。どちらも見込みで、scale で大きさを変えられる（高さを戻すなら台の奥行きも広げる）。
+# で通した姿もある。どちらも見込みで、scale で大きさを変えられる（台の奥行きの勧めも付いて来る）。
 # stand はその玩具に勧める立て方（下の縁が広い物は脚、細い物は台）。source は組になる出典（場面が同じ組を渡す）。
 # 1 頁に玩具が幾つもある時は、1 つの玩具を 1 つの値にし、出典は同じ頁の記録を使う。
 # 描き分けの省略: 細い棒（面の柄・首の竿）は、紙で切れて差せるよう、図より太くした（【解釈】）。
@@ -664,29 +667,52 @@ SOURCES = {k: f["source"] for k, f in FIGURES.items()}
 
 # 姿の大きさ（scale）に付いて伸び縮みする勧めの寸法。勧めは 1 倍の姿に合わせた mm の値なので、倍率だけを変えると、脚が背から
 # はみ出す・舌が足より広い・台が小さい、でほとんどの姿が落ちた（0.75 倍で 35 のうち 19、1.25 倍で 21）。
-# 脚の三角（脚の長さ・貼る面）と舌の幅（溝の長さ）は、姿に比例させる。脚の幅は、小さくする時だけ細くする（大きい姿に太い脚は要らない）。
-# 台の箱は、大きくする時だけ広げる（小さい姿に元の台は広すぎるだけで、倒れる側には効かない。縮めると余白が減る）。
+# 脚の三角（脚の長さ・貼る面）と溝の長さ（舌の幅）は、姿に比例させる。溝は比例の値を、舌の検査が通る窓（_slot_window）に収める。
+# 脚の幅は、小さくする時だけ細くする（背に収めるため。大きくする時は、脚の帯の座屈に効くのは主に長さで、幅を足してもあまり増えない）。
+# 台の箱は、大きくする時だけ奥行きを広げる（小さい姿に元の台は広すぎるだけで、倒れる側には効かない。横まで広げると紙に入らなくなる）。
 # 箱の高さ・溝の幅・糊代は紙と手の都合の寸法なので、姿の大きさでは変えない。
 _SCALE_ALWAYS = ("tab_length", "tab_glue", "slot_length")
 _SCALE_DOWN = ("tab_width",)
-_SCALE_UP = ("base_length", "base_depth")
+_SCALE_UP = ("base_depth",)
+
+
+@lru_cache(maxsize=64)
+def _slot_window(figure, scale):
+    """舌の検査が通る溝の長さの (下限, 上限)。tongue() と同じく、重心に一番近い足の下に舌を差すとして、式で出す。
+    上限: 舌を足の端へ寄せても TONGUE_ATTACH つながり、隣の足へ届かない幅。つながる長さは足の幅で決まり、下の縁が傾いた姿では
+    大きくしても伸びない。
+    下限: 舌を足の端へ寄せて、重心が舌の幅の内に余白 MIN_MARGIN を持って入る幅。余白は固定の mm なので、姿より速く細る。
+    下限が上限を越える姿と倍率は、溝をどうしても通らない（check_physics が落とす）。0.1mm に丸める向きは、窓の内へ。"""
+    H = FIGURES[figure]["height"] * scale
+    body = _shape(figure, round(H, 6))[0]
+    cx = body.centroid.x
+    feet = _contacts(body, H)
+    a, b = min(feet, key=lambda ab: max(ab[0] - cx, cx - ab[1], 0))
+    x = min(max(cx, a), b)  # 舌の中心（TONGUE_ATTACH が半分なら、どの幅でも足の中）
+    width = min([(b - a) / TONGUE_ATTACH] + [2 * (c - x if c > x else x - d) for c, d in feet if (c, d) != (a, b)])
+    return (math.ceil((2 * SLOT_END + (abs(x - cx) + MIN_MARGIN) / (1 - TONGUE_ATTACH)) * 10) / 10,
+            math.floor((2 * SLOT_END + width) * 10) / 10)
 
 
 def figure_defaults(figure, scale=1.0):
     """その姿の既定: 共通の出発点に、姿に勧める立て方と寸法を重ねた物。scale が 1 でなければ、姿に付いて伸び縮みする寸法を
-    同じ倍率にする（0.1mm に丸め、RANGES の内に収める）。"""
+    同じ倍率にする（0.1mm に丸め、RANGES の内に収める）。1 倍は手で決めた勧めのまま。"""
     f = FIGURES[figure]
     d = {**BASE_DEFAULTS, "stand": f["stand"], **f.get("suggest", {})}
     if scale != 1.0:
         for k in _SCALE_ALWAYS + (_SCALE_DOWN if scale < 1 else _SCALE_UP):
             lo, hi = RANGES[k]
             d[k] = min(hi, max(lo, round(d[k] * scale, 1)))
+        lo, hi = RANGES["slot_length"]
+        floor, ceiling = _slot_window(figure, scale)
+        d["slot_length"] = min(hi, max(lo, min(ceiling, max(floor, d["slot_length"]))))
     return d
 
 
 def filled(p):
     """None（＝姿の勧め）の値を、その姿の既定で埋める。書いた値はそのまま勝つ。姿が一覧に無ければ埋めない（範囲の検査が落とす）。"""
-    if p.get("figure") not in FIGURES:
+    fig = p.get("figure")
+    if not isinstance(fig, str) or fig not in FIGURES:
         return dict(p)
     # 倍率が数でない・範囲の外の時は、1 倍の勧めで埋める（倍率の誤りは範囲の検査が落とす。ここでは止めない）。
     sc = p.get("scale")
@@ -720,7 +746,7 @@ def check_range(p):
     out = []
     for k, v in p.items():
         if k == "figure":
-            if v not in FIGURES:
+            if not isinstance(v, str) or v not in FIGURES:
                 out.append(Failure("F5.range", k, f"{v} は姿の一覧（{len(FIGURES)} 個）に無い"))
         elif k == "stand":
             # None は、姿が一覧に無くて勧めで埋まらなかった既定。姿の名の誤りとして上で 1 つだけ落とす（ここで重ねて落とさない）。
@@ -733,8 +759,8 @@ def check_range(p):
                 out.append(Failure("F5.range", k, f"{v!r} は整数の 0 か 1 でない"))
         elif k not in RANGES:
             out.append(Failure("F5.range", k, "知らない寸法の名前"))
-        elif v is None:
-            continue  # 姿が一覧に無くて埋まらなかった既定。姿の名の誤りとして上で 1 つだけ落とす
+        elif v is None and k in BASE_DEFAULTS:
+            continue  # 姿が一覧に無くて埋まらなかった既定。姿の名の誤りとして上で 1 つだけ落とす（倍率と紙の厚みの null は勧めで埋まらないので、下で落とす）
         elif not isinstance(v, (int, float)) or isinstance(v, bool) or not RANGES[k][0] <= v <= RANGES[k][1]:
             out.append(Failure("F5.range", k, f"{v} は範囲 {RANGES[k]} の外"))
     return out
@@ -794,16 +820,20 @@ def figure_height(p):
     return FIGURES[p["figure"]]["height"] * p["scale"]
 
 
+def _contacts(body, H):
+    """床に触れる所の、左右の端の組の並び。姿の一番下から CONTACT_UP の高さの横線で姿を切った所。"""
+    cut = body.intersection(LineString([(-1, H - CONTACT_UP), (body.bounds[2] + 1, H - CONTACT_UP)]))
+    return sorted((min(x for x, _ in g.coords), max(x for x, _ in g.coords)) for g in getattr(cut, "geoms", [cut])
+                  if g.geom_type == "LineString" and g.length > 0)
+
+
 @_filling
 def geometry(p):
     """姿の外形・重心・床に触れる所。式と型紙が同じ形を使うよう、ここ 1 つから出す。"""
     H = figure_height(p)
     body, art = _shape(p["figure"], round(H, 6))
     c = body.centroid
-    cut = body.intersection(LineString([(-1, H - CONTACT_UP), (body.bounds[2] + 1, H - CONTACT_UP)]))
-    contacts = sorted((min(x for x, _ in g.coords), max(x for x, _ in g.coords)) for g in getattr(cut, "geoms", [cut])
-                      if g.geom_type == "LineString" and g.length > 0)
-    return {"body": body, "art": art, "H": H, "W": body.bounds[2], "cx": c.x, "zc": H - c.y, "contacts": contacts}
+    return {"body": body, "art": art, "H": H, "W": body.bounds[2], "cx": c.x, "zc": H - c.y, "contacts": _contacts(body, H)}
 
 
 def margin(g, above=0.0):
@@ -951,13 +981,15 @@ def check_physics(p):
             out.append(Failure("F5.stand", "台", f"糊代 {p['base_glue']:g}mm が箱の高さ {p['base_height']:g}mm の壁に収まらない（壁の高さ − 1mm まで）"))
         joint = LineString([(x - w / 2, H - CONTACT_UP), (x + w / 2, H - CONTACT_UP)]).intersection(g["body"])
         edge = joint.length
-        if edge < TONGUE_ATTACH * w:
-            out.append(Failure("F5.stand", "舌", f"差し込みの舌が姿と {edge:.1f}mm しかつながらず、差すと折れる（溝を短く）"))
+        # 溝が下限なら、短くしろと言っても範囲の検査で落ちるので、姿を大きくする方を言う
+        shorter = "溝を短く" if p["slot_length"] > RANGES["slot_length"][0] else "溝は下限なので、姿を大きく"
+        if edge < TONGUE_ATTACH * w - ROUND_TOL:
+            out.append(Failure("F5.stand", "舌", f"差し込みの舌が姿と {edge:.1f}mm しかつながらず、差すと折れる（{shorter}）"))
         # 舌の上の縁が姿と 2 か所以上で接する（2 本の脚にまたがる）と、脚の間が舌と胴で囲まれ、部品の外形では穴を持てないので
         # 紙で埋まる（_figure_part）。絵に無い紙の壁を黙って刷らず、溝を 1 つの足に収めさせる。
         feet = [q for q in getattr(joint, "geoms", [joint]) if q.geom_type == "LineString" and q.length > 0]
         if len(feet) >= 2:
-            out.append(Failure("F5.stand", "舌", f"舌が床に触れる所 {len(feet)} つにまたがり、間が紙でふさがる（溝を短くして 1 つの足の下に差す）"))
+            out.append(Failure("F5.stand", "舌", f"舌が床に触れる所 {len(feet)} つにまたがり、間が紙でふさがる（{shorter}して 1 つの足の下に差す）"))
         # 傾く軸は舌の先（机の上）なので、重心の高さは舌の長さを足して測る。余白も同じ高さから。
         up = depth
         mb = margin(g, up)
@@ -970,7 +1002,7 @@ def check_physics(p):
         # 姿の下の縁は上の面から浮くので、横に支えるのは舌の幅だけ。重心が余白を持って舌の幅に入らないと、付け根がねじれる。
         lo, hi = x - w / 2 + MIN_MARGIN, x + w / 2 - MIN_MARGIN
         if not lo <= cx <= hi:
-            out.append(Failure("F5.stand", "舌", f"重心（左の端から {cx:.1f}mm）が舌の幅の内（余白 {MIN_MARGIN}mm を引いて {lo:.1f}〜{hi:.1f}mm）に無く、舌の付け根がねじれる"))
+            out.append(Failure("F5.stand", "舌", f"重心（左の端から {cx:.2f}mm）が舌の幅の内（余白 {MIN_MARGIN}mm を引いて {lo:.2f}〜{hi:.2f}mm）に無く、舌の付け根がねじれる"))
     return out
 
 
@@ -1007,8 +1039,14 @@ def _figure_part(number, key, name, p, mirror):
             tw, cx = p["tab_width"], W - g["cx"]
             y0, y1 = H - e["s"], H - e["h"]
             # 貼る面が背に収まらない寸法（F5.stand で落ちる）でも、印は姿の中だけに描く（絵の検査が別の理由で重ねて落ちないように）。
+            inner = Polygon(outline).buffer(-0.5)
+            # 位置の印は赤茶で、地が同じ色の姿（馬・宮・俵など）では溶ける。貼る面で隠れる所なので、印の内を薄い地にして、その上に載せる。
+            ground = box(cx - tw / 2, y0, cx + tw / 2, y1).intersection(inner)
+            for piece in getattr(ground, "geoms", [ground]):
+                if piece.geom_type == "Polygon" and piece.area > 0:
+                    art.append({"kind": "poly", "pts": list(piece.exterior.coords)[:-1], "fill": PAPER})
             mark = LineString([(cx - tw / 2, y0), (cx + tw / 2, y0), (cx + tw / 2, y1), (cx - tw / 2, y1), (cx - tw / 2, y0)])
-            mark = mark.intersection(Polygon(outline).buffer(-0.5))
+            mark = mark.intersection(inner)
             for piece in getattr(mark, "geoms", [mark]):
                 if piece.geom_type == "LineString" and piece.length > 0.3:
                     # 位置の印で刷る（色と線の形は描く所が決める）。黒の実線だと、凡例の「切る」と同じ見え方になる。
@@ -1121,7 +1159,7 @@ def bom(p):
 @_filling
 def materials(p):
     by = {r["key"]: r for r in bom(p)}
-    return [f"{by['front']['material']}を 1 枚", "のり、はさみ、定規" + ("" if p["back"] else "、鉛筆") + ("、カッター（溝を切る。大人がする）" if p["stand"] == "base" else "")]
+    return [f"{by['front']['material']}を 1 枚", "のり、はさみ、定規" + ("、鉛筆" if not p["back"] and p["stand"] == "easel" else "") + ("、カッター（溝を切る。大人がする）" if p["stand"] == "base" else "")]
 
 
 @_filling
@@ -1163,10 +1201,11 @@ def steps(p):
         out += [f"部品 3 台の箱を実線で切り、上の面と底の面の溝（幅 {p['slot_width']:g}mm）を、2 本の線の間の細い帯ごと切り取る（1 本の切れ目にしない。カッターは大人がする）",
                 # 上の面を先に閉じると、残りの糊代に指が届かない。溝の上下のそろいは閉じた後にしか分からないので、乾く前に舌で直す。
                 "部品 3 台の箱を一点鎖線で山折りし（色の面が外）、左右の壁の糊代 4 枚を前後の壁の内に貼る。乾いたら、色の付いた上の面を閉じて"
-                "残りの糊代 3 枚を壁の内に貼り、乾く前に舌を 2 つの溝に通して箱のゆがみを直す（溝が上下にそろう）",
+                "残りの糊代 3 枚を壁の内に貼る。乾く前に舌を 2 つの溝に通し（きつければ押し込まず、舌の縁を少し切る）、箱のゆがみを直して、"
+                "そのまま乾かす（溝が上下にそろう）",
                 # 舌が底の溝を外れて箱の床で止まると、上の溝 1 つで挟む形（ほぼ倒れる）に戻るのに、浮きの差は紙の厚みだけで見分けられない。
-                "姿の舌を上の溝から底の溝まで通す（きつければ押し込まず、舌の縁を少し切る）。箱を持ち上げて、底の溝から舌の先が出ているのを見てから、"
-                f"舌の先を机に着けて置く。姿の下の縁は上の面から約 {TONGUE_EXTRA:g}mm 浮き、前後に少し傾く（どちらもよい。姿の置き場は溝で決まる）"]
+                "箱を持ち上げて、底の溝から舌の先が出ているのを見てから、舌の先を机に着けて置く。"
+                f"姿の下の縁は上の面から約 {TONGUE_EXTRA:g}mm 浮き、前後に少し傾く（どちらもよい。姿の置き場は溝で決まる）"]
     out.append("机を軽く叩いて、倒れないか見る" + ("" if base else "（前へ倒れるなら、折り目か貼る高さのずれ）"))
     return [f"手順 {i + 1}: {x}" for i, x in enumerate(out)]
 
