@@ -212,8 +212,38 @@ def widen_first(dx):
     return fn
 
 
+def scale_x(k):
+    """部品の横の寸法だけを k 倍にする（外形・折り線・糊代・穴）。絵の筒が式より太くずれた形。"""
+    def fn(q):
+        q.outline = [(x * k, y) for x, y in q.outline]
+        q.valley = [((a * k, b), (c * k, d)) for (a, b), (c, d) in q.valley]
+        q.glue = [[(x * k, y) for x, y in g] for g in q.glue]
+        q.holes = [(x * k, y, r) for x, y, r in q.holes]
+    return fn
+
+
+def set_fold(i, line):
+    def fn(q):
+        q.valley[i] = line
+    return fn
+
+
+def add_fold(x):
+    def fn(q):
+        q.valley.append(((x, 0), (x, H)))
+    return fn
+
+
+def swap_first_points(q):
+    q.outline = [q.outline[1], q.outline[0]] + q.outline[2:]  # 外形が自分と交わる
+
+
 NEG = [
     ("tube", move_fold(1, 300.0), "3D.close", "1 外筒", "分けていない"),  # 折り線が外形の外 → 黙って飛ばさず落とす（4 にしない）
+    ("tube", set_fold(0, ((A, 0), (A, 0))), "3D.close", "1 外筒", "長さが 0"),  # 長さ 0 の折り線も 4 にしない
+    ("tube", swap_first_points, "3D.close", "1 外筒", "自分と交わり"),        # 外形が自分と交わる
+    ("tube", add_fold(4 * A + p["tube_glue"] / 2), "3D.close", "1 外筒", "1 面になっておらず"),  # 糊代を余計な折り線で 2 つに分ける
+    ("pusher", scale_x(31 / 26), "3D.skewer", "2 内筒", "入らない"),  # 内筒の絵が外筒（一辺 30mm）より太い 31mm
     ("tube", move_fold(2, 2.0), "3D.close", "1 外筒", "継ぎ目"),    # 3 本目の折り線を 2mm ずらす → 90° ずつでは閉じない
     ("tube", widen_first(2.0), "3D.close", "1 外筒", "継ぎ目"),     # 1 面目だけ 2mm 広い → 継ぎ目が 1 面目の縁に来ない
     ("tube", lambda q: q.glue.clear(), "3D.close", "1 外筒", "糊代"),  # 糊代の印が無い → 継ぎ目を貼れない

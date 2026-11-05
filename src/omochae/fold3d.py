@@ -2,8 +2,10 @@
 
 本人の考え（2026-11-05「手順をAIが3Dで組み立てて、その過程を手順書にする」）の最初の 1 本。本人の決定で、提出の前は 2 つだけを見る:
 - 3D.close: 外筒を、型紙の折り線で 90° ずつ谷折りすると角筒に閉じ、糊代が帯の反対の端の面（1 面目）に重なる。内筒も同じく見る
-  （竹串の線の前提なので）。折り線が面を分けていない・つながらない面がある、も同じ床で落とす（式と絵のずれそのものなので）
-- 3D.skewer: 内筒の 2 つの穴を通す竹串が水平で、内筒を外筒に入れて静かな時から押し上げ切るまで、外筒の溝の中を通る
+  （竹串の線の前提なので）。糊代 1 つが 1 面である事、折り線が面を分けていない・長さ 0・つながらない面・自分と交わる外形も、
+  同じ床で落とす（式と絵のずれそのものなので）
+- 3D.skewer: 折った内筒が外筒の中に入り、内筒の 2 つの穴を通す竹串が水平で、内筒を外筒に入れて静かな時から押し上げ切るまで、
+  外筒の溝の中を通る
 判断の芯:
 - 寸法の式（check_physics・slot_span）でなく、刷る部品（外形・折り線・糊代・穴・溝の切り込み）から形を組む。式と絵がずれた時に見つけるため
 - 面は硬い板、折り線は蝶番と見る。紙の厚み・たわみ・摩擦は入れないので、通っても紙で動く保証ではない
@@ -28,7 +30,7 @@ from .__main__ import Parser, load_source, scenario_from_args
 from .compose import TEMPLATES, compose
 from .model import Failure, ToolMissing
 
-from shapely.geometry import LineString, Point, Polygon
+from shapely.geometry import LineString, MultiPoint, Point, Polygon
 from shapely.ops import nearest_points, split
 
 # 折る手の誤差の見込み（実物で未確認）。継ぎ目のずれ・糊代の浮き・2 つの穴の高さの差をこれで見る。
@@ -60,6 +62,10 @@ def _dot(a, b):
 
 def _unit(a):
     return _mul(a, 1 / math.sqrt(_dot(a, a)))
+
+
+def _cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
 
 
 IDENTITY = (((1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)), (0.0, 0.0, 0.0))
@@ -135,10 +141,17 @@ def fold(part, deg=FOLD_DEG):
     """部品を折り線で面に分け、外形の始めの点を持つ面を動かさずに、折り線ごとに deg° 折る。谷は刷った面の側へ、山は裏へ折る。
 
     Returns 面の並び（list of Face）。親の面を子より先に並べる。最初の面が動かない面（筒なら 1 面目）。
-    折り線が面をちょうど 2 つに分けていない時と、折り線でつながらない面がある時は FoldError（黙って飛ばすと、崩れた型紙が通る）。
+    外形が自分と交わる・長さ 0 の折り線がある・折り線が面をちょうど 2 つに分けていない・折り線でつながらない面がある時は
+    FoldError（黙って飛ばしたり、例外の 4 にしたりすると、崩れた型紙が「確かめられない」に紛れる）。
     """
     lines = [(ln, 1) for ln in part.valley] + [(ln, -1) for ln in part.mountain]
-    polys = [Polygon(part.outline)]
+    outline = Polygon(part.outline)
+    if not outline.is_valid:
+        raise FoldError("外形が自分と交わり、面に分けられない")
+    for n, ((a, b), _) in enumerate(lines, 1):
+        if math.dist(a, b) <= EPS:
+            raise FoldError(f"{n} 本目の折り線の長さが 0")
+    polys = [outline]
     for (a, b), _ in lines:
         polys = [g for f in polys for g in split(f, _long(a, b)).geoms]
     # 折り線に沿って縁を持つ 2 面を、その折り線でつなぐ。縁が線に沿う長さで見る（真ん中の点で見ると、溝や穴を通る折り線で外れる）
@@ -224,8 +237,9 @@ def _close(part, faces):
     if not part.glue:
         return None, Failure("3D.close", where, "糊代の印が無く、角筒の継ぎ目を貼れない")
     glued = _glue_faces(part, faces)
-    if not glued:
-        return None, Failure("3D.close", where, "糊代が折り線で区切られた 1 面になっておらず、折って貼れない")
+    # 糊代 1 つに面 1 つ。余計な折り線で糊代が分かれると、片方だけを見て、もう片方を見落とす（レビューの指摘）
+    if len(glued) != len(part.glue):
+        return None, Failure("3D.close", where, f"糊代が折り線で区切られた 1 面になっておらず（糊代 {len(part.glue)} つに面 {len(glued)} つ）、折って貼れない")
     gi = next(i for i, f in enumerate(faces) if f is glued[0])
     g, k = faces[gi], _far_end(faces, gi)
     # 糊代の面の折り線。外形の始めの点が糊代の面にあると、その面が動かない面になり、折り線は子の面の側が持つ
@@ -261,6 +275,15 @@ def tube_axis(faces):
     return up, c, min(hs), max(hs)
 
 
+def _section(faces, up, c):
+    """角筒の断面。折り線（角）の位置を、軸に垂直な面へ写した多角形（軸の中心 c が原点）。"""
+    e1 = _cross(up, (0.0, 0.0, 1.0))
+    e1 = _unit(e1 if _dot(e1, e1) > EPS else _cross(up, (1.0, 0.0, 0.0)))
+    e2 = _cross(up, e1)
+    mids = [_sub(f.at(((f.hinge[0][0] + f.hinge[1][0]) / 2, (f.hinge[0][1] + f.hinge[1][1]) / 2)), c) for f in faces if f.hinge]
+    return MultiPoint([(_dot(m, e1), _dot(m, e2)) for m in mids]).convex_hull
+
+
 def _skewer(outer_part, outer, inner_part, inner, p):
     """竹串の線が水平で、行程の全部で外筒の溝の中を通るか。Returns (所見の文, 失敗)。"""
     holes = inner_part.holes
@@ -274,6 +297,15 @@ def _skewer(outer_part, outer, inner_part, inner, p):
         centers.append(f.at((x, y)))
     up_o, c_o, bot_o, top_o = tube_axis(outer)
     up_i, c_i, bot_i, top_i = tube_axis(inner)
+    # 折った内筒が外筒の中に入るか。寸法の式（F5.slide_clearance）でなく、折った形の断面で見る（絵の内筒が式より大きくずれた時に
+    # 見つけるため。レビューの指摘）。紙の厚みを入れないので、すき間が 0 より大きいかだけを見る（厚みの分の余りは式の床が見る）
+    sec_o, sec_i = _section(outer, up_o, c_o), _section(inner, up_i, c_i)
+    if sec_i.within(sec_o):
+        fit = sec_o.exterior.distance(sec_i)
+    else:
+        fit = -max(sec_o.distance(Point(pt)) for pt in sec_i.exterior.coords)
+    if fit <= EPS:
+        return None, Failure("3D.skewer", inner_part.label, f"内筒の断面が外筒の断面に収まらず（すき間 {fit:.1f}mm）、外筒に入らない")
     tilt = abs(_dot(_sub(centers[1], centers[0]), up_i))
     if tilt > TOL:
         return None, Failure("3D.skewer", "竹串", f"2 つの穴の高さが {tilt:.1f}mm 違い、竹串が傾く（溝の中で引っかかる）")
@@ -322,7 +354,8 @@ def _skewer(outer_part, outer, inner_part, inner, p):
     stop = ""
     if c_push < TOL and nearest_points(f.poly, Point(q1))[0].y < q1[1] - EPS:
         stop = "。押し上げ切ると溝の上の端に届いて止まる"
-    return (f"並ぶ 竹串: 2 つの穴の高さの差 {tilt:.2f}mm で水平。内筒を外筒の真ん中に入れ、竹串（太さ {2 * r:g}mm）の中心が底から "
+    return (f"並ぶ 竹串: 内筒は外筒の中に入る（断面のすき間 {fit:.2f}mm）。2 つの穴の高さの差 {tilt:.2f}mm で水平。"
+            f"内筒を外筒の真ん中に入れ、竹串（太さ {2 * r:g}mm）の中心が底から "
             f"{rest_h:.1f}mm（静かな時）から {push_h:.1f}mm（押し上げ切る）まで、溝の中を通る（紙までの余り 静かな時 {c_rest:.2f}mm・"
             f"押し上げ切った時 {c_push:.2f}mm{stop}）"), None
 
