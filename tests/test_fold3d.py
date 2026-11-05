@@ -1,7 +1,8 @@
 """3D の中で折って組む確かめ（omochae.fold3d）。凍結の基準の 3D.close・3D.skewer の試験（criteria.md の行は、この 1 と 2 を指す）。
 
-本人の決定（2026-11-05）で、御来迎 つまみの形の 2 つだけを見る。
+本人の決定（2026-11-05）で、御来迎 つまみの形だけを見る。
 - 3D.close: 外筒（と、竹串の線の前提になる内筒）を、型紙の折り線で 90° ずつ折ると角筒に閉じ、糊代が 1 面目に重なる
+- 3D.face: 見える面の部品（色の境で折る外筒）の色の面（刷った面）が、閉じた筒の外を向く（本人の答え 2026-11-06 で足した）
 - 3D.skewer: 折った内筒が外筒に入り、2 つの穴が向かい合い、竹串が静かな時から押し上げ切るまで外筒の溝の中を通る
 狙いは式と絵のずれを見つける事なので、刷る部品を 1 か所だけ崩した負の対照で、それぞれ 1 行だけ落ちる事を見る。
 """
@@ -32,12 +33,14 @@ def built(params):
     return {q.key: q for q in layout["parts"]}, p
 
 
-# 1. 正の組。既定の寸法で通り、何を確かめたかを、閉じる（外筒・内筒）・並ぶ（竹串）の順に 1 行ずつ言う。糊代の相手は帯の反対の端の 1 面目
+# 1. 正の組。既定の寸法で通り、何を確かめたかを、閉じる（外筒）・外向き（外筒）・閉じる（内筒）・並ぶ（竹串）の順に 1 行ずつ言う。
+#    糊代の相手は帯の反対の端の 1 面目
 pc, p = built(TAB)
 notes, fails = fold3d.check(list(pc.values()), p)
 assert not fails, [f.line() for f in fails]
-assert [n.split()[:2] for n in notes] == [["閉じる", "1"], ["閉じる", "2"], ["並ぶ", "竹串:"]], notes
-assert all("谷折り 4 本" in n and "糊代は1 面目に" in n for n in notes[:2]), notes
+assert [n.split()[:2] for n in notes] == [["閉じる", "1"], ["外向き", "1"], ["閉じる", "2"], ["並ぶ", "竹串:"]], notes
+# 外筒は色の面を外にする山折り（見える面）。内筒は破線を刷る谷折りのまま（隠れる部品）
+assert "山折り 4 本" in notes[0] and "谷折り 4 本" in notes[2] and all("糊代は1 面目に" in notes[i] for i in (0, 2)), notes
 
 # 寸法を変えても、型紙の検査に通る組は 3D でも通る。通らない組が見つかったら、刷る紙は変えずに知らせる（今は無い）。
 # 寸法は互いに縛り合う（押し上げる量・筒の高さ・内筒の長さ・溝の上の余白・扇の台の大きさ）ので、範囲の端の総当たりでは
@@ -67,16 +70,23 @@ def tampered(key, fn):
     return list(parts.values())
 
 
+def lines_of(q):
+    """部品の折り線の並び。外筒は山折り（色の面を外にする）、内筒は谷折りなので、線のある方を返す（手伝いが並びを取り違えないように）。"""
+    assert bool(q.valley) != bool(q.mountain), (q.key, len(q.valley), len(q.mountain))
+    return q.valley or q.mountain
+
+
 def move_fold(i, dx):
     def fn(q):
-        (a, b), (c, d) = q.valley[i]
-        q.valley[i] = ((a + dx, b), (c + dx, d))
+        ls = lines_of(q)
+        (a, b), (c, d) = ls[i]
+        ls[i] = ((a + dx, b), (c + dx, d))
     return fn
 
 
 def set_fold(i, line):
     def fn(q):
-        q.valley[i] = line
+        lines_of(q)[i] = line
     return fn
 
 
@@ -133,12 +143,14 @@ NEG = [
     ("tube", set_fold(1, ((A, 0), (2 * A, 0))), "3D.close", "1 外筒", "分けていない"),  # 外形の縁の上に乗る折り線は面を分けない
     ("tube", set_fold(0, ((A, 0), (A, 0))), "3D.close", "1 外筒", "長さが 0"),  # 長さ 0 の折り線も 4 にしない
     ("tube", set_fold(0, ((A, 0.5), (A, H))), "3D.close", "1 外筒", "届いていない"),  # 縁の 0.5mm 手前で止まる折り線
-    ("tube", lambda q: q.valley.append(q.valley[0]), "3D.close", "1 外筒", "重なる"),  # 同じ所の 2 本目の折り線
-    ("tube", lambda q: q.mountain.append(q.valley[0]), "3D.close", "1 外筒", "重なる"),  # 谷と山を同じ所に重ねる
+    ("tube", lambda q: q.mountain.append(q.mountain[0]), "3D.close", "1 外筒", "重なる"),  # 同じ所の 2 本目の折り線
+    ("tube", lambda q: q.valley.append(q.mountain[0]), "3D.close", "1 外筒", "重なる"),  # 谷と山を同じ所に重ねる
     ("tube", swap_first_points, "3D.close", "1 外筒", "自分と交わり"),        # 外形が自分と交わる
     # 糊代を余計な折り線で 2 つに分ける（糊代の真ん中では、角を落とした斜めの縁が上下 1mm 内側にある）
     ("tube", add_fold(4 * A + p["tube_glue"] / 2, 1.0, 1.0), "3D.close", "1 外筒", "ちょうど重なって"),
     ("pusher", scale_x(31 / 26), "3D.skewer", "2 内筒", "入らない"),  # 内筒の絵が外筒（一辺 30mm）より太い 31mm
+    # 直す前の版（外筒が谷折り）。谷折りは刷った面がへこむ向きなので、色の面が筒の内に入る（本人の答え 2026-11-06 で見つけた食い違い）
+    ("tube", lambda q: (q.valley.extend(q.mountain), q.mountain.clear()), "3D.face", "1 外筒", "内を向く"),
     ("tube", move_fold(2, 2.0), "3D.close", "1 外筒", "継ぎ目"),    # 3 本目の折り線を 2mm ずらす → 90° ずつでは閉じない
     ("tube", widen_first(2.0), "3D.close", "1 外筒", "継ぎ目"),     # 1 面目だけ 2mm 広い → 継ぎ目が 1 面目の縁に来ない
     ("tube", lambda q: q.glue.clear(), "3D.close", "1 外筒", "糊代"),  # 糊代の印が無い → 継ぎ目を貼れない
@@ -166,13 +178,12 @@ k = tube.outline.index((w, 2))
 tube.outline = tube.outline[k:] + tube.outline[:k]
 note, fail = fold3d._close(tube, fold3d.fold(tube))
 assert fail is None and "継ぎ目のずれ 0.00mm・糊代は帯の反対の端の面に 100% 重なる" in note, (note, fail)
-# 限り: 谷と山の向き（どちらの面が筒の外を向くか）は見ない。外筒と内筒の谷を全部山に替えると、鏡に映した形として組めて通る。
+# 限り: 隠れる部品（破線を刷る内筒）の谷と山の向きは見ない。内筒を山折りに替えても、鏡に映した形として組めて通る。
 # 文は実際の折りの種類を言う（「谷折りすると」と言い切らない）
 mirrored = copy.deepcopy(pc)
-for key in ("tube", "pusher"):
-    mirrored[key].mountain, mirrored[key].valley = mirrored[key].valley, []
+mirrored["pusher"].mountain, mirrored["pusher"].valley = mirrored["pusher"].valley, []
 notes_m, fails_m = fold3d.check(list(mirrored.values()), p)
-assert not fails_m and all("山折り 4 本" in n for n in notes_m[:2]), (notes_m, [f.line() for f in fails_m])
+assert not fails_m and "山折り 4 本" in notes_m[2], (notes_m, [f.line() for f in fails_m])
 print("ok 3")
 
 
