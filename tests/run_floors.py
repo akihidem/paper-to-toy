@@ -15,15 +15,31 @@ PY = str(ROOT / ".venv/bin/python")
 NOT_YET = []
 
 
+def load_scenarios():
+    """場面を全部読み、(場面と期待の組, 読めない物の文) を返す。壊れた物があれば 1 つも回さない（結果の表を半端に残さない）。"""
+    found, wrong = [], []
+    for sc in sorted((ROOT / "tests/frozen/scenarios").glob("*.json")):
+        try:
+            expect = json.loads(sc.read_text(encoding="utf-8"))["expect"]
+            found.append((sc, {"rc": expect["rc"], "floors": sorted(expect["floors"])}))
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            wrong.append(f"{sc.relative_to(ROOT)}（{type(e).__name__}: {e}）")
+    return found, wrong
+
+
 def main():
     for tool in ("pdftotext", "pdftoppm", "pdfimages", "fc-match"):
         if not shutil.which(tool):
             print(f"検査できない: {tool} が無い", file=sys.stderr)
             return 4
+    scenarios, wrong = load_scenarios()
+    if wrong:
+        for line in wrong:
+            print(f"検査できない: 場面が読めない … {line}", file=sys.stderr)
+        return 4
     env = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
     rows, bad, broken = [], 0, 0
-    for sc in sorted((ROOT / "tests/frozen/scenarios").glob("*.json")):
-        expect = json.loads(sc.read_text(encoding="utf-8"))["expect"]
+    for sc, expect in scenarios:
         out = ROOT / "out/scenarios" / sc.stem
         cmd = [PY, "-m", "omochae", "--scenario", str(sc), "--out", str(out)]
         r = subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True)
@@ -52,4 +68,8 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as e:  # 思わぬ失敗は「通った」にも「落ちた」にも数えない（.venv が無い・結果の表が書けない など）。
+        print(f"検査できない: {type(e).__name__}: {e}", file=sys.stderr)
+        sys.exit(4)
