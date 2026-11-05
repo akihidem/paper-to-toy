@@ -4,8 +4,8 @@
 - 3D.close: 外筒を、型紙の折り線で 90° ずつ谷折りすると角筒に閉じ、糊代が帯の反対の端の面（1 面目）に重なる。内筒も同じく見る
   （竹串の線の前提なので）。糊代 1 つが 1 面である事、折り線が面を分けていない・長さ 0・つながらない面・自分と交わる外形も、
   同じ床で落とす（式と絵のずれそのものなので）
-- 3D.skewer: 折った内筒が外筒の中に入り、内筒の 2 つの穴を通す竹串が水平で、内筒を外筒に入れて静かな時から押し上げ切るまで、
-  外筒の溝の中を通る
+- 3D.skewer: 折った内筒が外筒の中に入り、内筒の 2 つの穴が向かい合い（高さも横もずれない）、穴を通す竹串が水平で、
+  内筒を外筒に入れて静かな時から押し上げ切るまで、外筒の溝の中を通る
 判断の芯:
 - 寸法の式（check_physics・slot_span）でなく、刷る部品（外形・折り線・糊代・穴・溝の切り込み）から形を組む。式と絵がずれた時に見つけるため
 - 面は硬い板、折り線は蝶番と見る。紙の厚み・たわみ・摩擦は入れないので、通っても紙で動く保証ではない
@@ -25,13 +25,19 @@ import math
 import sys
 from dataclasses import dataclass
 
-# 読み込みの囲い（壊れた雛形で 4 にする所）を先に通す。shapely が無い時も、ここで 4 になる。
+# 読み込みの囲い（壊れた雛形で 4 にする所）を先に通す。
 from .__main__ import Parser, load_source, scenario_from_args
 from .compose import TEMPLATES, compose
 from .model import Failure, ToolMissing
 
-from shapely.geometry import LineString, MultiPoint, Point, Polygon
-from shapely.ops import nearest_points, split
+# ここだけが使う shapely の部分も、読めなければ 4 にする。読み込みは main の囲いより前に走るので、
+# 囲わないとトレースバックの 1 になる（__main__ の囲いと同じ考え。レビューの指摘）。
+try:
+    from shapely.geometry import LineString, MultiPoint, Point, Polygon
+    from shapely.ops import nearest_points, split
+except Exception as e:
+    print(f"確かめられない: {type(e).__name__}: {e}", file=sys.stderr)
+    sys.exit(4)
 
 # 折る手の誤差の見込み（実物で未確認）。継ぎ目のずれ・糊代の浮き・2 つの穴の高さの差をこれで見る。
 TOL = 0.5
@@ -289,12 +295,13 @@ def _skewer(outer_part, outer, inner_part, inner, p):
     holes = inner_part.holes
     if len(holes) != 2:
         return None, Failure("3D.skewer", "竹串", f"竹串を通す穴が 2 つでない（{len(holes)} 個）")
-    centers = []
+    centers, walls_of = [], []
     for x, y, _ in holes:
         f = next((f for f in inner if f.poly.contains(Point(x, y))), None)
         if f is None:
             return None, Failure("3D.skewer", "竹串", "竹串を通す穴が面の中に無い（折り線の上か外形の外）")
         centers.append(f.at((x, y)))
+        walls_of.append(f)
     up_o, c_o, bot_o, top_o = tube_axis(outer)
     up_i, c_i, bot_i, top_i = tube_axis(inner)
     # 折った内筒が外筒の中に入るか。寸法の式（F5.slide_clearance）でなく、折った形の断面で見る（絵の内筒が式より大きくずれた時に
@@ -306,9 +313,16 @@ def _skewer(outer_part, outer, inner_part, inner, p):
         fit = -max(sec_o.distance(Point(pt)) for pt in sec_i.exterior.coords)
     if fit <= EPS:
         return None, Failure("3D.skewer", inner_part.label, f"内筒の断面が外筒の断面に収まらず（すき間 {fit:.1f}mm）、外筒に入らない")
-    tilt = abs(_dot(_sub(centers[1], centers[0]), up_i))
+    d = _sub(centers[1], centers[0])
+    tilt = abs(_dot(d, up_i))
     if tilt > TOL:
         return None, Failure("3D.skewer", "竹串", f"2 つの穴の高さが {tilt:.1f}mm 違い、竹串が傾く（溝の中で引っかかる）")
+    # 横のずれも同じく見る。高さだけがそろい、穴が向かい合わずに横へずれると、竹串が面へ斜めに交わる（レビューの指摘）。
+    # 穴のある面に垂直な向きと、軸の向きのどちらでもない向きの長さ
+    n1 = walls_of[0].normal
+    side = math.sqrt(max(0.0, _dot(d, d) - _dot(d, n1) ** 2 - _dot(d, up_i) ** 2))
+    if side > TOL:
+        return None, Failure("3D.skewer", "竹串", f"2 つの穴が向かい合っておらず（横に {side:.1f}mm ずれ）、竹串が斜めになる（溝の中で引っかかる）")
     H, L, s, r = top_o - bot_o, top_i - bot_i, p["push_amount"], p["knob_width"] / 2
     rest, push = H - s - L, H - L  # 内筒の底の、外筒の底からの高さ
 
@@ -331,15 +345,18 @@ def _skewer(outer_part, outer, inner_part, inner, p):
         hull = f.poly.convex_hull
         if not all(hull.covers(Point(pt)) for pt in q):
             continue  # 行程の端で面の外（筒の上か下）を通る面は、竹串が出る所ではない
-        clear = f.poly.distance(LineString(q)) - r
+        # 竹串が面へ斜めに交わると、面の上の切り口は楕円になり、長い方の半径は r / cos。安全側に、その半径の円で見る
+        # （上の横のずれの床を通った後は、斜めは 1° ほどまでなので、円にした分の差は小さい）
+        rf = r / abs(_dot(u, n))
+        clear = f.poly.distance(LineString(q)) - rf
         if best is None or clear > best[0]:
-            best = (clear, f, q)
+            best = (clear, f, q, rf)
     if best is None:
         return None, Failure("3D.skewer", "竹串", "竹串の線が、行程の間ずっと外筒の面を横切る所が無い（筒の外を通る）")
-    clear, f, (q0, q1) = best
+    clear, f, (q0, q1), rf = best  # rf はその面の上の竹串の切り口の半径（文に出す太さは r のまま）
     rest_h, push_h = (_dot(_sub(placed(centers[0], t), c_o), up_o) - bot_o for t in (rest, push))
     if clear < -EPS:
-        at_rest = f.poly.distance(Point(q0)) - r
+        at_rest = f.poly.distance(Point(q0)) - rf
         if at_rest < -EPS:
             return None, Failure("3D.skewer", "竹串", f"静かな時から、竹串（太さ {2 * r:g}mm）が外筒の紙に {-at_rest:.1f}mm 掛かり、溝を通らない")
         # 動きは真っ直ぐなので、紙に当たる所は行程の途中の 1 か所。二分で探す
@@ -347,14 +364,14 @@ def _skewer(outer_part, outer, inner_part, inner, p):
         for _ in range(40):
             mid = (lo + hi) / 2
             end = (q0[0] + (q1[0] - q0[0]) * mid, q0[1] + (q1[1] - q0[1]) * mid)
-            lo, hi = (mid, hi) if f.poly.distance(LineString([q0, end])) - r >= -EPS else (lo, mid)
+            lo, hi = (mid, hi) if f.poly.distance(LineString([q0, end])) - rf >= -EPS else (lo, mid)
         short = (1 - lo) * (push - rest)
         return None, Failure("3D.skewer", "竹串", f"押し上げ切る {short:.1f}mm 手前で、竹串が外筒の紙に当たり、溝を通り切らない")
-    c_rest, c_push = (f.poly.distance(Point(pt)) - r for pt in (q0, q1))
+    c_rest, c_push = (f.poly.distance(Point(pt)) - rf for pt in (q0, q1))
     stop = ""
     if c_push < TOL and nearest_points(f.poly, Point(q1))[0].y < q1[1] - EPS:
         stop = "。押し上げ切ると溝の上の端に届いて止まる"
-    return (f"並ぶ 竹串: 内筒は外筒の中に入る（断面のすき間 {fit:.2f}mm）。2 つの穴の高さの差 {tilt:.2f}mm で水平。"
+    return (f"並ぶ 竹串: 内筒は外筒の中に入る（断面のすき間 {fit:.2f}mm）。2 つの穴は向かい合い（高さの差 {tilt:.2f}mm・横のずれ {side:.2f}mm）、竹串は水平。"
             f"内筒を外筒の真ん中に入れ、竹串（太さ {2 * r:g}mm）の中心が底から "
             f"{rest_h:.1f}mm（静かな時）から {push_h:.1f}mm（押し上げ切る）まで、溝の中を通る（紙までの余り 静かな時 {c_rest:.2f}mm・"
             f"押し上げ切った時 {c_push:.2f}mm{stop}）"), None

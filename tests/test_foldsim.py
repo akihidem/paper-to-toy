@@ -206,6 +206,13 @@ def raise_hole(i, dy):
     return fn
 
 
+def shift_hole(i, dx):
+    def fn(q):
+        x, y, r = q.holes[i]
+        q.holes[i] = (x + dx, y, r)  # 同じ面の中で横へずらす（高さはそろったまま）
+    return fn
+
+
 def widen_first(dx):
     def fn(q):
         q.outline = [(x - dx if x == 0 else x, y) for x, y in q.outline]  # 1 面目の切る縁（x = 0）だけを外へ出す
@@ -252,6 +259,7 @@ NEG = [
     ("tube", notch(narrow=1.0), "3D.skewer", "竹串", "溝"),        # 溝を竹串より細くする（幅 5mm → 3mm、竹串 4mm）
     ("tube", notch(down=5.0), "3D.skewer", "竹串", "溝"),          # 溝の上の端を 5mm 下げる → 押し上げ切る前に当たる
     ("pusher", raise_hole(1, 2.0), "3D.skewer", "竹串", "傾"),     # 片方の穴を 2mm 上げる → 竹串が傾く
+    ("pusher", shift_hole(1, 2.0), "3D.skewer", "竹串", "向かい合って"),  # 片方の穴を 2mm 横へ → 竹串が面へ斜めに交わる
 ]
 for key, fn, floor, where, word in NEG:
     fl = fold3d.check(tampered(key, fn), p)[1]
@@ -295,4 +303,11 @@ with tempfile.TemporaryDirectory() as d:
     assert r.returncode == 4 and "まだ 3D で組めない" in r.stderr, r.stderr
     r = cli3d("--template", "nothing", "--params", params_file("tab.json", TAB))
     assert r.returncode == 4 and "知らない雛形" in r.stderr, r.stderr
+    # 3D の確かめだけが使う shapely の部分（split）が読めない時も、トレースバックの 1 でなく 4（雛形は split を使わないので、
+    # 型紙の読み込みの囲いでなく、fold3d の読み込みの囲いを通る）
+    (pathlib.Path(d) / "sitecustomize.py").write_text("import shapely.ops\ndel shapely.ops.split\n", encoding="utf-8")
+    env = {**ENV, "PYTHONPATH": f"{d}{os.pathsep}{ENV['PYTHONPATH']}"}
+    r = subprocess.run([sys.executable, "-m", "omochae.fold3d", "--scenario", str(ROOT / "examples/fan_tab.json")],
+                       cwd=ROOT, env=env, capture_output=True, text=True)
+    assert r.returncode == 4 and "確かめられない" in r.stderr and "split" in r.stderr and "Traceback" not in r.stderr, (r.returncode, r.stderr)
 print("ok")
