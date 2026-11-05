@@ -5,6 +5,9 @@
 段: take（入口）→ propose（案）→ adopt・reject（人の採否）→ release（次の版を刻む）→ compare（版ごとの数を並べる）。
 束を受けたら、人の操作を待たずに案を起こし、Issue の下書きまで置き場に置く（#72。take の命令が propose まで続けて回す）。
 人がするのは、束を渡す・下書きを読んで採否を決める・Issue を立てる・直しが入ったら版を刻む、の 4 つ。この道具は外へ何も送らない。
+材料は 2 つ（#79）: サイトからの束と、この repo の入口（omochae.intake）で人が受け入れた報告。どちらも同じ群の形に写して、同じ道で案にする。
+手順の番号つきの数と文は、紙（paper。報告では形の名）ごとに分けて数える。同じ雛形・同じ刷った組でも、紙が違えば組み方の手順の数と
+番号が違い、足すと「別の紙の別の段で止まった 2 人」が「同じ手順で止まった 2 人」になるため。工夫・動きの札・報告の数は、雛形と組で足す。
 判断の芯:
 - 型紙 1 枚の直し（寸法を 1 つ変えた次の版）は、サイトの側の輪が持つ。ここが見るのは、雛形から刷る全部の紙に効く直しだけ。
   行き先は 3 種: 雛形（その雛形の手順の文・部品の形）・部品（雛形をまたぐ共有の所。刷り方・凡例・位置の印）・
@@ -43,7 +46,8 @@ TZ = datetime.timezone(datetime.timedelta(hours=9))
 # current_sets（#68）: 雛形の id ごとの、今の刷った組の名。無くてもよい。この repo の雛形は組の名を持たない（刷るのはサイトの側）ので、
 # サイトが束に書く。前の組の紙の記録から起きた案を、人が見分けるために使う。
 TOP_KEYS = {"schema", "exported_at", "from", "dropped_pii", "current_sets", "groups"}
-GROUP_KEYS = {"template", "sheet_set", "reports", "results", "moved_word", "not_moved_word", "stuck_steps", "quit_steps", "craft_steps",
+# paper（#79）: どの紙か。無くてもよい。手順の番号は紙ごとに意味が違うので、手順ごとの数と文はこの名で分ける。名の形だけを受ける。
+GROUP_KEYS = {"template", "sheet_set", "paper", "reports", "results", "moved_word", "not_moved_word", "stuck_steps", "quit_steps", "craft_steps",
               "minutes", "measures", "record_ids", "texts"}
 TEXT_KEYS = {"kind", "step", "text", "count"}
 # 文の種類: 止まった所・直した点（工夫）・次の思いつき（工夫）・感想・聞く口の質問・試した記録への人の説明。
@@ -84,6 +88,9 @@ STATUS_JA = {"draft": "まだ採っていない案（採るか・採らないか
              "released": "採って、版に刻んだ案", "rejected": "採らないと決めた案"}
 # 文から拾う、雛形をまたぐ困り事の種類と、当たる共有の所。語は少なく保つ（広げるほど、関係の無い文を拾う）。拾い方は荒いので、
 # 案には当たった文をそのまま付け、人が読んで確かめる。
+# 報告の困り事の種類（omochae.feedback の KINDS）のうち、共有の所に当たる物。報告は種類を自分で持つので、文の語でなく種類で束ねる。
+PROBLEM_SHARED = ("fold", "glue", "mark", "cut")
+REPORTS_FROM = "engine-reports"  # 受け入れた報告を群に写した物の、出し元の名
 SHARED = {
     "fold": ("折り線の刷り方と凡例（render）", re.compile(r"折り線|谷折|山折|折る向き|破線|点線")),
     "glue": ("糊代の大きさと位置の描き方", re.compile(r"糊代|のりしろ|のり代")),
@@ -155,14 +162,16 @@ def check_bundle(b):
             continue
         if set(g) - GROUP_KEYS:
             bad(w, f"決まりの外の欄が {len(set(g) - GROUP_KEYS)} つある")
-        tid, ss = g.get("template"), g.get("sheet_set", "")
+        tid, ss, paper = g.get("template"), g.get("sheet_set", ""), g.get("paper", "")
         if not (isinstance(tid, str) and NAME.fullmatch(tid)):
             bad(f"{w}.template", "雛形の id の形でない")
         if not (isinstance(ss, str) and (ss == "" or NAME.fullmatch(ss))):
             bad(f"{w}.sheet_set", "刷った組の形でない（分からない時は空）")
-        if (tid, ss) in seen:
-            bad(w, "同じ雛形と刷った組の群が 2 つある")
-        seen.add((tid if isinstance(tid, str) else None, ss if isinstance(ss, str) else None))
+        if not (isinstance(paper, str) and (paper == "" or NAME.fullmatch(paper))):
+            bad(f"{w}.paper", "紙の名の形でない（無い時は空）")
+        if (tid, ss, paper) in seen:
+            bad(w, "同じ雛形・刷った組・紙の群が 2 つある")
+        seen.add(tuple(x if isinstance(x, str) else None for x in (tid, ss, paper)))
         if not _count(g.get("reports", 0)):
             bad(f"{w}.reports", "報告の数は 0 以上の整数")
         res = g.get("results", {})
@@ -276,9 +285,72 @@ def bundles():
     return [b for b, _ in latest.values()]
 
 
+def reports_dir():
+    """入口（omochae.intake）の置き場。試験と別の機械のために、環境の値で向け直せる。"""
+    return pathlib.Path(os.environ.get("OMOCHAE_REPORTS", ROOT / "local" / "reports"))
+
+
+def report_source():
+    """人が受け入れた報告を、束と同じ形に写す（#79）。Returns 束の形の dict か、報告が 1 件も無ければ None。
+    読むのは accepted だけ。受付箱（inbox）は、人が確かめる前なので読まない。受け入れた後に書き換えられて報告の検査に落ちる物も数えない。
+    紙は形（form）。刷った組は報告が持たないので不明（空）。1 件の報告は 1 人の 1 回の組み立てなので、止まった段の人の数は報告の数。
+    サービスの困り事（案内・聞く口・サイトの流れ）は写さない（エンジンの直しの行き先でない。feedback のサービスの集計が持つ）。"""
+    from .feedback import SERVICE_KINDS, check
+    from .intake import MOVED_JA
+
+    d = reports_dir() / "accepted"
+    out, dropped = {}, 0
+    for path in sorted(d.glob("*.json")) if d.is_dir() else []:
+        try:
+            r = _load(path)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(r, dict) or check(r):
+            continue
+        g = out.setdefault((r["template"], r["form"]), {
+            "template": r["template"], "sheet_set": "", "paper": r["form"], "reports": 0, "results": {}, "moved_word": MOVED_JA["moved"],
+            "not_moved_word": MOVED_JA["not"], "stuck_steps": {}, "quit_steps": {}, "minutes": None, "measures": {}, "texts": []})
+        g["reports"] += 1
+        g["results"][MOVED_JA[r["moved"]]] = g["results"].get(MOVED_JA[r["moved"]], 0) + 1
+        if r.get("minutes") is not None:
+            g["minutes"] = _join(g["minutes"], [r["minutes"], r["minutes"], 1])
+        g["measures"]["finish"] = _join(g["measures"].get("finish"), [r["finish"], r["finish"], 1])
+        problems = [pr for pr in r.get("problems") or [] if pr["kind"] not in SERVICE_KINDS]
+        # 止まった段: 止まった手順の欄と、困り事の手順。札は書かれた数、人は報告 1 件につき段ごとに 1 人。
+        mentions = [r["stuck_step"]] if r.get("stuck_step") is not None else []
+        mentions += [pr["step"] for pr in problems if pr.get("step") is not None]
+        for step in sorted(set(mentions)):
+            slot = g["stuck_steps"].setdefault(str(step), {"taps": 0, "people": 0})
+            slot["taps"] += mentions.count(step)
+            slot["people"] += 1
+        if r.get("gave_up") and r.get("stuck_step") is not None:
+            g["quit_steps"][str(r["stuck_step"])] = g["quit_steps"].get(str(r["stuck_step"]), 0) + 1
+        said = [("stuck", pr.get("step"), pr.get("note"), pr["kind"]) for pr in problems]
+        said += [("impression", None, r.get(key), None) for key in ("motion_notes", "finish_notes")]
+        for kind, step, text, problem in said:
+            text = " ".join(str(text or "").split())
+            if not text:
+                continue
+            if has_contact(text):  # 報告の検査を通った後でも、同じ床をもう一度当てる
+                dropped += 1
+                continue
+            text = text if len(text) <= MAX_TEXT else text[:MAX_TEXT - 1] + "…"
+            g["texts"].append({"kind": kind, "step": step, "text": text, "count": 1, **({"problem": problem} if problem else {})})
+    if not out:
+        return None
+    return {"schema": SCHEMA, "exported_at": _now(), "from": REPORTS_FROM, "dropped_pii": dropped, "groups": [out[k] for k in sorted(out)]}
+
+
+def sources():
+    """案の材料の全部: 置き場の束と、受け入れた報告（#79）。"""
+    reports = report_source()
+    return bundles() + ([reports] if reports else [])
+
+
 def groups(bs):
     """束の群を、雛形と刷った組ごとに合わせる（出し元が違う束の、同じ雛形・同じ組を足す）。
-    今の刷った組は、新しい束の値で読む（組は進むので、前の束の「今」は古い）。"""
+    今の刷った組は、新しい束の値で読む（組は進むので、前の束の「今」は古い）。
+    手順ごとの数（止まった段・やめた段・話した工夫の段）は、（紙, 手順）を鍵にして、紙ごとに分けたまま持つ。文も紙の名を持つ。"""
     out = {}
     now = {}
     for b in sorted(bs, key=lambda b: b["exported_at"]):
@@ -294,21 +366,24 @@ def groups(bs):
                 m["results"][k] = m["results"].get(k, 0) + v
             for key2 in ("moved_word", "not_moved_word"):
                 m[key2] = m[key2] or g.get(key2, "")
+            paper = g.get("paper", "")
             for k, v in g.get("stuck_steps", {}).items():
-                s = m["stuck_steps"].setdefault(_step(k), {"taps": 0, "people": 0})
+                s = m["stuck_steps"].setdefault((paper, _step(k)), {"taps": 0, "people": 0})
                 s["taps"] += v["taps"]
                 s["people"] += v["people"]
             for k, v in g.get("quit_steps", {}).items():
-                m["quit_steps"][_step(k)] = m["quit_steps"].get(_step(k), 0) + v
+                m["quit_steps"][(paper, _step(k))] = m["quit_steps"].get((paper, _step(k)), 0) + v
             for k, v in g.get("craft_steps", {}).items():
-                c = m["craft_steps"].setdefault(_step(k), {"talks": 0, "people": 0})
+                c = m["craft_steps"].setdefault((paper, _step(k)), {"talks": 0, "people": 0})
                 c["talks"] += v["talks"]
                 c["people"] += v["people"]
             m["minutes"] = _join(m["minutes"], g.get("minutes"))
             for k, v in g.get("measures", {}).items():
                 m["measures"][k] = _join(m["measures"].get(k), v)
             m["record_ids"] += [r for r in g.get("record_ids", []) if r not in m["record_ids"]]
-            m["texts"] += [{"kind": t["kind"], "step": t.get("step"), "text": t["text"], "count": t.get("count", 1)} for t in g.get("texts", [])]
+            # problem は、受け入れた報告の困り事の種類（report_source が付ける。束の文の欄には無い）
+            m["texts"] += [{"kind": t["kind"], "step": t.get("step"), "text": t["text"], "count": t.get("count", 1), "paper": paper,
+                            **({"problem": t["problem"]} if t.get("problem") else {})} for t in g.get("texts", [])]
     return out
 
 
@@ -328,6 +403,16 @@ def _set_note(ss, cur):
     return f"今の組は {cur}。この記録は前の組の紙の物（もう直っているかを、先に見る）。"
 
 
+def _on(paper):
+    """紙の名を、文の中に並べる時の形。紙の名が無い（前の形の束）時は、何も足さない。"""
+    return f"（紙 {paper}）" if paper else ""
+
+
+def _step_key(kind, tid, ss, paper, step):
+    """手順ごとの案の鍵。紙の名が無い時は、前からの鍵のまま（前に起きた案を、起こし直さない）。"""
+    return f"{kind}:{tid}:{ss}:{step}" if not paper else f"{kind}:{tid}:{ss}:{paper}:{step}"
+
+
 def drafts(gs):
     """群から直しの案（下書き）を起こす。Returns 案の list（まだ置かない）。key は同じ案を 2 度起こさないための鍵。
     案は行き先・題・数・当たった文だけを持つ。新しい寸法の値は持たない。"""
@@ -341,34 +426,36 @@ def drafts(gs):
         first = len(out)
         # 雛形: 同じ手順で止まった人が重なった所。その段で話された工夫も付ける（止まった所を、別の人がどう越えたかが並ぶ）。
         stuck_here = set()
-        for step, s in sorted(g["stuck_steps"].items()):
+        for (paper, step), s in sorted(g["stuck_steps"].items()):
             if s["people"] >= STUCK_PEOPLE or (s["people"] == 0 and s["taps"] >= STUCK_TAPS):
-                c = g["craft_steps"].get(step, {"talks": 0, "people": 0})
-                stuck_here.add(step)
-                out.append({"key": f"stuck:{tid}:{ss}:{step}", "target": {"kind": "template", "name": tid}, "template": tid, "sheet_set": ss, "step": step,
-                            "title": f"{tid}: 手順 {step} の文と、その段の部品の形を見直す",
-                            "numbers": {"stuck_taps": s["taps"], "stuck_people": s["people"], "quit_people": g["quit_steps"].get(step, 0),
+                c = g["craft_steps"].get((paper, step), {"talks": 0, "people": 0})
+                stuck_here.add((paper, step))
+                out.append({"key": _step_key("stuck", tid, ss, paper, step), "target": {"kind": "template", "name": tid}, "template": tid, "sheet_set": ss,
+                            "paper": paper, "step": step,
+                            "title": f"{tid}{_on(paper)}: 手順 {step} の文と、その段の部品の形を見直す",
+                            "numbers": {"stuck_taps": s["taps"], "stuck_people": s["people"], "quit_people": g["quit_steps"].get((paper, step), 0),
                                         "craft_talks": c["talks"], "craft_people": c["people"], "reports": g["reports"]},
-                            "why": f"{where}の手順 {step} で、止まったの札が {s['taps']} 回（印のある人 {s['people']} 人）。",
-                            "evidence": [t for t in g["texts"] if t["step"] == step and t["kind"] in ("stuck", "question", "craft")],
+                            "why": f"{where}{_on(paper)}の手順 {step} で、止まったの札が {s['taps']} 回（印のある人 {s['people']} 人）。",
+                            "evidence": [t for t in g["texts"] if t["paper"] == paper and t["step"] == step and t["kind"] in ("stuck", "question", "craft")],
                             "record_ids": g["record_ids"], "in_engine": here})
         # 雛形: 止まったの札は重なっていないが、同じ手順で工夫を話した人が重なった所。止まった段の案が起きる段では、
         # 工夫はその案に付けてあるので、同じ段に 2 つの案を起こさない。
-        for step, c in sorted(g["craft_steps"].items()):
-            if step not in stuck_here and (c["people"] >= CRAFT_PEOPLE or (c["people"] == 0 and c["talks"] >= CRAFT_TALKS)):
-                s = g["stuck_steps"].get(step, {"taps": 0, "people": 0})
-                out.append({"key": f"talk:{tid}:{ss}:{step}", "target": {"kind": "template", "name": tid}, "template": tid, "sheet_set": ss, "step": step,
-                            "title": f"{tid}: 手順 {step} で話された工夫を、組み方の文に入れるか見る",
+        for (paper, step), c in sorted(g["craft_steps"].items()):
+            if (paper, step) not in stuck_here and (c["people"] >= CRAFT_PEOPLE or (c["people"] == 0 and c["talks"] >= CRAFT_TALKS)):
+                s = g["stuck_steps"].get((paper, step), {"taps": 0, "people": 0})
+                out.append({"key": _step_key("talk", tid, ss, paper, step), "target": {"kind": "template", "name": tid}, "template": tid, "sheet_set": ss,
+                            "paper": paper, "step": step,
+                            "title": f"{tid}{_on(paper)}: 手順 {step} で話された工夫を、組み方の文に入れるか見る",
                             "numbers": {"craft_talks": c["talks"], "craft_people": c["people"], "stuck_taps": s["taps"], "stuck_people": s["people"], "reports": g["reports"]},
-                            "why": f"{where}の手順 {step} で、作りながら話された工夫が {c['talks']} 件（印のある人 {c['people']} 人）。",
-                            "evidence": [t for t in g["texts"] if t["step"] == step and t["kind"] == "craft"],
+                            "why": f"{where}{_on(paper)}の手順 {step} で、作りながら話された工夫が {c['talks']} 件（印のある人 {c['people']} 人）。",
+                            "evidence": [t for t in g["texts"] if t["paper"] == paper and t["step"] == step and t["kind"] == "craft"],
                             "record_ids": g["record_ids"], "in_engine": here})
         # 雛形: 工夫の言葉（作った人が直した点・次の思いつき・作りながら話した工夫・できた後の話）。1 件でも案にする
         # （直した人は、型紙の足りない所を実物で見つけている）。
         craft = [t for t in g["texts"] if t["kind"] in ("fix", "idea", "craft", "keep")]
         if craft:
             n_fix, n_idea, n_talk, n_keep = (sum(t["count"] for t in craft if t["kind"] == k) for k in ("fix", "idea", "craft", "keep"))
-            out.append({"key": f"craft:{tid}:{ss}", "target": {"kind": "template", "name": tid}, "template": tid, "sheet_set": ss, "step": None,
+            out.append({"key": f"craft:{tid}:{ss}", "target": {"kind": "template", "name": tid}, "template": tid, "sheet_set": ss, "paper": None, "step": None,
                         "title": f"{tid}: 作った人の工夫（直した点と思いつき）を、雛形に入れるか見る",
                         "numbers": {"fixes": n_fix, "ideas": n_idea, "craft_talks": n_talk, "keeps": n_keep, "reports": g["reports"]},
                         "why": f"{where}で、作った人が直した点が {n_fix} 件、思いつきが {n_idea} 件、作りながら話した工夫が {n_talk} 件、できた後の話が {n_keep} 件。",
@@ -377,7 +464,8 @@ def drafts(gs):
         # 作る前の考え（仮説を見て、どう動くと思ったか）もここに付ける。考えだけでは案にしない。
         not_moved = g["results"].get(g["not_moved_word"], 0) if g["not_moved_word"] else 0
         if not_moved >= NOT_MOVED:
-            out.append({"key": f"motion:{tid}:{ss}", "target": {"kind": "rule", "name": f"{tid} の動きの床と既定の寸法"}, "template": tid, "sheet_set": ss, "step": None,
+            out.append({"key": f"motion:{tid}:{ss}", "target": {"kind": "rule", "name": f"{tid} の動きの床と既定の寸法"}, "template": tid, "sheet_set": ss,
+                        "paper": None, "step": None,  # 動きの札は、雛形と組で足す（紙で分けない）
                         "title": f"{tid}: 動きの床の式と既定の寸法を見直す",
                         "numbers": {"not_moved": not_moved, "moved": g["results"].get(g["moved_word"], 0), "reports": g["reports"]},
                         "why": f"{where}は検査を通って刷られた紙で、「{g['not_moved_word']}」の札が {not_moved} 件（報告 {g['reports']} 件）。",
@@ -386,15 +474,16 @@ def drafts(gs):
         for d in out[first:]:
             d.update(current_set=cur, why=d["why"] + note)
         for t in g["texts"]:
-            for kind, (_, words) in SHARED.items():
-                if words.search(t["text"]):
-                    shared.setdefault(kind, {}).setdefault(tid, []).append({**t, "template": tid, "sheet_set": ss})
+            # 報告の困り事は種類を自分で持つので、それで束ねる。束の文は種類を持たないので、語で拾う（荒い束ね）。
+            hits = [t["problem"]] if t.get("problem") in PROBLEM_SHARED else [k for k, (_, words) in SHARED.items() if words.search(t["text"])]
+            for kind in hits:
+                shared.setdefault(kind, {}).setdefault(tid, []).append({**t, "template": tid, "sheet_set": ss})
     # 部品（共有の所）: 同じ種類の困り事が、2 つ以上の雛形で出た時。
     for kind, by_tpl in sorted(shared.items()):
         if len(by_tpl) >= SHARED_TEMPLATES:
             texts = [t for tid in sorted(by_tpl) for t in by_tpl[tid]]
             out.append({"key": f"shared:{kind}:{'+'.join(sorted(by_tpl))}", "target": {"kind": "part", "name": SHARED[kind][0]}, "template": None, "sheet_set": None,
-                        "current_set": None, "step": None,  # 雛形をまたぐ案なので、組は当たった文ごとに持つ
+                        "current_set": None, "paper": None, "step": None,  # 雛形をまたぐ案なので、組と紙は当たった文ごとに持つ
                         "title": f"共有の所: {SHARED[kind][0]}を見直す",
                         "numbers": {"templates": len(by_tpl), "texts": sum(t["count"] for t in texts)},
                         "why": f"同じ種類の困り事が {len(by_tpl)} つの雛形（{'・'.join(sorted(by_tpl))}）で出た。雛形ごとでなく共有の所に当たるかを見る。",
@@ -420,7 +509,7 @@ def propose():
     have = {p["key"]: p for p in proposals()}
     d = _dirs()["proposals"]
     made, renewed = [], []
-    for dr in drafts(groups(bundles())):
+    for dr in drafts(groups(sources())):
         old = have.get(dr["key"])
         if old is None:
             n = max((int(p.stem[3:]) for p in d.glob("EP-*.json")), default=0) + 1
@@ -467,7 +556,7 @@ def issue_draft(p):
               "## ゴールの要件", "- 直しの前後で、必須 2 種の刷った絵と凍結の場面が変わらない（変える時は理由を書く）。",
               "- 直しが main に入ったら `python -m omochae.engine_loop release` で次の版を刻み、次の束の数を `compare` で並べて人が読む。", "",
               "---", f"{MATERIAL}（Issue に写さない。作った人の言葉。名前や連絡先が無いかも、人が読む）:"]
-    lines += [f"- {TEXT_JA[t['kind']]}" + (f"（手順 {t['step']}）" if t.get("step") else "") + (f"（{t['template']}）" if t.get("template") else "")
+    lines += [f"- {TEXT_JA[t['kind']]}" + (f"（手順 {t['step']}）" if t.get("step") else "") + (f"（{t['template']}）" if t.get("template") else "") + _on(t.get("paper"))
               + f": 「{t['text']}」× {t['count']}" for t in p["evidence"]] or ["- （当たった文は無い）"]
     return "\n".join(lines + [""])
 
@@ -550,8 +639,9 @@ def compare(gs, led):
             v = version_of.get((tid, ss))
             ver = f"版 {v['version']}（{'・'.join(p['id'] for p in v['proposals'])}）" if v else "—"
             res = "・".join(f"{k} {n}" for k, n in g["results"].items()) or "—"
-            stuck = "、".join(f"手順 {k}: {s['taps']} 回・{s['people']} 人" for k, s in sorted(g["stuck_steps"].items())) or "—"
-            quit_ = "、".join(f"手順 {k}: {n}" for k, n in sorted(g["quit_steps"].items())) or "—"
+            of = lambda paper: f"{paper} の" if paper else ""  # 紙の名がある時は、どの紙の手順かを並べる
+            stuck = "、".join(f"{of(pp)}手順 {k}: {s['taps']} 回・{s['people']} 人" for (pp, k), s in sorted(g["stuck_steps"].items())) or "—"
+            quit_ = "、".join(f"{of(pp)}手順 {k}: {n}" for (pp, k), n in sorted(g["quit_steps"].items())) or "—"
             m = g["minutes"]
             mins = (f"{m[0]:g}" if m[0] == m[1] else f"{m[0]:g}〜{m[1]:g}") + f"（{m[2]} 件）" if m else "—"
             said = "・".join(f"{ja} {n}" for ja, n in ((ja, sum(t["count"] for t in g["texts"] if t["kind"] == k)) for k, ja in TALK_JA.items()) if n) or "—"
@@ -657,7 +747,7 @@ def main(argv=None):
             return 0
         led = ledger()
         if args.cmd == "compare":
-            print(compare(groups(bundles()), led))
+            print(compare(groups(sources()), led))
             return 0
         now = max((v["version"] for v in led["versions"]), default=0)
         print(f"エンジンの版 {now}。次の版の予定 {len(led.get('next', []))} 件")
