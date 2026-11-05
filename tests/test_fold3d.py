@@ -195,6 +195,8 @@ NEG = [
     ("fan", fan_x(lambda x, h: x + 10 if x == h else x), "3D.fan", "4 扇", "隠れない"),       # 板を 10mm 高く描く → 静かな時に口から出る
     ("fan", fan_x(lambda x, h: x + 2.0 if x == h else x), "3D.fan", "4 扇", "同じ高さ"),       # ちょうど 2mm 高く → 口と同じ高さも隠れていない
     ("fan", lambda q: q.holes.clear(), "3D.fan", "4 扇", "要の穴か足"),                       # 軸の形なのに要の穴が無い → 口の台と取り違えない
+    ("tube", lambda q: q.holes.pop(), "3D.fan", "1 外筒", "向かい合う"),                      # 開く糸の穴が 1 つだけ → 向きが決まらない
+    ("tube", lambda q: q.holes.__setitem__(1, (2.5 * A, q.holes[1][1], q.holes[1][2])), "3D.fan", "1 外筒", "向かい合う"),  # 隣の面へ
     ("fan", lambda q: setattr(q, "valley", [(a, b) for a, b in q.valley if not (abs(a[0] - b[0]) < 1e-9 and a[0] < 0)]),
      "3D.fan", "4 扇", "要の穴か足"),                                                       # 足の糊代の境の折り線が無い
     ("fan", fan_leg(-10.0), "3D.fan", "4 扇", "隠れない"),                                  # 足を 10mm 長く描く → 扇ごと上がって口から出る
@@ -217,6 +219,9 @@ for key, fn, want in (("pusher", move_hole(1, dy=2.0), "（手順 6）"), ("push
                       ("tube", notch(dx=3.0), "（手順 12）"), ("tube", notch(down=5.0), "（手順 13）")):
     fl = fold3d.check(tampered(key, fn), p)[1]
     assert len(fl) == 1 and fl[0].message.endswith(want), (want, [f.line() for f in fl])
+# 開く糸の穴が全く無い時だけ、1 面目に平行と置いて続け、その事を所見で言う（落とさない）
+none = fold3d.check(tampered("tube", lambda q: q.holes.clear()), p)
+assert not none[1] and "開く糸の穴が無いので、この向きと置いた" in none[0][-1], none
 # 崩す前の部品はそのまま通る（上の負の対照が、写し方のせいで落ちたのでない事）
 assert not fold3d.check(tampered("tube", lambda q: None), p)[1]
 print("ok 2")

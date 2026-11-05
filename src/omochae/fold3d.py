@@ -536,7 +536,12 @@ def _fan(st):
     sides = sorted((f for f in outer if f not in _glue_faces(outer_part, outer)), key=lambda f: f.poly.bounds[0])
     # 開く面: 開く糸の穴のある面が向かい合う 2 面なら、その 2 面に垂直（＝ほかの 2 面に平行）。無ければ FAN_PLANE_PANEL に平行と置く
     holed = [f for f in sides if any(f.poly.contains(Point(x, y)) for x, y, _ in outer_part.holes)]
-    if len(holed) == 2 and _dot(holed[0].normal, holed[1].normal) < -1 + EPS:
+    if holed and not (len(holed) == 2 and _dot(holed[0].normal, holed[1].normal) < -1 + EPS):
+        # 穴はあるのに、向かい合う 2 面に無い（1 面だけ・3 面以上・隣の面）のは、描いた穴の崩れ。穴が無い時と取り違えて
+        # 決めた向きで続けない（レビューの指摘）
+        faces = "・".join(str(sides.index(f) + 1) for f in holed)
+        return [(None, Failure("3D.fan", outer_part.label, f"開く糸の穴が向かい合う 2 つの面に無く（穴のある面: {faces} 面目）、扇の開く向きが決まらない"))]
+    if holed:
         fan_n = _cross(up, holed[0].normal)
         plane = next(i for i, f in enumerate(sides, 1) if abs(abs(_dot(f.normal, fan_n)) - 1) < EPS)
         how = f"{plane} 面目に平行に開き（開く糸の穴のある {'・'.join(str(sides.index(f) + 1) for f in holed)} 面目に垂直な向き）"
