@@ -17,6 +17,7 @@ import re
 import sys
 
 from .compose import TEMPLATES
+from .sheets import is_sheet, reading_of, source_of
 
 # 紙一枚の印を外す材料の語。道具（糊・はさみ・定規・カッター・下敷き・目打ち・鉛筆・ニッパー・紙やすり、
 # 硬さを測るのに下げる硬貨）は、玩具の材料でないので入れない。
@@ -69,8 +70,13 @@ def marks(template_id, form):
 
 
 def table():
-    """全部の雛形の全部の形の印。サイトの絞り込みに使う。"""
-    return [{"template": tid, "form": str(f), **details(tid, f)} for tid, t in sorted(TEMPLATES.items()) for f in t.FORMS]
+    """全部の雛形の全部の形の印。サイトの絞り込みに使う。
+    sheet は、その形が玩具の型紙の 1 枚か（本人の決定「玩具 1 つに型紙 1 枚」・omochae.sheets）。サイトは sheet の行だけを
+    型紙として出す。別の読みの行（sheet が false）も消さずに残し、reading_of で型紙の形を指す（試行錯誤のヒントに使える）。
+    行を消さないのは、今の一覧を読む側（サイト）の形を壊さず、足した欄で絞れるようにするため。"""
+    return [{"template": tid, "form": str(f), "source_id": source_of(tid, f), "sheet": is_sheet(tid, f),
+             "reading_of": reading_of(tid, f), **details(tid, f)}
+            for tid, t in sorted(TEMPLATES.items()) for f in t.FORMS]
 
 
 def main(argv=None):
