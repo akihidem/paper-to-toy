@@ -51,7 +51,8 @@ def scenario_from_args(args):
     """--scenario か、--template・--source・--params から場面を作る。型紙の書き出し（omochae.foldsim）も同じ入口を使う。"""
     if args.scenario:
         return json.loads(pathlib.Path(args.scenario).read_text(encoding="utf-8"))
-    # 寸法を直に渡す入口。刷る形を決める寸法（雛形の FORM）は仮説の違いそのものなので、必ず書かせる（既定の答えを作らない）。
+    # 寸法を直に渡す入口。刷る形を決める寸法（雛形の FORM）は必ず書かせる（どの形を刷ったかを、呼んだ側の JSON に残すため）。
+    # 玩具の型紙の 1 枚（たたき台）がどの形かは omochae.sheets が持つ（本人の決定 2026-11-05「玩具 1 つに型紙 1 枚」）。
     if args.template not in TEMPLATES:
         raise ToolMissing(f"知らない雛形: {args.template}（{'・'.join(TEMPLATES)} のどれか）")
     tpl = TEMPLATES[args.template]

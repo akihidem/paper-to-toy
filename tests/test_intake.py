@@ -127,4 +127,10 @@ with tempfile.TemporaryDirectory() as d:
     (pathlib.Path(d) / "inbox" / f"{rid2}.json").write_text(shown.replace("息で回った", "息で回った。山田"), encoding="utf-8")
     assert intake.accept(rid2, pathlib.Path(d), confirm=rid2, shown=shown)[0] is False
     assert not (pathlib.Path(d) / "accepted" / f"{rid2}.json").exists()
+
+# 命令の間違った呼び方は rc 4（2 は使わない）
+for wrong in ((), ("nope",), ("review",), ("review", "nope"), ("serve", "--port", "x")):
+    r = subprocess.run([sys.executable, "-m", "omochae.intake", *wrong], capture_output=True, text=True, cwd=ROOT,
+                       env={"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin"})
+    assert r.returncode == 4, (wrong, r.returncode, r.stderr)
 print("ok")

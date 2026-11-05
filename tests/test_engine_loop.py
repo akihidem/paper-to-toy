@@ -50,7 +50,7 @@ assert cli("check", "examples/bundles/sample_made_up.json").returncode == 0
 # 話した事（#65）: 文の種類 3 つと、群の craft_steps。前の形の束（どちらも無い）も、そのまま通る
 assert set(el.TEXT_KINDS) >= {"think", "craft", "keep"} and "craft_steps" in el.GROUP_KEYS
 assert {"think", "craft", "keep"} <= {t["kind"] for g in SAMPLE["groups"] for t in g["texts"]}
-TALK = ("think", "craft", "keep")
+TALK = ("think", "craft", "keep", "review")
 
 
 def old_shape(b):
@@ -112,6 +112,7 @@ for p in auto:
     md = (ISSUES / f"{p['id']}.md").read_text(encoding="utf-8")
     assert all(h in md for h in ("## 目的", "## なぜか（根拠）", "## どうしたらいいか", "## ゴールの要件")), p["id"]
     assert "まだ採っていない案" in md.split("## 目的")[0] and "立てるのは人" in md.split("## 目的")[0] and PHONE not in md
+    assert "`PYTHONPATH=src .venv/bin/python -m omochae.engine_loop release`" in md, "下書きの命令は README と同じ字（python の名前が無い機械でも打てる）"
 assert f"新しい案 {len(auto)} 件" in r.stdout and "Issue の下書き" in r.stdout and all(p["id"] in r.stdout for p in auto)
 # この道具は、外へ何も送らない（Issue を立てるのは人）。網や外の命令を使う呼び出しを持たない
 code = (ROOT / "src/omochae/engine_loop.py").read_text(encoding="utf-8")
@@ -126,7 +127,7 @@ newer = variant(lambda b: b.update(exported_at="2026-11-05T16:00+09:00"))
 assert el.take(newer)[0] is not None
 assert len(el.bundles()) == 1 and el.bundles()[0]["exported_at"] == "2026-11-05T16:00+09:00"
 gs = el.groups(el.bundles())
-assert gs[("slider_fan", "goraigo-v10")]["reports"] == 5
+assert gs[("slider_fan", "goraigo-v10", "")]["reports"] == 5
 
 # 5. 案: 雛形・部品（共有の所）・生成の決まり の 3 種が出る。案は数と文だけで、新しい寸法の値を持たない。2 度起こさない
 assert el.propose() == ([], [])  # 束の中身が同じなら、新しい案も、新しくする案も無い
@@ -160,7 +161,18 @@ assert by_key["talk:pivot_counterweight:tora-v3:4"]["numbers"]["craft_talks"] ==
 few = el.groups([variant(lambda b: b["groups"][1]["craft_steps"].update({"4": {"talks": 2, "people": 0}}))])
 assert not any(d["key"].startswith("talk:pivot_counterweight") for d in el.drafts(few))
 # 前の形の束からは、前と同じ鍵の案だけが起きる（話した事の案は起きない）
-assert {d["key"] for d in el.drafts(el.groups([OLD]))} == {k for k in by_key if not k.startswith("talk:")}
+assert {d["key"] for d in el.drafts(el.groups([OLD]))} == {k for k in by_key if not k.startswith(("talk:", "review:"))}
+# 作る前の型紙のレビュー（経験者が、作らずに型紙を読んだ指摘）: 人が確かめた字だけが束に来るので、1 件から案にする。作っていないので、
+# 止まった段にも工夫の数にも、報告の数にも入れない
+rv = by_key["review:slider_fan:goraigo-v10"]
+assert rv["target"] == {"kind": "template", "name": "slider_fan"} and rv["numbers"] == {"reviews": 1, "reports": 5} and "レビュー" in rv["title"]
+assert [(t["kind"], t["step"], t["text"]) for t in rv["evidence"]] == [("review", 8, "このつまみの幅だと、大人の指では押しにくそう")]
+assert not [k for k in by_key if k.endswith(":8") and k.startswith(("stuck:", "talk:"))]
+assert "review" not in {t["kind"] for t in by_key["craft:slider_fan:goraigo-v10"]["evidence"]}
+assert "作る前のレビュー（手順 8）" in el.issue_draft({**rv, "id": "EP-0000"}).split("---")[1]
+only_review = variant(lambda b: b.update(groups=[{"template": "slider_fan", "sheet_set": "goraigo-v10", "reports": 0,
+                                                  "texts": [{"kind": "review", "step": None, "text": "外筒の糊代が細く見える", "count": 1}]}]))
+assert el.check_bundle(only_review) == [] and [d["key"] for d in el.drafts(el.groups([only_review]))] == ["review:slider_fan:goraigo-v10"]
 assert "motion:pivot_counterweight:tora-v3" not in by_key
 fold = by_key["shared:fold:pivot_counterweight+slider_fan"]
 assert fold["target"]["kind"] == "part" and fold["numbers"]["templates"] == 2
@@ -194,7 +206,7 @@ assert all("今の組" not in d["why"] and not d["current_set"] for d in no_cur.
 # この repo に無い雛形の群も数える（サイトの側の雛形）。案には、無い事を書く。出し元が違う束の同じ群は、足して数える
 only_site = variant(lambda b: (b.update({"from": "other-site", "groups": [b["groups"][2]]}), b["groups"][0]["stuck_steps"].update({"4": {"taps": 2, "people": 2}})))
 assert el.take(only_site)[0] is not None
-assert el.groups(el.bundles())[("den_den", "den_den-v1")]["reports"] == 2
+assert el.groups(el.bundles())[("den_den", "den_den-v1", "sample-toy.H-A")]["reports"] == 2
 extra = {p["key"]: p for p in el.propose()[0]}
 assert (ISSUES / f"{extra['stuck:den_den:den_den-v1:sample-toy.H-A:4']['id']}.md").exists()  # 手で propose を打った時も、下書きが出る
 assert extra["stuck:den_den:den_den-v1:sample-toy.H-A:4"]["in_engine"] is False
@@ -292,10 +304,10 @@ out = r.stdout
 rows = [ln for ln in out.splitlines() if ln.startswith("| goraigo-")]
 # 今の組の行に印が付く。今の組は、新しい束の値で読む（前の束では v10 が今の組だった）
 assert [ln.split("|")[1].strip() for ln in rows] == ["goraigo-v9", "goraigo-v10", "goraigo-v11（今の組）"], rows
-assert "| goraigo-v10 | — | 5 件 | 動いた 2・動かない 2・わからない 1 | 手順 3: 4 回・2 人、手順 5: 1 回・1 人 | 手順 3: 1 | 20〜40（3 件） | 考え 1・工夫 5・できた後 1 |" in out, out
-assert f"| goraigo-v11（今の組） | 版 1（{sid}） | 3 件 | 動いた 3 | 手順 3: 1 回・1 人 | — | 10〜25（3 件） | 工夫 1 |" in out, out
+assert "| goraigo-v10 | — | — | 5 件 | 動いた 2・動かない 2・わからない 1 | 手順 3: 4 回・2 人、手順 5: 1 回・1 人 | 手順 3: 1 | 20〜40（3 件） | 考え 1・工夫 5・できた後 1・レビュー 1 |" in out, out
+assert f"| goraigo-v11（今の組） | — | 版 1（{sid}） | 3 件 | 動いた 3 | 手順 3: 1 回・1 人 | — | 10〜25（3 件） | 工夫 1 |" in out, out
 assert "| tora-v3（今の組） |" in out
-assert "| den_den-v1 | — | 2 件 | 鳴った 2 | sample-toy.H-A の手順 4: 2 回・2 人 | — | — | — |" in out, out  # 紙の名がある群は、どの紙の手順かが並ぶ
+assert "| den_den-v1 | sample-toy.H-A | — | 2 件 | 鳴った 2 | 手順 4: 2 回・2 人 | — | — | — |" in out, out  # 紙の名がある群は、紙ごとの行になる
 assert "判定はしない" in out and "den_den（この repo の雛形の一覧に無い）" in out
 for word in ("効いた", "改善し", "良くな", "悪くな", "増えた", "減った", "上がっ", "下がっ", "%", "％", "↑", "↓", "平均"):
     assert word not in out, word
@@ -332,9 +344,18 @@ assert not [k for k in pk if k.startswith("stuck:") and k.endswith(":3")], sorte
 s4 = pk["stuck:slider_fan:goraigo-v10:stick:4"]
 assert s4["paper"] == "stick" and s4["step"] == 4 and s4["numbers"]["stuck_people"] == 2 and s4["numbers"]["quit_people"] == 1
 assert "stick" in s4["title"] and [t["text"] for t in s4["evidence"]] == ["柄の先の差し込みがきつい"]
-# 動きの札と報告の数は、紙で分けた後も、雛形と組で足す（紙 2 つで 5 件ずつ → 10 件）
-assert el.groups([papers])[("slider_fan", "goraigo-v10")]["reports"] == 10 and pk["motion:slider_fan:goraigo-v10"]["numbers"]["not_moved"] == 4
-assert "stick の手順 4: 2 回・2 人" in el.compare(el.groups([papers]), {"versions": [], "next": []})
+# 動きの札と報告の数も紙ごと（玩具 = 雛形 + 形。別の玩具の札を足して案にしない）
+assert el.groups([papers])[("slider_fan", "goraigo-v10", "stick")]["reports"] == 5 and pk["motion:slider_fan:goraigo-v10:stick"]["numbers"]["not_moved"] == 2
+assert pk["motion:slider_fan:goraigo-v10:tab"]["numbers"]["not_moved"] == 2 and "motion:slider_fan:goraigo-v10" not in pk
+
+
+def row_of(out, paper):
+    """版ごとの数の表の、その紙の行。"""
+    return next(x for x in out.splitlines() if f"| {paper} |" in x or f"| {paper}（" in x)
+
+
+listed = el.compare(el.groups([papers]), {"versions": [], "next": []})
+assert "手順 4: 2 回・2 人" in row_of(listed, "stick") and "手順 4" not in row_of(listed, "tab")
 
 # 12. 人が受け入れた報告も集計する（#79）。入口（omochae.intake）の accepted だけを読み、受付箱（inbox）は読まない。
 # 報告は形（form）を持つので、紙 = 形。サービスの困り事（案内・聞く口・サイトの流れ）は、エンジンの案にしない
@@ -359,15 +380,16 @@ report("in1", where="inbox", stuck_step=5)
 report("in2", where="inbox", stuck_step=5)  # 受付箱にあるだけの報告は、人が確かめる前なので数えない
 report("bad", stuck_step=7, motion_notes=f"分からない時は {PHONE} へ")  # 受け入れた後に手で書き換えられた形。報告の検査に落ちる物は数えない
 rg = el.groups(el.sources())
-fan = rg[("slider_fan", "")]
-assert fan["reports"] == 3 and fan["results"] == {"動かない": 2, "動いた": 1} and fan["minutes"] == [25, 40, 2], fan
-assert fan["measures"]["finish"] == [2, 4, 3] and (fan["moved_word"], fan["not_moved_word"]) == ("動いた", "動かない")
+fan = rg[("slider_fan", "", "tab")]
+assert fan["reports"] == 2 and fan["results"] == {"動かない": 2} and fan["minutes"] == [25, 40, 2], fan
+assert fan["measures"]["finish"] == [2, 3, 2] and (fan["moved_word"], fan["not_moved_word"]) == ("動いた", "動かない")
+assert rg[("slider_fan", "", "stick")]["results"] == {"動いた": 1}
 rk = {d["key"]: d for d in el.drafts(rg)}
 st = rk["stuck:slider_fan::tab:3"]
 assert st["numbers"]["stuck_people"] == 2 and st["numbers"]["stuck_taps"] == 3 and st["numbers"]["quit_people"] == 1 and st["paper"] == "tab"
 assert "足をどちらへ折るのかが分からない" in [t["text"] for t in st["evidence"]]
 assert "stuck:slider_fan::stick:3" not in rk and not [k for k in rk if ":5" in k or ":7" in k], sorted(rk)
-assert rk["motion:slider_fan:"]["numbers"] == {"not_moved": 2, "moved": 1, "reports": 3}
+assert rk["motion:slider_fan::tab"]["numbers"] == {"not_moved": 2, "moved": 0, "reports": 2} and "（紙 tab）" in rk["motion:slider_fan::tab"]["title"]
 # 困り事の種類が同じ物が 2 つ以上の雛形で出たら、共有の所の案（文の語でなく、報告の種類で束ねる）
 fold = rk["shared:fold:slider_fan+spinner"]
 assert fold["numbers"] == {"templates": 2, "texts": 2}
@@ -382,8 +404,60 @@ md = (tmp / "local2/issues" / f"{made2['stuck:slider_fan::tab:3']['id']}.md").re
 assert "まだ採っていない案" in md and "## ゴールの要件" in md and "tab" in md and "足をどちらへ折るのかが分からない" in md.split("---")[1]
 out = cli("compare").stdout
 # 札の数は、書かれた数（a1 は止まった手順の欄と、困り事の手順で 2 回。サービスの困り事は数えない）。人の数は報告の数
-assert "tab の手順 3: 3 回・2 人" in out and "stick の手順 3: 1 回・1 人" in out and "| 不明 |" in out, out
+assert "手順 3: 3 回・2 人" in row_of(out, "tab") and "手順 3: 1 回・1 人" in row_of(out, "stick") and "| 不明 |" in out, out
 for word in ("効いた", "改善し", "良くな", "悪くな", "%", "％", "平均"):
     assert word not in out, word
+
+# 13. 玩具ごとの案と版（玩具 = 雛形 + 形。本人の決定 11-05「型紙は玩具ごとに 1 枚」）。工夫・レビュー・動きの床の案も紙で分ける。
+# 紙の名の無い前の形の束は、前の鍵のまま（上の 1〜8 がそのまま通っている）
+os.environ["OMOCHAE_ENGINE_LOOP"] = str(tmp / "local3")
+os.environ["OMOCHAE_ENGINE_LEDGER"] = str(tmp / "versions3.json")
+os.environ["OMOCHAE_REPORTS"] = str(tmp / "no-reports")
+
+
+def toys(b):
+    g = {**copy.deepcopy(b["groups"][0]), "template": "spinner", "sheet_set": "spin-v1", "stuck_steps": {}, "quit_steps": {}, "craft_steps": {}, "record_ids": []}
+    say = lambda paper: [{"kind": "fix", "step": None, "text": f"{paper} の羽を少し細くした", "count": 1}, {"kind": "review", "step": None, "text": f"{paper} の軸の穴が小さく見える", "count": 1}]
+    b["current_sets"] = {}
+    b["groups"] = [{**copy.deepcopy(g), "paper": "pinwheel", "texts": say("pinwheel")}, {**copy.deepcopy(g), "paper": "top", "texts": say("top")},
+                   {**copy.deepcopy(g), "template": "slider_fan", "sheet_set": "goraigo-v10", "paper": "tube", "texts": say("tube")},
+                   {**copy.deepcopy(g), "template": "slider_fan", "sheet_set": "goraigo-v10", "paper": "tab", "texts": say("tab")}]
+
+
+(tmp / "toys.json").write_text(json.dumps(variant(toys), ensure_ascii=False), encoding="utf-8")
+assert cli("take", str(tmp / "toys.json")).returncode == 0
+toy = {p["key"]: p for p in el.proposals()}
+for kind in ("craft", "review", "motion"):
+    # 別の玩具の声を 1 つの案に混ぜない
+    assert f"{kind}:spinner:spin-v1" not in toy and {f"{kind}:spinner:spin-v1:pinwheel", f"{kind}:spinner:spin-v1:top"} <= set(toy), sorted(toy)
+    assert "（紙 pinwheel）" in toy[f"{kind}:spinner:spin-v1:pinwheel"]["title"] and "（紙 pinwheel）" in toy[f"{kind}:spinner:spin-v1:pinwheel"]["why"]
+    assert toy[f"{kind}:spinner:spin-v1:pinwheel"]["paper"] == "pinwheel"
+for kind, word in (("craft", "羽"), ("review", "穴")):
+    assert [t["text"] for t in toy[f"{kind}:spinner:spin-v1:pinwheel"]["evidence"]] == [f"pinwheel の{'羽を少し細くした' if word == '羽' else '軸の穴が小さく見える'}"]
+assert toy["review:spinner:spin-v1:pinwheel"]["numbers"]["reviews"] == 1 and toy["motion:spinner:spin-v1:top"]["numbers"]["not_moved"] == 2
+# 別の読みの形（ヒント）の声も案にする。機械は捨てず、型紙でない事と型紙の形を並べて、人が決める
+reading = toy["craft:slider_fan:goraigo-v10:tube"]
+assert "別の読み" in reading["why"] and "型紙は tab" in reading["why"], reading["why"]
+assert "別の読み" not in toy["craft:slider_fan:goraigo-v10:tab"]["why"] and "別の読み" not in toy["craft:spinner:spin-v1:top"]["why"]
+out = cli("compare").stdout
+assert "別の読み" in row_of(out, "tube") and "型紙は tab" in row_of(out, "tube") and "別の読み" not in row_of(out, "tab"), out
+# 採る時に人が書く知見の 1 行は、台帳に入る（頁が読む）。書かなければ欄が無い。連絡先の形と長すぎる文は断る。採らない案には書けない
+pin, top = toy["review:spinner:spin-v1:pinwheel"]["id"], toy["review:spinner:spin-v1:top"]["id"]
+assert cli("adopt", pin, "--by", "作る人", "--finding", f"穴の大きさは {PHONE} へ").returncode == 3
+assert cli("adopt", pin, "--by", "作る人", "--finding", "あ" * (el.MAX_TEXT + 1)).returncode == 3
+assert el.ledger()["next"] == [] and json.loads((tmp / "local3/proposals" / f"{pin}.json").read_text(encoding="utf-8"))["status"] == "draft"
+assert cli("reject", top, "--by", "作る人", "--finding", "書けない").returncode == 4
+assert cli("adopt", pin, "--by", "作る人", "--finding", "軸の穴は、羽の幅に合わせて大きめに取る").returncode == 0
+assert cli("adopt", top, "--by", "作る人").returncode == 0
+next_up = {p["id"]: p for p in el.ledger()["next"]}
+assert next_up[pin]["finding"] == "軸の穴は、羽の幅に合わせて大きめに取る" and "finding" not in next_up[top]
+# 版は玩具ごとにも刻める（雛形 id.形）。刻むと、当たる玩具の出典が台帳に残り、版ごとの数はその紙の行にだけ版が並ぶ
+r = cli("release", "--commit", "abc1234", "--by", "作る人", "--sheet-set", "spinner.pinwheel=spin-v1", "--sheet-set", "slider_fan=goraigo-v10", "--sheet-set", "no_such=x")
+assert r.returncode == 0, r.stderr
+ver = el.ledger()["versions"][-1]
+assert ver["sources"]["spinner.pinwheel"] == ["NDL-1187053-R0000014-L-spinner"] and ver["sources"]["slider_fan"] == ["NDL-1187053-R0000005-L"] and ver["sources"]["no_such"] == []
+assert ver["proposals"][0]["finding"] == "軸の穴は、羽の幅に合わせて大きめに取る"
+out = cli("compare").stdout
+assert "版 1" in row_of(out, "pinwheel") and "版 1" not in row_of(out, "top") and "版 1" in row_of(out, "tab") and "版 1" in row_of(out, "tube"), out
 
 print("OK test_engine_loop")

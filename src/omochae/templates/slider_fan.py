@@ -1,16 +1,18 @@
 """雛形 slider_fan: 角筒の中で動く台に蛇腹の扇と像を載せ、押し上げると開く。
 
-押し方は仮説の違いなので描き分ける（どれが昔の作り方かは分からないので、1 つに決めない）。寸法の初期値は行程の計算から出した。
+押し方の読みを描き分ける（どれが昔の作り方かは分からない）。ただし玩具の型紙は 1 枚で、tab がたたき台。tube・stick は
+試行錯誤のヒントとして残す読み（本人の決定 2026-11-05「玩具 1 つに型紙 1 枚」・omochae.sheets）。寸法の初期値は行程の計算から出した。
 どの値も実物では未確認。Claude が変えてよいのは RANGES にある名前の値だけで、座標には触れない。
 """
 from shapely.geometry import LineString, Polygon
 
 from ..fan_model import clearance_limit_deg, opening_bound_deg, shortest_free_thread
 from ..model import Failure, Part
+from ..ops3d import ops as assembly_ops
 
 ID = "slider_fan"
 # 寸法の共通の出発点。手元の複写の図の比と紙面の制約から出した。
-# 押し方と中心の置き方の値は答えではない。どの組を刷るかは呼ぶ側（仮説）が決める。
+# 押し方と中心の置き方の値は答えではない。型紙の 1 枚（たたき台）は omochae.sheets が決め、ほかの組は試行錯誤のヒント。
 DEFAULTS = {
     "push_part": "tab",
     # 扇の中心の置き方も仮説の違い。axle は口より上の軸、rim は口の高さの台。
@@ -42,7 +44,7 @@ RANGES = {
     "fan_length": (50, 300),
 }
 PUSH_PARTS = ("tab", "tube", "stick")
-# 刷る形を決める寸法（押し方）。仮説の違いそのものなので、寸法を直に渡す入口（python -m omochae --params）では既定に頼らず必ず書かせる。
+# 刷る形を決める寸法（押し方）。寸法を直に渡す入口（python -m omochae --params）では既定に頼らず必ず書かせる（刷った形を JSON に残すため）。
 FORM = "push_part"
 FORMS = PUSH_PARTS  # 刷る形の値の一覧（作りうる部品を数える時に使う）
 # 既定の出典（data/sources/ の名前）。--source を書かない時に、雛形と合わない出典の印を刷らないため。
@@ -135,6 +137,10 @@ def check_physics(p):
             out.append(Failure("F5.stroke", "溝", f"溝が筒の口から {SLOT_MARGIN}mm 離れない（底から 0〜{high:.1f}）"))
     elif p["push_part"] == "stick" and p["stage_height"] > H - s:
         out.append(Failure("F5.stroke", "土台", f"土台の高さ {p['stage_height']} が静止時の筒の空き {H - s} に収まらない"))
+    elif p["push_part"] == "tube" and s > H:
+        # 静止時の内筒の上の端は外筒の底から H − s。量が高さを超えると、扇の台が外筒の下へ出て扇が筒に入らない。
+        # つまみと柄の形は上の 2 つの検査が同じ事を含むので、内筒を下から押す形だけに足す。
+        out.append(Failure("F5.stroke", "内筒", f"押し上げる量 {s} が筒の高さ {H} を超え、静止時に内筒の上の端が筒の下に出る"))
     if p["push_part"] != "tab" and L < H:
         # L < H だと指が筒の外にある間に押し切れない（行程の計算で見つかった不足）。
         out.append(Failure("F5.stroke", "押す部品", f"長さ {L} が筒の高さ {H} より短く、押し切れない"))
@@ -237,6 +243,10 @@ def parts(p):
     tube = _tube(1, "tube", "外筒", A, H, p["tube_glue"], "1 外筒", notch)
     tube.art = _tube_art(A, H, notch)
     tube.hide_folds = True
+    # 外筒は色の面を外にして角筒にするので、刷った面から見て山折り（本人の答え 2026-11-06「色がついている所が外を向くよう折った」）。
+    # 谷折り（凡例の、刷った面がへこむ向き）のままだと色の面が筒の内に入る事を、3D で組んで見つけた（omochae.fold3d の 3D.face）。
+    # 線は刷らず色の境で折る部品なので、型紙の PDF は変わらない。内筒は隠れる部品で、破線を刷るので谷のまま（手順 2 の文は本人の決定 2026-11-06）
+    tube.mountain, tube.valley = tube.valley, []
     if p["hub"] == "axle":
         # 開く糸を試す穴。扇は 1 面目に平行に開くので、その両脇の面につなぐ。
         tube.holes += [(A * 1.5, THREAD_DEPTH, 0.6), (A * 3.5, THREAD_DEPTH, 0.6)]
@@ -363,7 +373,15 @@ RESULTS = ("動いた", "動かない", "わからない")
 def materials(p):
     """型紙の「用意する物」。素材は部品表だけから刷り、2 か所に手で書かない。"""
     rows = bom(p)
-    lines = [f"{rows[0]['material']}を 1 枚（全部品を同じ紙に刷る）", "のり、はさみ、定規"]
+    # 穴があるのに竹串の行が無い形（内筒を下から押す形・柄の形）は、穴をあける竹串を道具に書く（手順に「穴は竹串の先であける」。
+    # 本人の確認 2026-11-06）。つまみの形は竹串の行がもう有る。
+    # 部品を組まずに形の値で決める（穴は、軸の形の開く糸・扇・像の穴と、竹串の行のあるつまみの形の穴だけなので、同じ答えになる。
+    # 部品から決めた答えと同じ事は試験で見る）。用意する物は、記録の寸法（字の形の寸法が混ざりうる）で読む一覧からも呼ばれうるので、
+    # 部品を組んで落ちないようにする（写し先の repo で、作り方の印の一覧が記録を読んで落ちたため）
+    tools = "のり、はさみ、定規"
+    if p["hub"] == "axle" and not any("竹串" in r["material"] for r in rows):
+        tools += "、竹串（穴あけ）"
+    lines = [f"{rows[0]['material']}を 1 枚（全部品を同じ紙に刷る）", tools]
     lines += [f"{r['material']} {r['qty']} 本" for r in rows if r["number"] == 6]
     lines += [r["material"] for r in rows if r["number"] == 7]
     return lines
@@ -396,36 +414,62 @@ def place(by_key, page, top, gap):
     return left_y, fan.x - page.x0 - gap, page.x0
 
 
-def steps(p):
-    """組み方。部品番号は型紙と同じ。押し方と中心の置き方で変わる所だけを分ける。"""
+def _steps(p):
+    """組み方の (手順の文, 3D の操作の種類) の並び。種類は、3D の操作から作った手順だけに付く（ほかは None）。
+
+    文と操作の種類を 1 つの並びで持つのは、omochae.fold3d が確かめた操作の手順の番号を、文を突き合わせずに引けるようにするため
+    （浮き人形の _steps が、文と直しの行き先を 1 つの並びで持つのと同じ考え。文の突き合わせは、文の小さな直しで黙って外れる）。
+    つまみの形は、3D で組める部品（外筒・内筒・竹串）の手順を、3D の操作から作る（本人の決定 2026-11-06。omochae.ops3d）。
+    文は型紙のデータから作るので、折り方のデータを直すと文も変わる。ほかの手順と、ほかの形の手順は文のまま。
+    """
+    # 3D の操作から作った文。つまみの形だけ（3D で組めるのは、まだこの形だけ）
+    made = dict(assembly_ops(parts(p), p)) if p["push_part"] == "tab" else {}
+
+    def op(kind, text):
+        return (made[kind], kind) if kind in made else (text, None)
     # まず筒を 1 つ作る（v8）。紙で組んで試した時、手が止まりやすいのは平面から立体への最初の一歩だったので、
     # 最初に形が 1 つできる順にする。
-    out = ["刷った物差しに定規を当て、10cm か確かめる"]
+    out = [("刷った物差しに定規を当て、10cm か確かめる", None)]
     if p["push_part"] == "tab":
-        out.append("まず 1 外筒だけを実線で切る。溝は下の端からはさみで切り込む（くり抜かない）")
+        out.append(("まず 1 外筒だけを実線で切る。溝は下の端からはさみで切り込む（くり抜かない）", None))
     else:
-        out.append("まず 1 外筒だけを実線で切る")
-    out.append("1 外筒を色の境で谷折りし、糊代で貼って角筒にする")
-    out.append("残りの部品を実線で切る。穴は竹串の先であける")
+        out.append(("まず 1 外筒だけを実線で切る", None))
+    out.append(op("fold_outer", "1 外筒を色の境で山折りし、糊代で貼って角筒にする"))
+    out.append(("残りの部品を実線で切る。穴は竹串の先であける", None))
     if p["push_part"] in ("tab", "tube"):
-        out.append("2 内筒も同じように角筒にする")
+        # 外筒を山折りに直した時、「同じように」だと、破線を谷折りで刷る内筒と食い違うので、本人の決定（2026-11-06）の文にした
+        out.append(op("fold_inner", "2 内筒は破線で谷折りし、糊代で貼って角筒にする"))
     if p["push_part"] == "tab":
-        out.append("竹串を 2 内筒の 2 つの穴に通す")
+        out.append(op("thread", None))
     if p["push_part"] == "stick":
-        out.append("2 土台も同じように角筒にし、割り箸の先を下から差し込んで貼る")
-    out.append("3 台で 2 の上に蓋をする")
-    out.append("4 扇を色の境で、端から谷折り・山折りを交互にして蛇腹に畳む")
+        # 外筒を山折りに直した後は「同じように」が山折りと読めて、破線を谷折りで刷る土台と食い違うので、手順 2 と同じ型の文にした（本人の確認 2026-11-06）
+        out.append(("2 土台は破線で谷折りし、糊代で貼って角筒にし、割り箸の先を下から差し込んで貼る", None))
+    out.append(("3 台で 2 の上に蓋をする", None))
+    out.append(("4 扇を色の境で、端から谷折り・山折りを交互にして蛇腹に畳む", None))
     if p["hub"] == "axle":
-        out.append("糸を 5 像の穴と 4 扇の中心側の穴の列に通し、ゆるく結ぶ")
-        out.append("4 扇の真ん中の足を、糊代の境の破線で折り、足の糊代を 3 台の印に貼る")
-        out.append("5 像の足を 3 台に貼る")
+        out.append(("糸を 5 像の穴と 4 扇の中心側の穴の列に通し、ゆるく結ぶ", None))
+        out.append(("4 扇の真ん中の足を、糊代の境の破線で折り、足の糊代を 3 台の印に貼る", None))
+        out.append(("5 像の足を 3 台に貼る", None))
     else:
-        out.append("4 扇の端を 3 台に貼り、5 像の足も台に貼る")
+        out.append(("4 扇の端を 3 台に貼り、5 像の足も台に貼る", None))
     if p["push_part"] == "tab":
-        out.append("内筒を 1 外筒に入れ、竹串の端を溝から出す")
+        out.append(op("insert", None))
+        # 組み立ての最後の動き（本人の追加 2026-11-06「上にスライドさせて蛇腹が開く所まで」）。今の手順の後ろに足すので、
+        # 前の手順の番号はずれない（作った人の報告は手順の番号を鍵にしている）
+        out.append(op("push", None))
     else:
-        out.append("押す部品を 1 外筒に下から入れる")
+        out.append(("押す部品を 1 外筒に下から入れる", None))
     return out
+
+
+def steps(p):
+    """組み方。部品番号は型紙と同じ。押し方と中心の置き方で変わる所だけを分ける（作り方は _steps）。"""
+    return [text for text, _ in _steps(p)]
+
+
+def step_ops(p):
+    """3D の操作の種類ごとの、手順の番号（1 から）。omochae.fold3d が、確かめた操作の手順の番号を所見に添えるのに使う。"""
+    return {kind: i for i, (_, kind) in enumerate(_steps(p), 1) if kind}
 
 
 def measures(p):

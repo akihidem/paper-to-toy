@@ -1,6 +1,6 @@
 """作った人の報告の入口（Issue #22）。手元の画面で受け付け、受付箱に置き、人が確かめて受け入れた物だけを集計に回す。
 
-本人の決定（カード 20261105-090458 の (b)）: 報告の入口もエンジン（paper-to-toy）の側に作る。
+本人の決定（2026-11-05）: 報告の入口もエンジン（paper-to-toy）の側に作る。
 提出物の持ち寄りの受付（受付箱 → 人の確認 → 公開）と同じ流れにした。判断の芯:
 - 画面は手元の機械（127.0.0.1）でだけ開く。外へ開く入口（認証・荒らし・保管の運用が要る）は、この Issue では作らない。
 - 送られた報告は omochae.feedback の check を通し、通った物だけを受付箱に置く。落ちた物は置かず、床の名と理由だけを見せる。
@@ -11,7 +11,6 @@
 - 写真は受け付けない（権利と人の写り込みの確認が要るため）。
 終了: 0 = できた / 3 = 落ちた・断った / 4 = できない。
 """
-import argparse
 import datetime
 import html
 import json
@@ -23,6 +22,7 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 
+from .__main__ import Parser
 from .compose import TEMPLATES
 from .feedback import FINISH, KINDS, MOVED, check
 
@@ -242,7 +242,7 @@ def make_server(port):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="omochae.intake", description="作った人の報告の入口。終了: 0 できた / 3 落ちた・断った / 4 できない")
+    ap = Parser(prog="omochae.intake", description="作った人の報告の入口。終了: 0 できた / 3 落ちた・断った / 4 できない")
     ap.add_argument("--base", default=str(BASE), help="置き場（既定 local/reports。git の外）")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sv = sub.add_parser("serve", help="手元の機械（127.0.0.1）で報告の画面を開く")

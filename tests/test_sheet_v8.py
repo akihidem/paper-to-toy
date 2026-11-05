@@ -52,5 +52,27 @@ for p in (tab, stick, rim):
     assert all(a != b for a, b in zip(fills, fills[1:])), "隣の板は色が違う（色の境が折り目）"
     tube_grounds = [a["fill"] for a in k["tube"].art if a["kind"] == "poly" and a["pts"][0][1] == 4.5]
     assert len(set(tube_grounds)) == 2, "外筒は 1 面おきに地の色を変える"
+    # 外筒は色の面を外にして角筒にするので、刷った面から見て山折り（本人の答え 2026-11-06「色がついている所が外を向くよう折った」）。
+    # 谷折り（刷った面がへこむ向き）だと色が内に入る。線は刷らないので、型紙の PDF は変わらない
+    assert len(k["tube"].mountain) == 4 and not k["tube"].valley, (len(k["tube"].mountain), len(k["tube"].valley))
 assert any("色の境" in s for s in steps(tab))
+# 組み方の文も 1 語だけ（谷折り → 山折り）替えた。それより大きく文を変える時は本人の確認を取る
+assert "1 外筒を色の境で山折りし、糊代で貼って角筒にする" in steps(tab), steps(tab)
+# 内筒は隠れる部品で破線を谷折りで刷るので、手順 2 は本人の決定（2026-11-06）の文。「同じように」だと山折りと読めて、刷った破線と食い違った
+assert "2 内筒は破線で谷折りし、糊代で貼って角筒にする" in steps(tab) and not any("同じように角筒にする" in s for s in steps(tab)), steps(tab)
+# 用意する物の道具（本人の確認 2026-11-06）: 穴があるのに竹串の行が無い形（内筒を下から押す・柄）は、穴をあける竹串を書く。
+# つまみの形は竹串の行がもう有る。穴の無い形（内筒を下から押す・口の台）には書かない
+for form, want in (("tab", "のり、はさみ、定規"), ("tube", "のり、はさみ、定規、竹串（穴あけ）"), ("stick", "のり、はさみ、定規、竹串（穴あけ）")):
+    assert materials({**DEFAULTS, "push_part": form})[1] == want, (form, materials({**DEFAULTS, "push_part": form}))
+assert materials({**DEFAULTS, "push_part": "tube", "hub": "rim"})[1] == "のり、はさみ、定規"
+# 道具は部品を組まずに形の値で決める。部品から決めた答え（穴があり、竹串の行が無い）と、全部の押し方 × 中心の置き方で同じ事を見る
+from omochae.templates.slider_fan import bom
+for form in ("tab", "tube", "stick"):
+    for hub in ("axle", "rim"):
+        q = {**DEFAULTS, "push_part": form, "hub": hub}
+        by_parts = any(x.holes for x in parts(q)) and not any("竹串" in r["material"] for r in bom(q))
+        assert materials(q)[1].endswith("、竹串（穴あけ）") == by_parts, (form, hub, materials(q)[1])
+# 柄の形の手順 2 も、手順 2 と同じ型の文（本人の確認 2026-11-06）。「同じように」だと、山折りの外筒と同じと読めた
+stick_steps = steps({**DEFAULTS, "push_part": "stick"})
+assert "2 土台は破線で谷折りし、糊代で貼って角筒にし、割り箸の先を下から差し込んで貼る" in stick_steps, stick_steps
 print("ok v9")
