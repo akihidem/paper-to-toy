@@ -111,13 +111,15 @@ def has_pii(text):
     # 見えない文字・結合文字・異体字セレクター・空白を消してから語を探す（語の中に挟むと、すり抜けた）
     raw = "".join(ch for ch in unicodedata.normalize("NFKC", str(text))
                   if unicodedata.category(ch) not in ("Cf", "Mn", "Me") and not ch.isspace())
-    if CONTACT.search(raw) or LINE_HANDLE.search(raw):
+    if CONTACT.search(raw):
         return True
     t = _norm(text)
     idx = [i for i, ch in enumerate(t) if ch.isdigit()]
     if any(idx[i + 6] - idx[i] < 24 for i in range(len(idx) - 6)):
         return True
-    return CONTACT.search(t) is not None
+    # LINE の名は、空白を残した文で見る。空白を消した文では、前の語とつながって見逃し（use Line _taro → useLine_taro）、
+    # 離れた _ と語がつながって当たった（line _ red mark → line_redmark）
+    return CONTACT.search(t) is not None or LINE_HANDLE.search(t) is not None
 
 
 def _strings(v, depth=0):
