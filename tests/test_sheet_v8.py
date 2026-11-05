@@ -52,5 +52,12 @@ for p in (tab, stick, rim):
     assert all(a != b for a, b in zip(fills, fills[1:])), "隣の板は色が違う（色の境が折り目）"
     tube_grounds = [a["fill"] for a in k["tube"].art if a["kind"] == "poly" and a["pts"][0][1] == 4.5]
     assert len(set(tube_grounds)) == 2, "外筒は 1 面おきに地の色を変える"
+    # 外筒は色の面を外にして角筒にするので、刷った面から見て山折り（本人の答え 2026-11-06「色がついている所が外を向くよう折った」）。
+    # 谷折り（刷った面がへこむ向き）だと色が内に入る。線は刷らないので、型紙の PDF は変わらない
+    assert len(k["tube"].mountain) == 4 and not k["tube"].valley, (len(k["tube"].mountain), len(k["tube"].valley))
 assert any("色の境" in s for s in steps(tab))
+# 組み方の文も 1 語だけ（谷折り → 山折り）替えた。それより大きく文を変える時は本人の確認を取る
+assert "1 外筒を色の境で山折りし、糊代で貼って角筒にする" in steps(tab), steps(tab)
+# 内筒は隠れる部品で破線を谷折りで刷るので、手順 2 は本人の決定（2026-11-06）の文。「同じように」だと山折りと読めて、刷った破線と食い違った
+assert "2 内筒は破線で谷折りし、糊代で貼って角筒にする" in steps(tab) and not any("同じように角筒にする" in s for s in steps(tab)), steps(tab)
 print("ok v9")

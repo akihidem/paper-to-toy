@@ -242,6 +242,10 @@ def parts(p):
     tube = _tube(1, "tube", "外筒", A, H, p["tube_glue"], "1 外筒", notch)
     tube.art = _tube_art(A, H, notch)
     tube.hide_folds = True
+    # 外筒は色の面を外にして角筒にするので、刷った面から見て山折り（本人の答え 2026-11-06「色がついている所が外を向くよう折った」）。
+    # 谷折り（凡例の、刷った面がへこむ向き）のままだと色の面が筒の内に入る事を、3D で組んで見つけた（omochae.fold3d の 3D.face）。
+    # 線は刷らず色の境で折る部品なので、型紙の PDF は変わらない。内筒は隠れる部品で、破線を刷るので谷のまま（手順 2 の文は本人の決定 2026-11-06）
+    tube.mountain, tube.valley = tube.valley, []
     if p["hub"] == "axle":
         # 開く糸を試す穴。扇は 1 面目に平行に開くので、その両脇の面につなぐ。
         tube.holes += [(A * 1.5, THREAD_DEPTH, 0.6), (A * 3.5, THREAD_DEPTH, 0.6)]
@@ -410,10 +414,11 @@ def steps(p):
         out.append("まず 1 外筒だけを実線で切る。溝は下の端からはさみで切り込む（くり抜かない）")
     else:
         out.append("まず 1 外筒だけを実線で切る")
-    out.append("1 外筒を色の境で谷折りし、糊代で貼って角筒にする")
+    out.append("1 外筒を色の境で山折りし、糊代で貼って角筒にする")
     out.append("残りの部品を実線で切る。穴は竹串の先であける")
     if p["push_part"] in ("tab", "tube"):
-        out.append("2 内筒も同じように角筒にする")
+        # 外筒を山折りに直した時、「同じように」だと、破線を谷折りで刷る内筒と食い違うので、本人の決定（2026-11-06）の文にした
+        out.append("2 内筒は破線で谷折りし、糊代で貼って角筒にする")
     if p["push_part"] == "tab":
         out.append("竹串を 2 内筒の 2 つの穴に通す")
     if p["push_part"] == "stick":

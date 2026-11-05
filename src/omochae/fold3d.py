@@ -1,21 +1,25 @@
 """型紙の部品を 3D の中で折って組み、刷る部品の形が組み方と合うかを確かめる（最小の 1 本: 御来迎 つまみの形）。
 
-本人の考え（2026-11-05「手順をAIが3Dで組み立てて、その過程を手順書にする」）の最初の 1 本。本人の決定で、提出の前は 2 つだけを見る:
-- 3D.close: 外筒を、型紙の折り線で 90° ずつ谷折りすると角筒に閉じ、糊代が帯の反対の端の面（1 面目）に重なる。内筒も同じく見る
+本人の考え（2026-11-05「手順をAIが3Dで組み立てて、その過程を手順書にする」）の最初の 1 本。本人の決定で、提出の前は御来迎 つまみの形だけを見る:
+- 3D.close: 外筒を、型紙の折り線で 90° ずつ折ると角筒に閉じ、糊代が帯の反対の端の面（1 面目）に重なる。内筒も同じく見る
   （竹串の線の前提なので）。糊代 1 つが 1 面である事、折り線が面を分けていない・長さ 0・つながらない面・自分と交わる外形も、
   同じ床で落とす（式と絵のずれそのものなので）
+- 3D.face: 見える面の部品（折り線を刷らず色の境で折る外筒）の刷った面（色の面）が、閉じた筒の外を向く。本人の答え（2026-11-06
+  「色がついている所が外を向くよう折った」）で足した。隠れる部品（破線を刷る内筒）は、向きが組み立てに効かないので見ない
 - 3D.skewer: 折った内筒が外筒の中に入り、内筒の 2 つの穴が向かい合い（高さも横もずれない）、穴を通す竹串が水平で、
   内筒を外筒に入れて静かな時から押し上げ切るまで、外筒の溝の中を通る
 判断の芯:
 - 寸法の式（check_physics・slot_span）でなく、刷る部品（外形・折り線・糊代・穴・溝の切り込み）から形を組む。式と絵がずれた時に見つけるため
 - 面は硬い板、折り線は蝶番と見る。紙の厚み・たわみ・摩擦は入れないので、通っても紙で動く保証ではない
-- 刷る紙・手順の文・凍結の床は変えない。入口は python -m omochae.fold3d だけで、型紙の検査（compose）には繋がない。
-  3D.close・3D.skewer は凍結の基準（tests/frozen/criteria.md）の床（2026-11-05 の本人の決定で足した。試験は tests/test_fold3d.py）
+- 入口は python -m omochae.fold3d だけで、型紙の検査（compose）には繋がない。3D.close・3D.face・3D.skewer は凍結の基準
+  （tests/frozen/criteria.md）の床（2026-11-05 と 11-06 の本人の決定で足した。試験は tests/test_fold3d.py）
 前提と限り:
-- 谷と山の向き（どちらの面が筒の外を向くか）は見ない。谷を全部山に替えても、鏡に映した角筒として閉じる
+- 谷と山の向き（どちらの面が筒の外を向くか）は、見える面の部品だけを 3D.face で見る。3D.close は向きを見ない（谷を全部山に替えても、
+  鏡に映した角筒として閉じる）
 - 外筒は折り線を刷らず、絵の色の境で折る（hide_folds）。ここで折るのは型紙の折り線のデータで、色の境がその上にある事は見ない
   （型紙の絵は、折り線と同じ位置から面ごとに塗っている）
-- 内筒は外筒の真ん中に、同じ面の並び（1 面目と 1 面目を向かい合わせ）で入れる。すき間の分だけ横にずれる遊びは見ない
+- 内筒は外筒の真ん中に、穴のある 2 面目・4 面目を外筒の 2 面目（溝のある面）・4 面目に向けて入れる（外筒は山折り・内筒は谷折りで
+  鏡の向きに折れるので、1 面目と 3 面目は入れ替わって向かい合う）。すき間の分だけ横にずれる遊びは見ない
 - 竹串の太さは、溝の式（slot_span）と同じ knob_width と見る。刷った穴の丸（半径 1.2mm）は竹串の先であける所の印で、竹串の太さではない
 - 行程は、内筒の上の端が口より押し上げる量だけ下にある時（静かな時）から、口に届く時（押し上げ切る）まで。
   押し上げる量は寸法から、筒の高さは折った形から取る
@@ -251,6 +255,11 @@ def _far_end(faces, g):
     return max(range(len(faces)), key=dist)
 
 
+def _kinds(part):
+    """折りの種類と本数の言い方（例: 谷折り 4 本）。"""
+    return "・".join(f"{name} {len(ls)} 本" for name, ls in (("谷折り", part.valley), ("山折り", part.mountain)) if ls)
+
+
 def _close(part, faces):
     """糊代の面が、継ぎ目を合わせて帯の反対の端の面に重なるか。Returns (所見の文, 失敗)。どちらか片方だけ。
 
@@ -259,7 +268,7 @@ def _close(part, faces):
     谷と山の向きは見ない（どちらの面が筒の外を向くか）。谷を全部山に替えても、鏡に映した角筒として閉じる。文には実際の本数を言う。
     """
     where = part.label
-    kinds = "・".join(f"{name} {len(ls)} 本" for name, ls in (("谷折り", part.valley), ("山折り", part.mountain)) if ls)
+    kinds = _kinds(part)
     if not part.glue:
         return None, Failure("3D.close", where, "糊代の印が無く、角筒の継ぎ目を貼れない")
     glued = _glue_faces(part, faces)
@@ -298,6 +307,27 @@ def tube_axis(faces):
     c = _mul(tuple(sum(m[i] for m in mids) for i in range(3)), 1 / len(mids))
     hs = [_dot(_sub(f.at(pt), c), up) for f in faces for pt in f.poly.exterior.coords]
     return up, c, min(hs), max(hs)
+
+
+def _face(part, faces):
+    """見える面の部品の刷った面（色の面）が、閉じた筒の外を向くか。Returns (所見の文, 失敗)。
+
+    側の面ごとに、刷った面の向き（折る前の z の正を今の向きへ写した物）と、軸から面の真ん中への向きが同じ側かを見る。
+    谷折り（凡例の、刷った面がへこむ向き）で筒にすると、色の面が内に入る。本人の答え（2026-11-06「色がついている所が外を向くよう
+    折った」）で、型紙の外筒を山折りに直した時に足した。
+    """
+    up, c, _, _ = tube_axis(faces)
+    glue = _glue_faces(part, faces)
+    sides = [f for f in faces if f not in glue]
+    inward = 0
+    for f in sides:
+        m = _sub(f.at(f.poly.centroid.coords[0]), c)
+        if _dot(f.normal, _sub(m, _mul(up, _dot(m, up)))) <= 0:
+            inward += 1
+    if inward:
+        return None, Failure("3D.face", part.label, f"型紙の折り線（{_kinds(part)}）で折ると、色の面（刷った面）が筒の内を向く"
+                                                 f"（{len(sides)} 面のうち {inward} 面）。谷折りは刷った面がへこむ向き")
+    return f"外向き {part.label}: 色の面（刷った面）は {len(sides)} 面とも筒の外を向く", None
 
 
 def _section(faces, up, c):
@@ -349,7 +379,8 @@ def _skewer(outer_part, outer, inner_part, inner, p):
     rest, push = H - s - L, H - L  # 内筒の底の、外筒の底からの高さ
 
     def placed(q, t):
-        """内筒の点を、外筒の真ん中で、内筒の底を外筒の底から t の高さに置いた所へ写す（両方とも 1 面目を動かさずに折ったので、向きはそろう）。"""
+        """内筒の点を、外筒の真ん中で、内筒の底を外筒の底から t の高さに置いた所へ写す（両方とも 1 面目を動かさずに頁の向きのまま折るので、
+        穴のある 2 面目・4 面目は外筒の 2 面目・4 面目に向く。外筒が山折り・内筒が谷折りだと鏡の向きになり、1 面目と 3 面目は入れ替わる）。"""
         return _add(_add(_sub(q, c_i), c_o), _mul(up_o, bot_o + t - bot_i))
 
     u = _unit(_sub(centers[1], centers[0]))
@@ -404,7 +435,7 @@ def check(parts, p):
     by = {q.key: q for q in parts}
     if OUTER not in by or INNER not in by:
         raise ToolMissing("外筒と内筒が無い（最小の 1 本は、御来迎 つまみの形だけを組む）")
-    notes, failures, folded = [], [], {}
+    notes, failures, faced, folded = [], [], [], {}
     for q in (by[OUTER], by[INNER]):
         try:
             folded[q.key] = fold(q)
@@ -414,13 +445,19 @@ def check(parts, p):
         note, fail = _close(q, folded[q.key])
         if fail:
             failures.append(fail)
-        else:
-            notes.append(note)
+            continue
+        notes.append(note)
+        if q.hide_folds:
+            # 見える面の部品（色の境で折る）だけ、色の面の向きを見る。隠れる部品（破線を刷る内筒）の向きは組み立てに効かない
+            note, fail = _face(q, folded[q.key])
+            (faced if fail else notes).append(fail or note)
     if failures:
         # 筒が閉じなければ、竹串の線の形が決まらない。続けて見ると、1 つの崩れに別の行が続いて狙いが読めなくなる（compose と同じ考え）
-        return notes, failures
+        # 外筒の 3D.face は外筒が閉じた後に見た物なので、ほかの部品が閉じなくても捨てない（レビューの指摘）
+        return notes, failures + faced
+    # 色の面の向きは竹串の形に効かない（鏡に映した筒でも穴と溝は並ぶ）ので、3D.face で落ちても竹串は見る
     note, fail = _skewer(by[OUTER], folded[OUTER], by[INNER], folded[INNER], p)
-    return (notes + [note], []) if note else (notes, [fail])
+    return (notes + [note], faced) if note else (notes, faced + [fail])
 
 
 def run(template_id, params, source, title=None, inject=None):
