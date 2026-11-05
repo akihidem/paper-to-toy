@@ -67,6 +67,7 @@ Python のパッケージ名は `omochae`（元の repo と同じ名前のまま
 Ubuntu 24.04 では、まっさらな環境からこれで揃う（Docker の `ubuntu:24.04` で確かめた）:
 
 ```bash
+sudo apt-get update
 sudo apt-get install -y python3 pipx poppler-utils fontconfig fonts-noto-cjk
 pipx install uv   # uv の入れ方は https://docs.astral.sh/uv/ の物でもよい
 export PATH="$HOME/.local/bin:$PATH"   # pipx が uv を置く所
@@ -103,11 +104,11 @@ echo '{"mount": "hang", "axle_height": 50}' > tiger.json
 PYTHONPATH=src .venv/bin/python -m omochae --template pivot_counterweight --params tiger.json --out out/tiger
 ```
 
-引数の説明は `python -m omochae --help`。
+引数の説明は `PYTHONPATH=src .venv/bin/python -m omochae --help`。
 
 `params` に書かなかった寸法は雛形の既定値（`DEFAULTS`）を使う。変えてよい名前と範囲は雛形の `RANGES`。`source_id` は `data/sources/` の出典の記録の名前で、型紙に刷る所蔵と改変の印をここから取る。
 
-描かずに検査だけを回す時は Python から:
+描かずに検査だけを回す時は Python から（`PYTHONPATH=src .venv/bin/python` で）:
 
 ```python
 from omochae.compose import check_params
@@ -374,7 +375,7 @@ PYTHONPATH=src .venv/bin/python -m omochae.engine_loop compare                  
 - `src/omochae/engine_loop.py` エンジンごとの改善の輪（束の入口・直しの案・人の採否・次の版・版ごとの数の並び）
 - `data/sources/` 出典の記録（国立国会図書館の書誌の値）
 - `data/engine/` エンジンの版の台帳（`omochae.engine_loop`。数と行き先だけで、作った人の文は入れない）
-- `tests/frozen/` 凍結した場面と合格の基準（照合の表 `manifest.json` と合わないと `./run.sh` は 4。凍結を変える時は理由を commit に書き、`python tests/run_floors.py --write-manifest` で表も同じ commit で直す。落ちる場面は FAIL の行が 1 つか、期待の `lines` に全部の行の形を書く） / `tests/test_*.py` 式と検査の守りの試験
+- `tests/frozen/` 凍結した場面と合格の基準（照合の表 `manifest.json` と合わないと `./run.sh` は 4。凍結を変える時は理由を commit に書き、`.venv/bin/python tests/run_floors.py --write-manifest` で表も同じ commit で直す。落ちる場面は FAIL の行が 1 つか、期待の `lines` に全部の行の形を書く） / `tests/test_*.py` 式と検査の守りの試験
 - `examples/` 最小の例
 
 ## 実装で参考にした物
