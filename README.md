@@ -225,7 +225,7 @@ PYTHONPATH=src .venv/bin/python -m omochae.foldsim --scenario examples/fan_tab.j
 - `src/omochae/templates/` 雛形
 - `src/omochae/foldsim.py` Origami Simulator への書き出し
 - `data/sources/` 出典の記録（国立国会図書館の書誌の値）
-- `tests/frozen/` 凍結した場面と合格の基準（照合の表 `manifest.json` と合わないと `./run.sh` は 4。凍結を変える時は理由を commit に書き、`python tests/run_floors.py --write-manifest` で表も同じ commit で直す） / `tests/test_*.py` 式と検査の守りの試験
+- `tests/frozen/` 凍結した場面と合格の基準（照合の表 `manifest.json` と合わないと `./run.sh` は 4。凍結を変える時は理由を commit に書き、`python tests/run_floors.py --write-manifest` で表も同じ commit で直す。落ちる場面は FAIL の行が 1 つか、期待の `lines` に全部の行の形を書く） / `tests/test_*.py` 式と検査の守りの試験
 - `examples/` 最小の例
 
 ## 実装で参考にした物

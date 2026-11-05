@@ -80,13 +80,31 @@ def write_manifest(root):
     return 0
 
 
+def fail_shapes(stderr):
+    """FAIL の行から数を除いた形を、並べて返す。数は寸法を調整すると動くので、比べるのは「どの検査が落ちたか」だけにする。"""
+    return sorted(floor + " " + re.sub(r"-?\d+(?:\.\d+)?", "#", rest) for floor, rest in re.findall(r"^FAIL (\S+) (.+)$", stderr, re.M))
+
+
+def scenario_ok(expect, rc, stderr):
+    """(通ったか, 落ちた床) を返す。床の ID だけを見ると、1 つの ID に多くの検査が入っているので、狙った検査を消しても通る（#27）。
+    落ちる場面は FAIL の行が 1 つか、期待の lines に全部の行の形が書いてある事を求める。"""
+    got = sorted(set(re.findall(r"^FAIL (\S+)", stderr, re.M)))
+    shapes = fail_shapes(stderr)
+    want = expect.get("lines")
+    same = len(shapes) <= 1 if want is None else shapes == sorted(want)
+    return rc == expect["rc"] and got == expect["floors"] and same, got
+
+
 def load_scenarios():
     """場面を全部読み、(場面と期待の組, 読めない物の文) を返す。壊れた物があれば 1 つも回さない（結果の表を半端に残さない）。"""
     found, wrong = [], []
     for sc in sorted((ROOT / "tests/frozen/scenarios").glob("*.json")):
         try:
             expect = json.loads(sc.read_text(encoding="utf-8"))["expect"]
-            found.append((sc, {"rc": expect["rc"], "floors": sorted(expect["floors"])}))
+            lines = expect.get("lines")
+            if not (lines is None or isinstance(lines, list) and all(isinstance(x, str) for x in lines)):
+                raise TypeError("lines は文の並び")
+            found.append((sc, {"rc": expect["rc"], "floors": sorted(expect["floors"]), **({} if lines is None else {"lines": lines})}))
         except (OSError, ValueError, KeyError, TypeError) as e:
             wrong.append(f"{sc.relative_to(ROOT)}（{type(e).__name__}: {e}）")
     return found, wrong
@@ -145,13 +163,13 @@ def main():
         out = ROOT / "out/scenarios" / sc.stem
         cmd = [PY, "-m", "omochae", "--scenario", str(sc), "--out", str(out)]
         r = subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True)
-        got = sorted(set(re.findall(r"^FAIL (\S+)", r.stderr, re.M)))
-        ok = r.returncode == expect["rc"] and got == sorted(expect["floors"])
+        ok, got = scenario_ok(expect, r.returncode, r.stderr)
         broken += r.returncode == 4
         bad += not ok
         rows.append((sc.stem, scenario_command(sc), r.returncode, expect["rc"], ",".join(got) or "—", ",".join(expect["floors"]) or "—", "OK" if ok else "NG"))
         if not ok:
             print(f"NG {sc.stem}: rc={r.returncode} {r.stderr.strip()[:500]}", file=sys.stderr)
+            print(f"   今の FAIL の行の形（期待の lines に書く形）: {json.dumps(fail_shapes(r.stderr), ensure_ascii=False)}", file=sys.stderr)
     for test in sorted((ROOT / "tests").glob("test_*.py")):
         unit = subprocess.run([PY, str(test)], cwd=ROOT, env=env, capture_output=True, text=True)
         bad += unit.returncode != 0
