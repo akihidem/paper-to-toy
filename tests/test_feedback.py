@@ -147,7 +147,7 @@ for fine in ("折りライン2.5mmずれた", "部品のIDが分からない", "
 for text in ("email me", "LINE ID: taro_123", "ライン:taro123", "ラインID taro123", "id:taro99", "taro at gmail dot com",
              "LINE ID は taro_123", "LINEのIDはtaro_123", "ID は taro_123", "ラインのIDはtaro_123",
              "name at " + "x" * 50 + " dot com", "Line taro_123", "LiNe taro_123", "Line _taro",
-             "use Line _taro", "LINE yamada"):
+             "use Line _taro", "LINE yamada", "L I N E yamada", "LINE y a m a d a", "LI\u034fNE yamada", "LI\u200bNE yamada"):
     assert fb.has_pii(text), text
 # 長すぎる文・多すぎる葉は、連絡先の式を当てる前に落とす（長い文で式が 2 乗の時間をかけ、幅の広い list で止められた）。
 # 時間の秒数は機械に依るので見ない。式（has_pii）が 1 度も呼ばれない事で、先に断った事を見る
