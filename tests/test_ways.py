@@ -74,4 +74,8 @@ assert all(r["period"] for r in table if r["one_sheet"])  # 紙だけなら当�
 r = subprocess.run([sys.executable, "-m", "omochae.ways", "--json"], cwd=ROOT, capture_output=True, text=True,
                    env={"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin"})
 assert r.returncode == 0 and json.loads(r.stdout) == json.loads(json.dumps(table, ensure_ascii=False)), r.stderr
+# 間違った呼び方は 4（README の終了の番号。1 と 2 は使わない。ほかの口と同じ）
+r = subprocess.run([sys.executable, "-m", "omochae.ways", "--nope"], cwd=ROOT, capture_output=True, text=True,
+                   env={"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin"})
+assert r.returncode == 4, (r.returncode, r.stderr)
 print("ok")

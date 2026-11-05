@@ -11,11 +11,11 @@
 - 印は雛形に宣言させず、部品表（bom）・用意する物（materials）・部品（parts）から出す。宣言だと、部品を変えた時に印と食い違う。
 - 材料は、部品表の素材と、用意する物の文の両方で見る。部品表に載らない物（割ピン・テープなど）が、用意する物にだけ書かれる雛形があるため。
 """
-import argparse
 import json
 import re
 import sys
 
+from .__main__ import Parser
 from .compose import TEMPLATES
 from .sheets import is_sheet, reading_of, source_of
 
@@ -84,7 +84,7 @@ def table():
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="omochae.ways", description="形ごとの作り方の印（紙一枚・折るだけ・当時の材料）を出す。どれも優劣の印ではない")
+    ap = Parser(prog="omochae.ways", description="形ごとの作り方の印（紙一枚・折るだけ・当時の材料）を出す。どれも優劣の印ではない")
     ap.add_argument("--json", action="store_true", help="JSON で出す（サイトの絞り込みに使う）")
     args = ap.parse_args(argv)
     t = table()
