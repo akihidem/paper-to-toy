@@ -5,8 +5,8 @@
     "figure": "tokkuri",
     "stand": "easel",
     "tab_width": 12,
-    "tab_length": 22,
-    "tab_glue": 10
+    "tab_length": 36,
+    "tab_glue": 33
   },
   "inject": {},
   "expect": {
