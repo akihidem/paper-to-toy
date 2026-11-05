@@ -145,7 +145,7 @@ assert t.foot_width(small) <= 2 * 8 * 0.9 and [f.where for f in t.check_physics(
 st = " ".join(t.steps(P))
 assert all(k in st for k in ("拭く", "水を捨てる", "にじむ", "乾かす")) and "触らない" not in st
 
-# 四度目の検品（/code-review・main との差分）の指摘。配置と外形は check_params（描く前の検査の全部）で見る
+# 四度目の検品（main との差分）の指摘。配置と外形は check_params（描く前の検査の全部）で見る
 SRC = json.load(open(pathlib.Path(__file__).resolve().parents[1] / "data/sources/NDL-1187053-R0000028-R-float.json", encoding="utf-8"))
 
 
@@ -229,4 +229,172 @@ for L_ in (70, 74, 76, 78, 90):
                 assert "刻み" in " ".join(f.message for f in t.check_physics(q)), q
 fs = t.check_physics({**C, "tray_length": 76, "leaf_radius": 14.5})
 assert [f.where for f in fs] == ["葉の向きの刻み"], fs
+
+# 息で倒れないか（風受けつき）。壁より上の風受けの面に掛かる息の力から「傾ける腕」を出し、箱の断面の「戻す腕」の最大と比べる。
+# 見込みの値（息の速さ・抗力係数・余裕）は 1 か所に置き、作った人の報告（Issue #21）で直す。式を数え直して合わせる
+fo, fb = t.blow_forces(C)
+area = 2 * t.cup_radius(C) * (C["cup_height"] - C["wall_height"]) * 1e-6
+qd = 0.5 * t.AIR_DENSITY * t.BREATH_V ** 2
+assert abs(fo - qd * area * t.CD_CUP_OPEN) < 1e-12 and abs(fb - qd * area * t.CD_CUP_BACK) < 1e-12 and fo > fb > 0  # 口の側が強く押され、差が舟を回す
+hyc = t.hydro(C)
+lever = (C["wall_height"] + C["cup_height"]) / 2 - hyc["d"] / 2
+assert abs(t.blow_arm(C) - (fo + fb) * lever / (hyc["m"] / 1000 * t.GRAVITY)) < 1e-9 and t.blow_arm(C, hyc) == t.blow_arm(C)
+assert t.blow_forces(P) == (0.0, 0.0) and t.blow_arm(P) == 0.0  # 風受けの無い形は、息を受ける面を見ない
+assert t.blow_arm({**C, "cup_height": 50}) > t.blow_arm(C) > t.blow_arm({**C, "cup_height": 30})  # 高い風受けほど、傾ける腕が長い
+# 戻す腕 GZ。喫水が浅いので、底の高い側の角が 3° 足らずで水から出る。そこまでは小さな傾きの式（GM·sinθ）に合い、出た後は
+# 低い側の角の三角形の浮心から出す。幅の半分より手前で頭打ちになり、小さな傾きの式のままだと何倍も大きく見積もる
+Wd, dd, KGd = C["tray_width"], hyc["d"], hyc["KG"]
+corner = math.degrees(math.atan(2 * dd / Wd))
+assert 2 < corner < 3 and abs(t.righting_arm(C, hyc, 0.5) / (hyc["GM"] * math.sin(math.radians(0.5))) - 1) < 0.01
+assert abs(t.righting_arm(C, hyc, corner - 1e-6) - t.righting_arm(C, hyc, corner + 1e-6)) < 1e-3  # 2 つの式は、角が出る所でつながる
+th20 = math.radians(20)
+b20 = math.sqrt(2 * Wd * dd / math.tan(th20))
+assert abs(t.righting_arm(C, hyc, 20) - ((Wd / 2 - b20 / 3) * math.cos(th20) - (KGd - b20 * math.tan(th20) / 3) * math.sin(th20))) < 1e-9
+gz_c, at_c = t.righting_max(C, hyc)
+assert 15 < gz_c < Wd / 2 and gz_c < hyc["GM"] * math.sin(math.radians(at_c)) / 3 and at_c <= t.rim_angle(C, hyc)
+assert all(t.righting_arm(C, hyc, a_ / 4) <= gz_c + 1e-12 for a_ in range(1, int(t.rim_angle(C, hyc) * 4)))  # 最大は、ふちが着く角までの全部の中の最大
+# ふちが水に着く角: 浅い舟は浮き上がりながら傾くので、atan(2·乾舷 ÷ 幅)（hydro の heel）より大きい。深く沈んだ舟は同じ
+assert abs(t.rim_angle(C, hyc) - math.degrees(math.atan(C["wall_height"] ** 2 / (2 * Wd * dd)))) < 1e-9 and t.rim_angle(C, hyc) > hyc["heel"]
+deepq = {**C, "ballast_g": 70, "clay_side": 20, "wall_height": 20}
+hyd = t.hydro(deepq)
+assert 0 < hyd["f"] <= hyd["d"] and abs(t.rim_angle(deepq, hyd) - math.degrees(math.atan(2 * hyd["f"] / Wd))) < 1e-9
+# 既定の舟は、傾ける腕（余裕込み）が戻す腕の最大の 2 割に届かない
+assert t.blow_arm(C, hyc) * t.BLOW_SAFETY < 0.2 * gz_c and not t.check_physics(C)
+# 息は幅の向きに当たるので、戻す腕は幅で決まる。幅が長さより長い舟でも、狭い向き（長さ）の値を使わない
+wide_c = {**C, "tray_width": 80, "tray_length": 70, "leaf_radius": 12, "cup_width": 14}
+square_c = {**wide_c, "tray_width": 70}
+assert t.righting_max(wide_c, t.hydro(wide_c))[0] > t.righting_max(square_c, t.hydro(square_c))[0] + 3
+# 狭い舟に高い風受けを立てると、傾ける腕（余裕 BLOW_SAFETY 倍）が戻す腕の最大に届く（負の場面 float_neg_blow と同じ寸法）
+blow = {**C, "tray_width": 30, "wall_height": 8, "glue": 5, "figure_height": 30, "leaf_radius": 10, "cup_width": 30, "cup_height": 60, "ballast_g": 0}
+fs = t.check_physics(blow)
+assert [f.where for f in fs] == ["風受け"] and fs[0].message.startswith("息（"), fs
+assert floors(blow) == ["F5.float"] and floors({**blow, "cup_height": 20}) == []  # 風受けを低くすると通る
+# この寸法が落ちる理由は息の検査だけ（余裕を 0 にすると、ほかの検査は何も落とさない）
+keep = t.BLOW_SAFETY
+t.BLOW_SAFETY = 0
+assert not t.check_physics(blow)
+t.BLOW_SAFETY = keep
+# 小さな傾きの式では「8° 傾くだけ」と出て通っていた寸法（風受け 36）。傾ける腕が戻す腕の最大より長く、つり合う傾きが無い
+q36 = {**blow, "cup_height": 36}
+assert t.blow_arm(q36) > t.righting_max(q36, t.hydro(q36))[0] and [f.where for f in t.check_physics(q36)] == ["風受け"]
+# 余裕: 見込みの息ではつり合う（傾ける腕 < 戻す腕の最大）が、余裕を掛けると届く寸法も落とす（息の速さは量っていない見込みで、力は速さの 2 乗）
+edge = {**blow, "cup_height": 24}
+assert t.blow_arm(edge) < t.righting_max(edge, t.hydro(edge))[0] <= t.blow_arm(edge) * t.BLOW_SAFETY and [f.where for f in t.check_physics(edge)] == ["風受け"]
+# 別の検査が落ちた舟には息の検査を重ねない（同じ舟に、別の直し方を 2 つ言わない）。3 つとも、重ねなければ息の検査に掛かる寸法:
+# 乾舷が足りない舟・GM が足りない舟・壁の上に 4mm しか出ず息を受けない風受け
+sunk = {**blow, "cup_width": 34, "ballast_g": 8, "clay_side": 12}
+tippy = {**C, "tray_length": 88, "tray_width": 20, "wall_height": 30, "glue": 5, "figure_height": 30, "leaf_radius": 8, "cup_width": 16, "cup_height": 57, "ballast_g": 0, "paper_gsm": 300}
+low = {**C, "tray_length": 50, "tray_width": 20, "wall_height": 34, "glue": 5, "figure_height": 30, "leaf_radius": 8, "cup_width": 38, "cup_height": 38, "ballast_g": 0}
+hy_s, hy_t, hy_l = t.hydro(sunk), t.hydro(tippy), t.hydro(low)
+assert hy_s["f"] < t.FREEBOARD_MIN and hy_t["GM"] < t.GM_MIN <= hy_l["GM"] and min(hy_t["f"], hy_l["f"]) >= t.FREEBOARD_MIN and min(hy_t["heel"], hy_l["heel"]) >= t.MIN_HEEL
+for q, where, word in ((sunk, "舟の壁", "余裕"), (tippy, "重心", "GM"), (low, "風受け", "息を受けない")):
+    hy_q = t.hydro(q)
+    assert t.blow_arm(q, hy_q) * t.BLOW_SAFETY >= t.righting_max(q, hy_q)[0], q
+    fs = t.check_physics(q)
+    assert any(f.where == where and word in f.message for f in fs) and not any(f.message.startswith("息（") for f in fs), fs
+
+# 糊代の斜線は刷った面にある。斜線の面が貼る相手に当たり、組み上がった物の見える側に斜線が残らない向きに折る:
+# 舟は谷折り（刷った面が内・底の印が内に要る）で、角の糊代はとなりの壁の外側へ。人形の足と風受けの歯は山折り（谷折りだと斜線が上を向いて残る）
+fig_p, cup_p = by["figure"], next(q for q in t.parts(C) if q.key == "cupa")
+assert fig_p.mountain and not fig_p.valley and not cup_p.valley and tray.valley and not tray.mountain
+# 風受けの山折りの線は幅いっぱいの 1 本（歯ごとの 3mm の線は、山折りの刻みより短く、実線に見える）。歯の糊代の上の辺は全部その線の上
+(fold_c,) = cup_p.mountain
+assert fold_c == ((0, C["cup_height"]), (C["cup_width"], C["cup_height"])) and all(g[0][1] == g[1][1] == C["cup_height"] for g in cup_p.glue)
+st_f = " ".join(t.steps(C))
+assert "となりの壁の外側" in st_f and "内側に貼って" not in st_f and st_f.count("山折り") >= 3 and st_f.count("斜線") >= 3 and "絵は矢印と逆" in st_f
+# 「短い壁」「長い向き」とは言わない（幅が長さより長い舟では、糊代の無い壁の方が長い）
+assert all("短い壁" not in s_ and "長い向き" not in s_ for q in (P, C, {**C, "tray_width": 80, "tray_length": 70}) for s_ in t.steps(q))
+# 雷文は、舟の内から見ると 2 枚の壁で同じ形（口が底の側・巻く向きも同じ）。壁ごとに「内から見た左右（u）とふちからの距離（v）」に直して比べる。
+# 上の壁は内から見て紙の右が右、下の壁は紙の右が左。既定の舟（ラベルが底にあり、2 枚とも同じ所から始まる）で見る
+fret = marks(tray, "fret")
+top_f = [a["pts"] for a in fret if a["pts"][0][1] < h]
+bot_f = [a["pts"] for a in fret if a["pts"][0][1] > h + W]
+
+
+def seen(pts, lower):
+    xs = [x for x, _ in pts]
+    return [(round(max(xs) - x if lower else x - min(xs), 6), round(2 * h + W - y if lower else y, 6)) for x, y in pts]
+
+
+assert len(top_f) == len(bot_f) >= 3 and all(seen(a, False) == seen(top_f[0], False) for a in top_f) and all(seen(b_, True) == seen(top_f[0], False) for b_ in bot_f)
+# 口（線の始まり）は底の折り線の側、閉じた側はふちの側。ふちからの距離で見る
+assert seen(top_f[0], False)[0][1] > seen(top_f[0], False)[1][1] and seen(bot_f[0], True)[0][1] > seen(bot_f[0], True)[1][1]
+
+# どちらの形にも、浮かべた後に動かす手順が 1 つある: 風受けつきは息、風受けの無い形は水をかき回した渦（前は浮かべて見るだけだった）
+play_n = [s_ for s_ in t.steps(P) if "渦" in s_]
+play_c = [s_ for s_ in t.steps(C) if "息を吹き" in s_]
+assert len(play_n) == 1 and len(play_c) == 1 and not any("渦" in s_ for s_ in t.steps(C)) and not any("息を吹き" in s_ for s_ in t.steps(P))
+assert f"{t.STIR_TURNS} 回" in play_n[0] and t.steps(P).index(play_n[0]) == len(t.steps(P)) - 2  # 片付けの前
+# 手順の数は形だけで決まる（重りを使わない寸法でも番号がずれない）。作った人の報告は手順の番号で来て、形ごとに集められるため
+for q in (P, C):
+    with_clay, no_clay = t.steps(q), t.steps({**q, "ballast_g": 0})
+    diff = [i for i, (a_, b_) in enumerate(zip(with_clay, no_clay)) if a_ != b_]
+    assert len(with_clay) == len(no_clay) and len(diff) == 1 and "油粘土" in with_clay[diff[0]] and "重りを使わない" in no_clay[diff[0]], diff
+# 組み方の文は、サイトの手順の紙の左の列（144mm・字 3.6mm）で STEP_LINES_MAX 行まで。前の版は風受けつきで 20 行あり、紙からはみ出していた。
+# サイトは「番号. 文」の形で刷り、同じ折り返し（textfit.wrap）を使う
+from omochae.textfit import text_width, wrap
+for q in (P, C, {**P, "ballast_g": 0}, {**C, "ballast_g": 0}, {**C, "ballast_g": 12.5}):
+    n_lines = sum(len(wrap(f"{i}. {s_}", t.STEP_SIZE, t.STEP_COL_W)) for i, s_ in enumerate(t.steps(q), 1))
+    assert n_lines <= t.STEP_LINES_MAX, (n_lines, q)
+
+# 「試した事」の欄は 1 行で、数でなく言葉で書く（サイトの手順の紙は測る欄を外している。2 行にすると紙からはみ出す）。
+# 形ごとに、動かし方（息・渦）に合わせた予想の問いと欄にする
+mc, mn = t.measures(C), t.measures(P)
+for m, word, other in ((mc, "息", "渦"), (mn, "渦", "息")):
+    (row,) = m["rows"]
+    lab = " ".join(lab_ for lab_, _ in row)
+    assert word in lab and other not in lab and "水が入ったか" in lab and not any(ch.isdigit() for ch in lab + m["predict"]) and "mm" not in lab
+    assert sum(text_width(lab_, t.STEP_SIZE) + 1.5 + w_ + 5 for lab_, w_ in row) <= 190 and text_width(m["predict"], t.STEP_SIZE) <= 190, row
+    assert row[0][1] >= 100  # 3 つの事を書くので、枠は行の残りいっぱいに取る（前は 40mm で、字を書く所が足りなかった）
+assert "息" in mc["predict"] and "かき回す" in mn["predict"]
+
+# 手順ごとの直しの行き先（step_targets）。作った人の報告の困り事は手順の番号で来るので、番号から当たる寸法・見込みの値・検査の所を引ける。
+# 文と行き先は 1 つの並びから出す。名は実際にある物だけ
+WHERES = {"舟の壁", "重心", "舟の糊代", "葉", "人形", "重り", "風受け", "粘土の印", "葉の向きの刻み"}
+for q in (P, C, {**C, "ballast_g": 0}, {**P, "ballast_g": 0}):
+    st_q, tg = t.steps(q), t.step_targets(q)
+    assert sorted(tg) == list(range(1, len(st_q) + 1)), q
+    for i, target in tg.items():
+        assert set(target) == {"params", "consts", "floors"}, target
+        assert all(k in t.RANGES for k in target["params"]) and all(hasattr(t, c) for c in target["consts"]) and set(target["floors"]) <= WHERES, (i, target)
+tc, st_c = t.step_targets(C), t.steps(C)
+blow_i, tape_i, clay_i = (next(i for i, s_ in enumerate(st_c, 1) if w in s_) for w in ("息を吹き", "透明テープ", "油粘土"))
+assert "BREATH_V" in tc[blow_i]["consts"] and "tape_gsm" in tc[tape_i]["params"] and "重り" in tc[clay_i]["floors"]
+assert t.step_targets({**C, "ballast_g": 0})[clay_i] == tc[clay_i]  # 重りを使わない寸法でも、同じ番号は同じ行き先
+assert not any(tc[i]["params"] or tc[i]["consts"] or tc[i]["floors"] for i in (1, 2, 3, len(st_c)))  # 水の注意・物差し・片付けは組み方の文だけ
+# 行き先の寸法は、その手順の式に実際に効く物だけ（名を並べただけにしない）: 寸法を範囲の端へ動かすと、その手順が見る数が変わる
+float_i, cups_i = (next(i for i, s_ in enumerate(st_c, 1) if w in s_) for w in ("水に浮かべ", "風受けの印"))
+
+
+def moved(q, k):
+    lo, hi = t.RANGES[k]
+    return {**q, k: hi if q[k] != hi else lo}
+
+
+def hydro_key(q):
+    return tuple(round(v, 9) for v in t.hydro(q).values())
+
+
+def blow_key(q):
+    return (round(t.blow_arm(q), 9), tuple(round(v, 9) for v in t.righting_max(q, t.hydro(q))))
+
+
+def cups_key(q):
+    fm = t.floor_marks(q)
+    return ([c.bounds for c in fm["cups"]], fm["leaf"].bounds, q["cup_height"])
+
+
+for i, key in ((float_i, hydro_key), (blow_i, blow_key), (clay_i, t.clay_thickness), (cups_i, cups_key)):
+    assert tc[i]["params"] and all(key(moved(C, k)) != key(C) for k in tc[i]["params"]), (i, tc[i])
+# 浮かべる手順と息の手順の行き先は、名で固定する（別の手順の寸法に差し替わった時に気づく）
+assert set(tc[float_i]["params"]) == {"paper_gsm", "tape_gsm", "wall_height", "tray_length", "tray_width", "ballast_g", "figure_height"} and set(tc[float_i]["floors"]) == {"舟の壁", "重心"}
+assert set(tc[blow_i]["params"]) == {"cup_width", "cup_height", "wall_height", "tray_width"} and set(tc[blow_i]["consts"]) == {"BREATH_V", "CD_CUP_OPEN", "CD_CUP_BACK", "BLOW_SAFETY", "CUP_ABOVE"}
+# 風受けの歯の刻みは、風受けの無い形の「切る」手順の行き先に入れない
+assert "FRINGE_PITCH" in tc[4]["consts"] and not t.step_targets(P)[4]["consts"]
+# 所の名（floors）は、check_physics が実際に出す所の名の全部。検査の所の名を変えた時にここで気づく
+seen_w = set()
+for q in (blow, sunk, narrowfig, deep, {**P, "glue": 30}, {**P, "leaf_radius": 35}, {**P, "ballast_g": 30}, {**C, "tray_length": 76, "leaf_radius": 14.5},
+          {**P, "tray_width": 28, "tray_length": 100, "clay_side": 15, "leaf_radius": 12, "ballast_g": 12, "figure_height": 40}):
+    seen_w |= {f.where for f in t.check_physics(q)}
+assert seen_w == WHERES, seen_w ^ WHERES
 print("ok")
