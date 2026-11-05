@@ -88,7 +88,9 @@ def _has_pii(text):
     - 連絡先の語と印: @・アット・メール・電話・LINE・SNS の名・URL・ドメインの形。
     名前は式では見分けられないので、受け入れの前に人が全文を読む（omochae.intake の review）。"""
     # 連絡先の語は、長音の ー を - に直す前に見る（直した後では「メール」「ツイッター」が当たらなかった）
-    raw = "".join(ch for ch in unicodedata.normalize("NFKC", str(text)) if unicodedata.category(ch) != "Cf")  # 見えない文字も消す
+    # 見えない文字・結合文字・異体字セレクター・空白を消してから語を探す（語の中に挟むと、すり抜けた）
+    raw = "".join(ch for ch in unicodedata.normalize("NFKC", str(text))
+                  if unicodedata.category(ch) not in ("Cf", "Mn", "Me") and not ch.isspace())
     if CONTACT.search(raw):
         return True
     t = _norm(text)
@@ -159,7 +161,8 @@ def check(r):
             if isinstance(v, (int, float)):
                 # 寸法は雛形の範囲（F5.range と同じ）の中だけ。範囲の外の大きな数で番号を運べた
                 lo_hi = getattr(tpl, "RANGES", {}).get(k)
-                return lo_hi is not None and lo_hi[0] <= v <= lo_hi[1]
+                # 小数は 2 桁まで（寸法は 0.01mm より細かく測れない）。桁を許すと、範囲の中の小数の後ろで番号を運べた
+                return lo_hi is not None and lo_hi[0] <= v <= lo_hi[1] and round(v, 2) == v
             return isinstance(v, str) and isinstance(tpl.DEFAULTS[k], str) and re.fullmatch(r"[a-z_]{1,20}", v) is not None
         if not isinstance(params, dict) or not all(ok_param(k, v) for k, v in params.items()):
             out.append(Failure("F12.report", "params", f"{tpl.ID} の寸法の名と、数か形の値だけ"))

@@ -58,6 +58,10 @@ for bad in ({**OK, "stuck_step": 9012345678}, {**OK, "problems": [{"kind": "fit"
             {**OK, "stuck_step": 90}, {**OK, "params": {"vane_radius": 9012345678}}):
     assert any(f.floor == "F12.report" for f in fb.check(bad)), bad
 assert any(f.floor == "F12.pii" for f in fb.check({**OK, "motion_notes": "メ\u200bール yamada_taro"}))
+assert any(f.floor == "F12.report" for f in fb.check({**OK, "params": {"axle_d": 3.09012345678}}))  # 小数の後ろで番号を運ばせない
+assert fb.check({**OK, "params": {"axle_d": 3.5}}) == []
+for t in ("メ\ufe0fール yamada", "メ\u0301ール yamada", "メ ール yamada", "ラ イ ン yamada_taro"):
+    assert any(f.floor == "F12.pii" for f in fb.check({**OK, "motion_notes": t})), t
 assert not [f for f in fb.check({**OK, "motion_notes": "fold line 3mm が見えない"}) if f.floor == "F12.pii"]
 # 2b3. 決まった形の欄も、値を絞る（自由な文を入れさせない）。深い入れ子は落ちずに F12.report
 for bad in ({**OK, "params": {"kind": "山田太郎 横浜市"}}, {**OK, "source_id": "NDL-1-R1-L-yamada_taro"},
