@@ -455,4 +455,23 @@ assert any("姿を大きく" in x for x in thin) and not any("溝を短く" in x
 
 # 姿の形の覚えは上限つき（高さは連続の値なので、上限が無いと場面を回すほど増える）
 assert t._shape.cache_info().maxsize is not None
+# 表のとおり stand に base を書いた値で刷れる。勧めの寸法は脚で立てる物なので、そのままだと舌が足に合わず、紙にも入らない姿があった。
+# 馬だけは、足の幅と重心の位置で舌の窓が空（下限が上限を越える）で、溝をどう変えても舌では立たない。
+from omochae.compose import check_params  # noqa: E402
+
+NO_TONGUE = {"uma"}
+for fig, f in t.FIGURES.items():
+    src = json.loads((ROOT / "data/sources" / f"{f['source']}.json").read_text(encoding="utf-8"))
+    r = check_params(t.ID, {"figure": fig, "stand": "base"}, src)
+    low, high = t._slot_window(fig, 1.0)
+    if fig in NO_TONGUE:
+        assert low > high and not r["passed"] and all("F5.stand" in e for e in r["errors"]), (fig, low, high, r)
+    else:
+        assert r["passed"], ("stand: base を書くと刷れない", fig, r["errors"])
+        if f["stand"] != "base":
+            assert low <= t.filled({"figure": fig, "stand": "base"})["slot_length"] <= high, fig
+    # 勧めの立て方を書いても書かなくても同じ（勧めの紙を変えない）。書いた値はそのまま勝つ
+    assert t.filled({"figure": fig}) == {**t.filled({"figure": fig, "stand": f["stand"]})}, fig
+    assert t.filled({"figure": fig, "stand": "base", "slot_length": 30})["slot_length"] == 30, fig
+
 print("ok")
