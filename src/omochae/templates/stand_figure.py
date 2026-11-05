@@ -1,4 +1,4 @@
-"""雛形 stand_figure: 刷った姿（表と、貼り合わせる裏）を、折り返しの脚か、溝のある箱の台で立てる。
+"""雛形 stand_figure: 刷った姿（表と、貼り合わせる裏）を、背に貼る三角の脚か、溝のある箱の台で立てる。
 
 『江都二色』の玩具のうち、動く仕組みが絵に無い物（張子・土人形・紙雛・羽子板・凧・面など）を、1 つの雛形で立てて飾る型紙にする。
 玩具ごとに刷る姿（figure）の値を 1 つ持つ。どの値も、出典の図を見て手で取った点（画素は使っていない）の輪郭と絵と、
@@ -11,14 +11,28 @@
 立つかの見込み（F5.stand）の前提:
 - 姿の面の重心（表の外形の面積の重心）が、支える足の形（床に触れる所を囲む凸の形）の内に、余白を持って入れば倒れないと見る。
   余白は max(MIN_MARGIN, 重心の高さ × tan(TILT_TOL))。重心が高いほど、同じ傾き（机の揺れ・息）で重心が横へ大きく動くため。
-  紙の重さは表と裏で同じ形なので重心は変わらない。脚と台の紙の重さは入れない（脚は軽く、台は重心を下げる側に効く）。
-- 脚（easel）: 脚は帯 1 本。上の糊代を姿の背に貼り、糊代の境で谷折りして後ろへ開く。姿は後ろへ LEAN_DEG 傾き、
-  姿の下の縁（床に触れる所）と脚の先と脚の付け根で三角ができると見る。脚と姿の開きの角 α・脚の長さ L から、
+  紙の重さは表と裏で同じ形なので重心は変わらない。脚の帯の重さは、重心の奥行きに入れる（帯は姿の紙の 1〜5 割あり、姿の後ろに
+  あるので重心を後ろへ寄せる）。余白を決める重心の高さは姿だけで測る（帯は低い所にあるので、入れない方が余白が広い側）。
+  台の紙の重さは入れない（台は重心を下げる側に効く）。
+- 脚（easel）: 脚は帯 1 本を 3 本の折り線で三角に折って閉じた物（背に貼る面・脚・つなぎの 3 辺と、閉じる糊代）。
+  背に貼る面を姿の背（重心の真後ろ）に貼ると、脚がその上の端（付け根）から後ろへ開き、つなぎが脚の先から貼る面の下の端へ戻る。
+  姿は後ろへ LEAN_DEG 傾き、姿の下の縁（床に触れる所）と脚の先と付け根で三角ができると見る。脚と姿の開きの角 α・脚の長さ L から、
   付け根の高さ s = L·sin(α + φ)/sin φ（φ = 90° − LEAN_DEG）と、足の形の奥行き c = L·sin α / sin φ が決まる。
-  重心は姿の下の縁から zc·sin(LEAN_DEG) 後ろ。c がこれに余白を足した分より浅いと、後ろへ倒れる。
-  開きの角は折り目の硬さで保つと見込む（実物で確かめていない。開きすぎる紙なら糸で脚と姿をつなぐ）。
-  倒れないかは開き具合で決まるので、開きの物差し（部品 4。印の間が c）を刷り、脚の先を印に合わせて置かせる。
-  台の形は、舌が溝をほぼ埋める（溝の長さ − 1mm）ので、姿の置き場は溝で決まり、印は要らない。
+  重心の奥行きは、姿だけなら下の縁から zc·sin(傾き) 後ろで、脚の帯の重さを面積で重み付けして足す。c がこれに余白を足した分より浅いと
+  後ろへ、重心が下の縁に近すぎると前へ倒れる。
+  開きの角は折り目の硬さでなく、三角の 3 辺の長さで決まる（貼る面 tab_glue・脚 L・つなぎ r。r は α と LEAN_DEG から出して刷る）。
+  前の形は脚の帯を背に貼って折り目の硬さで開きを保つ見込みで、開きの物差し（別の部品）で脚の先を置かせていた。脚は姿の重さで
+  開く向きに押されるので、開きを紙の辺で止める形に替えた（つなぎは引っ張りで効く）。
+  姿の傾きは、付け根の高さと脚の長さの 1mm のずれで数度変わる（感度は ほぼ 1/c ラジアン/mm。c が浅いほど鋭い）。手のずれを
+  全部入れて見る: 折り目 3 本の位置と、閉じる糊代を貼る位置が ±FOLD_TOL、三角を背に貼る高さが ±GLUE_TOL（裏の印は裏の紙にあり、
+  下の縁は表の実線で切るので、表と裏の重ねのずれもここに入る）。この 5 つの端の組み合わせ全部で、傾き・奥行き・重心を数え直し、
+  前へも後ろへも倒れない事を見る。前へ倒れない限りは 傾き ≧ 約 8°（重心の奥行き ≧ 余白）なので、既定の傾きは 20°、開きは 40°
+  （c = 0.68·L で深い）にした。既定の傾きが 12°・開きが 30° だった時は、どの姿も 1mm のずれで前へ倒れる側に入った。
+  貼る面が短いと、同じずれで開きの角が大きく変わる（付け根に近い所で止めるため）ので、貼る面は背の許す限り長くする。
+  貼る面は、±GLUE_TOL ずれて貼っても姿の背に収まる要がある（下へ出ると、そこが机に当たって姿が浮く）。
+  台の形は、舌が溝をほぼ埋める（溝の長さ − 1mm）ので、姿の置き場は溝で決まる。
+- 折る向き: 凡例の谷折りは刷った面がへこむ、山折りは刷った面が出る。脚の帯も台の箱も、色の面を外にして山折りする。
+  糊代の斜線は刷った面にあるので、山折りにすると斜線の面が貼る相手（姿の背・壁の内）を向く（谷折りだと、色が内に隠れ、斜線が貼らない側を向く）。
 - 台（base）: 箱（底つき）の上の面と底の面の真ん中に、同じ溝を切る（閉じると上下にそろう）。姿の下に足した差し込み（舌）は
   箱の高さより TONGUE_EXTRA 長く、上の溝と底の溝を通り抜けて先が机に着く。姿の重さは舌の先で机に乗り、姿の下の縁は
   上の面から TONGUE_EXTRA ほど浮く（浮くのでよい）。舌が箱の高さちょうどだと、箱が少し高く折れただけ（BOX_TOL）で先が浮き、
@@ -34,6 +48,7 @@
   ねじって折れると見て落とす。舌は付け根が半分以上姿とつながる範囲で、重心の側へ寄せる（細い棒の姿は溝を長めにする）。
 どの値も実物では未確認。Claude が変えてよいのは RANGES の名前の値と、figure・stand・back の値だけ。
 """
+import itertools
 import math
 from functools import lru_cache, wraps
 
@@ -47,8 +62,10 @@ ID = "stand_figure"
 # 立て方と脚・台の寸法の出発点。姿ごとの勧め（FIGURES の stand と suggest）がこれに重なる（filled）。
 BASE_DEFAULTS = {
     "stand": "easel",
-    # 脚。帯の幅・脚の長さ・糊代・姿と脚の開きの角。
-    "tab_width": 14, "tab_length": 40, "tab_glue": 14, "tab_angle": 30,
+    # 脚。帯の幅・脚の長さ・背に貼る面の長さ（付け根から下へ）・姿と脚の開きの角。
+    # 傾き 20°・開き 40° では付け根の高さは脚の長さと同じ（48mm）。貼る面 45mm は、付け根から下の縁の 3mm 上まで（背の許す限り長く）。
+    # 脚 48mm は、高さ 75〜110mm の姿が、手のずれ（FOLD_TOL・GLUE_TOL）を全部入れても前へも後ろへも倒れない長さ。
+    "tab_width": 14, "tab_length": 48, "tab_glue": 45, "tab_angle": 40,
     # 台の箱。横の長さ・奥行き・高さ・糊代、溝の長さと幅。
     # 溝の幅 1mm は、カッターで 2 本の線の間の帯を切り取れる幅の見込み。箱の高さ 16mm は、その隙間が広く切れ（+2·CUT_TOL）箱が低く折れた（−BOX_TOL）側でも傾きが MAX_WOBBLE に収まる高さ（13mm 以下だと越える）。
     "base_length": 60, "base_depth": 30, "base_height": 16, "base_glue": 6,
@@ -70,7 +87,8 @@ DEFAULTS = {
 RANGES = {
     "scale": (0.5, 1.5),
     "paper_thickness": (0.05, 0.5),
-    "tab_width": (6, 30), "tab_length": (10, 120), "tab_glue": (6, 40), "tab_angle": (10, 60),
+    # 貼る面の下限 10 は、閉じる糊代（CLOSE_GLUE 8mm）より長く取るため（組み方の文が「短い糊代」「長い糊代の面」で見分けさせる）。
+    "tab_width": (6, 30), "tab_length": (10, 120), "tab_glue": (10, 60), "tab_angle": (10, 60),
     "base_length": (30, 150), "base_depth": (15, 80), "base_height": (6, 30), "base_glue": (4, 12),
     # 溝の長さの下限 6 は、舌の幅（溝 − 2·SLOT_END）から両側の余白 MIN_MARGIN を引いて 1mm の窓が残る長さ。5 だと窓が 0 で、重心が舌の真ん中に
     # ぴたり来る姿しか横の検査を通らない（試験で定数との関係を見る）。
@@ -81,7 +99,7 @@ STANDS = ("easel", "base")
 FORM = "figure"
 # 既定の出典（data/sources/ の名前）。既定の姿（犬張子）と組になる出典。
 SOURCE = "NDL-1187053-R0000016-L-stand_figure"
-LEAN_DEG = 12  # 脚で立てた姿の後ろへの傾き（見込み）。立て掛ける写真立てと同じくらい
+LEAN_DEG = 20  # 脚で立てた姿の後ろへの傾き（寸法どおりに組めた時）。前へ倒れない限り（約 8°）まで、手のずれで立つ分の余地を取る
 TILT_TOL = 8  # この角度まで傾けても倒れない余白を取る（机の揺れ・息の見込み）
 MIN_MARGIN = 2  # 余白の下限（mm）
 MIN_CLEAR = 0.5  # 溝の隙間の下限。紙の毛羽の 0.1mm に、狭く切れた側のずれ 2·CUT_TOL を足した見込み
@@ -90,6 +108,9 @@ CUT_TOL = 0.2  # 手で切る溝の縁 1 つのずれ（見込み）。溝の幅
 BOX_TOL = 0.5  # 箱を折った時の高さのずれ（見込み）。折り目の位置と紙の厚みで、この程度は高くも低くもなる
 TONGUE_EXTRA = 1.5  # 舌を箱の高さより長くする分。BOX_TOL より大きくする（箱が BOX_TOL 高く折れても、先が底の溝を抜けて机に届く）。
 # この決まりは寸法に依らないので、check_physics で見ず（どの寸法でも同じ答えになる）、試験で定数の関係として見る。
+FOLD_TOL = 0.5  # 脚の三角の折り目 1 本の位置のずれと、閉じる糊代を貼る位置のずれ（見込み）
+GLUE_TOL = 1.0  # 脚の三角を背に貼る高さのずれ（見込み。表と裏を重ねるずれを含む）
+CLOSE_GLUE = 8  # 脚の三角を閉じる糊代の長さ（背に貼る面より長くはしない）
 SLOT_EDGE = 5  # 溝の端から箱の縁までの紙。これより狭いと溝の端が裂ける
 SLOT_END = 0.5  # 舌の左右と溝の端の隙間
 TONGUE_ATTACH = 0.5  # 舌の上の縁のうち、姿とつながっている割合の下限
@@ -122,6 +143,9 @@ def _src(canvas, side):
 FIGURES = {
     "inu": {
         "title": "犬張子", "source": _src(16, "L"), "height": 88, "stand": "easel",
+        # 脚の間が空き、重心の真後ろの背は腹（下の縁から約 26mm）から上にしか無い。貼る面は既定の 45mm が取れないので 20mm にする
+        # （±GLUE_TOL ずれて貼っても腹の下へ出ない長さ）。
+        "suggest": {"tab_glue": 20},
         "frame": "コマ 16 左頁の 1600px の図の座標",
         "fill": "#efe7d3",
         "body": [[(295, 1535), (330, 1490), (380, 1450), (420, 1365), (470, 1420), (555, 1345), (605, 1450), (640, 1560), (700, 1650),
@@ -146,6 +170,7 @@ FIGURES = {
     },
     "uma": {
         "title": "張子の馬", "source": _src(17, "L"), "height": 80, "stand": "easel",
+        "suggest": {"tab_glue": 20},  # 犬張子と同じ理由（腹の下が空く）
         "frame": "コマ 17 左頁の縮図の座標", "fill": "#a5482c",
         "body": [[(98, 652), (125, 628), (175, 600), (240, 565), (265, 590), (300, 660), (320, 720), (380, 712), (470, 728), (520, 748), (540, 760),
                   (590, 820), (625, 900), (580, 880), (535, 860), (545, 950), (525, 1035), (485, 1035), (495, 950), (440, 890), (330, 890),
@@ -239,7 +264,7 @@ FIGURES = {
         ] + [_p("poly", "#c9a85a", _circ(x, y, 7)) for x, y in ((410, 490), (420, 525), (432, 465), (470, 462), (505, 485))],
     },
     "tsuchi_usagi": {
-        "title": "土人形の兎", "source": _src(13, "L"), "height": 55, "stand": "easel", "suggest": {"tab_width": 10, "tab_length": 18, "tab_glue": 8},
+        "title": "土人形の兎", "source": _src(13, "L"), "height": 55, "stand": "easel", "suggest": {"tab_width": 10, "tab_length": 28, "tab_glue": 25},
         "frame": "コマ 13 左頁の縮図の座標", "fill": "#f1ece0",
         "body": [[(468, 722), (480, 715), (492, 730), (500, 745), (515, 725), (535, 718), (530, 745), (545, 765), (552, 795), (545, 828), (455, 828),
                   (447, 785), (455, 760)]],
@@ -251,7 +276,7 @@ FIGURES = {
         ],
     },
     "tsuchi_kame": {
-        "title": "土人形の亀", "source": _src(13, "L"), "height": 45, "stand": "easel", "suggest": {"tab_width": 10, "tab_length": 18, "tab_glue": 8},
+        "title": "土人形の亀", "source": _src(13, "L"), "height": 45, "stand": "easel", "suggest": {"tab_width": 10, "tab_length": 28, "tab_glue": 25},
         "frame": "コマ 13 左頁の縮図の座標。左下の亀", "fill": "#6f9a7a",
         "body": [[(170, 945), (200, 925), (240, 925), (262, 950), (275, 965), (268, 990), (255, 1005), (262, 1033), (180, 1033), (170, 1010),
                   (165, 980)]],
@@ -262,7 +287,7 @@ FIGURES = {
         ],
     },
     "tsuchi_hato": {
-        "title": "土人形の鳩", "source": _src(13, "L"), "height": 42, "stand": "easel", "suggest": {"tab_width": 10, "tab_length": 18, "tab_glue": 8},
+        "title": "土人形の鳩", "source": _src(13, "L"), "height": 42, "stand": "easel", "suggest": {"tab_width": 10, "tab_length": 28, "tab_glue": 25},
         "frame": "コマ 13 左頁の縮図の座標。左上の鳥", "fill": "#e3c98a",
         "body": [[(118, 640), (160, 618), (185, 615), (200, 625), (230, 615), (260, 620), (300, 625), (270, 650), (240, 655), (235, 680),
                   (235, 705), (175, 705), (170, 680), (140, 672)]],
@@ -423,7 +448,7 @@ FIGURES = {
         ],
     },
     "tokkuri": {
-        "title": "ままごとの徳利", "source": _src(15, "L"), "height": 70, "stand": "easel", "suggest": {"tab_width": 12, "tab_length": 22, "tab_glue": 10},
+        "title": "ままごとの徳利", "source": _src(15, "L"), "height": 70, "stand": "easel", "suggest": {"tab_width": 12, "tab_length": 36, "tab_glue": 33},
         "frame": "コマ 15 左頁の縮図の座標。右上の徳利（頁のままごと道具の代表）", "fill": "#e8b88a",
         "body": [[(495, 690), (530, 688), (528, 705), (522, 720), (545, 745), (570, 790), (578, 830), (565, 860), (485, 860), (472, 830), (478, 780),
                   (500, 740), (505, 715), (495, 705)]],
@@ -434,7 +459,7 @@ FIGURES = {
         ],
     },
     "suribachi": {
-        "title": "ままごとの擂鉢", "source": _src(21, "L"), "height": 40, "stand": "easel", "suggest": {"tab_width": 10, "tab_length": 16, "tab_glue": 8},
+        "title": "ままごとの擂鉢", "source": _src(21, "L"), "height": 40, "stand": "easel", "suggest": {"tab_width": 10, "tab_length": 28, "tab_glue": 25},
         "frame": "コマ 21 左頁の縮図の座標。擂鉢（頁のままごと道具の代表）。下の縁は平らにした", "fill": "#c98a5a",
         "body": [[(175, 830), (230, 800), (340, 785), (450, 790), (505, 815), (505, 845), (500, 870), (550, 870), (552, 920), (520, 925), (495, 905),
                   (480, 945), (195, 945), (180, 905), (178, 870)]],
@@ -445,7 +470,7 @@ FIGURES = {
         ],
     },
     "binkake": {
-        "title": "ままごとの丸い徳利", "source": _src(26, "R"), "height": 70, "stand": "easel", "suggest": {"tab_width": 12, "tab_length": 22, "tab_glue": 10},
+        "title": "ままごとの丸い徳利", "source": _src(26, "R"), "height": 70, "stand": "easel", "suggest": {"tab_width": 12, "tab_length": 36, "tab_glue": 33},
         "frame": "コマ 26 右頁の縮図の座標。右の丸い徳利（頁のままごと道具の代表）", "fill": "#d8b878",
         "body": [[(480, 605), (518, 600), (520, 630), (505, 640), (545, 660), (572, 700), (578, 740), (565, 785), (530, 798), (470, 798), (440, 780),
                   (428, 735), (438, 690), (470, 655), (480, 640)]],
@@ -468,7 +493,7 @@ FIGURES = {
         ],
     },
     "tawara": {
-        "title": "縁起物の俵", "source": _src(22, "R"), "height": 40, "stand": "easel", "suggest": {"tab_width": 10, "tab_length": 16, "tab_glue": 8},
+        "title": "縁起物の俵", "source": _src(22, "R"), "height": 40, "stand": "easel", "suggest": {"tab_width": 10, "tab_length": 28, "tab_glue": 25},
         "frame": "コマ 22 右頁の縮図の座標。下の俵（頁の縁起物の代表）。下の縁は平らにした", "fill": "#a87a52",
         "body": [[(255, 935), (270, 905), (310, 893), (380, 893), (415, 910), (425, 950), (415, 980), (380, 990), (262, 990), (255, 975)]],
         "art": [
@@ -654,8 +679,8 @@ def filled(p):
 def _filling(fn):
     """外から p を受ける関数の入口で filled を通す。中の関数どうしで呼んでも、もう埋まっているので変わらない。"""
     @wraps(fn)
-    def run(p, *a):
-        return fn(filled(p), *a)
+    def run(p, *a, **k):
+        return fn(filled(p), *a, **k)
     return run
 
 
@@ -768,12 +793,46 @@ def margin(g, above=0.0):
 
 @_filling
 def easel(p):
-    """脚の三角（前提は module の docstring）。付け根の高さ s と、足の形の奥行き c と、重心の奥行き。"""
+    """脚の三角（前提は module の docstring）の寸法どおりの形。付け根の高さ s・足の形の奥行き c と、
+    背に貼る面の下の端の高さ h（姿の下の縁から、姿に沿って）・つなぎの辺の長さ r（脚の先から貼る面の下の端まで）。"""
     phi = math.radians(90 - LEAN_DEG)
+    lean = math.radians(LEAN_DEG)
     a, L = math.radians(p["tab_angle"]), p["tab_length"]
+    s, c = L * math.sin(a + phi) / math.sin(phi), L * math.sin(a) / math.sin(phi)
+    h = s - p["tab_glue"]
+    # 貼る面の下の端は、姿に沿って h の所（後ろへ h·sin、上へ h·cos）。脚の先は机の上の (c, 0)。
+    r = math.hypot(c - h * math.sin(lean), h * math.cos(lean))
+    return {"s": s, "c": c, "h": h, "r": r}
+
+
+@_filling
+def easel_at(p, folds=(0.0, 0.0, 0.0, 0.0), up=0.0):
+    """手のずれを入れた時の、開きの角（度）・足の形の奥行き・後ろへの傾き（度）・重心の奥行き。ずれが 0 なら寸法どおりの形に戻る。
+    folds は帯の上から順に（閉じる糊代とつなぎの折り目・つなぎと脚の折り目・脚と貼る面の折り目・閉じる糊代を貼る位置）のずれ（mm）。
+    折り目が帯の下へずれると、その上の辺が伸び、下の辺が縮む。up は三角を背に貼る高さのずれ（上へが正）。
+    閉じる糊代を貼る位置のずれは、どちら向きも貼る面の長さの増減として数える（折り目が下の端より外へ出た分は、実際にはつなぎが
+    伸びる側に効くが、余白の差は 0.1mm ほど）。貼る面の下の端を切るずれは、別には数えない（同じ大きさで、この幅の内）。
+    三角（貼る面・脚・つなぎ）の 3 辺から開きの角を出し、姿（付け根の高さ）と脚と机の三角を解いて傾きを出す。閉じない時は None。
+    重心は、姿（表と裏の枚数ぶん）と脚の帯（1 枚）の面積で重みを付けた奥行き。帯の 4 つの面は、それぞれの真ん中に重さがあると見る。"""
+    e = easel(p)
+    e1, e2, e3, e4 = folds
+    w, L, r, s = p["tab_glue"] - e3 + e4, p["tab_length"] + e3 - e2, e["r"] + e2 - e1, e["s"] + up
+    ca = (w * w + L * L - r * r) / (2 * w * L)
+    if not -1 < ca < 1:
+        return None
+    a = math.acos(ca)
+    c = math.sqrt(s * s + L * L - 2 * s * L * math.cos(a))
+    lean = math.pi / 2 - math.acos(max(-1.0, min(1.0, (s * s + c * c - L * L) / (2 * s * c))))
     g = geometry(p)
-    return {"s": L * math.sin(a + phi) / math.sin(phi), "c": L * math.sin(a) / math.sin(phi),
-            "com": g["zc"] * math.sin(math.radians(LEAN_DEG))}
+    sl, h, k = math.sin(lean), s - w, min(CLOSE_GLUE, p["tab_glue"])
+    faces = [(w, (h + s) / 2 * sl), (L, (s * sl + c) / 2), (r, (c + h * sl) / 2), (k, (h + k / 2) * sl)]
+    fig, strip = g["body"].area * layers(p), p["tab_width"] * sum(n for n, _ in faces)
+    com = (fig * g["zc"] * sl + p["tab_width"] * sum(n * x for n, x in faces)) / (fig + strip)
+    return {"angle": math.degrees(a), "c": c, "lean": math.degrees(lean), "com": com}
+
+
+# 手のずれの端の組み合わせ。寸法どおり（全部 0）を先頭に置き、寸法そのものが悪い時は、ずれの話をせずに落とす。
+_SLIPS = [((0.0, 0.0, 0.0, 0.0), 0.0)] + [(f, u) for f in itertools.product((-FOLD_TOL, FOLD_TOL), repeat=4) for u in (-GLUE_TOL, GLUE_TOL)]
 
 
 @_filling
@@ -832,19 +891,29 @@ def check_physics(p):
     if p["stand"] == "easel":
         e = easel(p)
         tw = p["tab_width"]
-        # 脚の糊代は姿の背の、重心の真後ろに貼る。糊代が姿の外にはみ出すと貼れない。
-        patch = box(cx - tw / 2, H - e["s"] - p["tab_glue"], cx + tw / 2, H - e["s"])
+        # 脚の三角の貼る面は、姿の背の重心の真後ろに、付け根から下へ貼る。±GLUE_TOL ずれて貼っても姿の背に収まる要がある
+        # （脚の間が空いた姿の腹の下へ出ると貼れず、下の縁より下へ出ると、そこが机に当たって姿が浮く）。
+        patch = box(cx - tw / 2, H - e["s"] - GLUE_TOL, cx + tw / 2, H - e["h"] + GLUE_TOL)
         if not g["body"].buffer(-0.5).contains(patch):
-            out.append(Failure("F5.stand", "脚", f"脚の糊代（付け根の高さ {e['s']:.0f}mm から上へ {p['tab_glue']:g}mm）が姿の背に収まらない"))
-        foot = [(a, 0) for ab in g["contacts"] for a in ab] + [(cx - tw / 2, e["c"]), (cx + tw / 2, e["c"])]
-        hull = Polygon(foot).convex_hull if len(foot) >= 3 else None
-        com = Point(cx, e["com"])
-        if hull is None or hull.geom_type != "Polygon" or not hull.buffer(-m).contains(com):
-            if e["c"] - e["com"] < m:
-                why = f"脚の足の形の奥行き {e['c']:.1f}mm が浅く、重心（下の縁から {e['com']:.1f}mm 後ろ）が後ろへ倒れる（余白 {m:.1f}mm 要る）"
-            else:
-                why = f"重心が足の形の横の端に近く、横へ倒れる（余白 {m:.1f}mm 要る）"
-            out.append(Failure("F5.stand", "脚", why))
+            out.append(Failure("F5.stand", "脚", f"脚を貼る面（付け根の高さ {e['s']:.0f}mm から下へ {p['tab_glue']:g}mm。貼るずれ ±{GLUE_TOL:g}mm を含む）が姿の背に収まらない"))
+        # 倒れないかは、寸法どおりの形と、手のずれの端の組み合わせ全部で見る（1 つ落ちたら、その理由だけを言う）。
+        for folds, up in _SLIPS:
+            x = easel_at(p, folds, up)
+            when = f"（折り目が {FOLD_TOL:g}mm・貼る高さが {GLUE_TOL:g}mm ずれた時）" if up else ""
+            if x is None:
+                out.append(Failure("F5.stand", "脚", f"脚の三角（貼る面 {p['tab_glue']:g}・脚 {p['tab_length']:g}・つなぎ {e['r']:.1f}mm）が閉じない{when}"))
+                break
+            foot = [(a, 0) for ab in g["contacts"] for a in ab] + [(cx - tw / 2, x["c"]), (cx + tw / 2, x["c"])]
+            hull = Polygon(foot).convex_hull if len(foot) >= 3 else None
+            if hull is None or hull.geom_type != "Polygon" or not hull.buffer(-m).contains(Point(cx, x["com"])):
+                if x["c"] - x["com"] < m:
+                    why = f"脚の足の形の奥行き {x['c']:.1f}mm が浅く、重心（下の縁から {x['com']:.1f}mm 後ろ）が後ろへ倒れる（余白 {m:.1f}mm 要る）"
+                elif x["com"] < m:
+                    why = f"姿が立ちすぎ（傾き {x['lean']:.1f}°）、重心（下の縁から {x['com']:.1f}mm 後ろ）が前へ倒れる（余白 {m:.1f}mm 要る）"
+                else:
+                    why = f"重心が足の形の横の端に近く、横へ倒れる（余白 {m:.1f}mm 要る）"
+                out.append(Failure("F5.stand", "脚", why + when))
+                break
     else:
         x, w, depth = tongue(p)
         wob = wobble_deg(p)
@@ -913,11 +982,11 @@ def _figure_part(number, key, name, p, mirror):
         for a in art:
             a["pts"] = _mirror(a["pts"], W)
         if p["stand"] == "easel":
-            # 脚の糊代を貼る所の印（裏の背の上）。貼る高さを測らずに済むように。
+            # 脚の三角の貼る面を貼る所の印（裏の背の上。上の辺が付け根）。貼る高さを測らずに済むように。
             e = easel(p)
             tw, cx = p["tab_width"], W - g["cx"]
-            y0, y1 = H - e["s"] - p["tab_glue"], H - e["s"]
-            # 糊代が背に収まらない寸法（F5.stand で落ちる）でも、印は姿の中だけに描く（絵の検査が別の理由で重ねて落ちないように）。
+            y0, y1 = H - e["s"], H - e["h"]
+            # 貼る面が背に収まらない寸法（F5.stand で落ちる）でも、印は姿の中だけに描く（絵の検査が別の理由で重ねて落ちないように）。
             mark = LineString([(cx - tw / 2, y0), (cx + tw / 2, y0), (cx + tw / 2, y1), (cx - tw / 2, y1), (cx - tw / 2, y0)])
             mark = mark.intersection(Polygon(outline).buffer(-0.5))
             for piece in getattr(mark, "geoms", [mark]):
@@ -929,36 +998,31 @@ def _figure_part(number, key, name, p, mirror):
     return Part(number, key, name, outline, label_xy=(lx, c.y - 1.8), label=str(number), art=art)
 
 
-GAUGE_W, GAUGE_END = 8, 4  # 開きの物差しの幅と、印の外の持ち手の長さ
-
-
-@_filling
-def _gauge(p):
-    """開きの物差し: 上の印を姿の下の縁に当て、下の印に脚の先を置くと、開きが式の c になる。"""
-    c = easel(p)["c"]
-    L = c + 2 * GAUGE_END
-    part = Part(4, "gauge", "開きの物差し", [(0, 0), (GAUGE_W, 0), (GAUGE_W, L), (0, L)], label_xy=(1, GAUGE_END + c / 2 - 1.8), label="4")
-    part.art = [{"kind": "poly", "pts": [(0.2, 0.2), (GAUGE_W - 0.2, 0.2), (GAUGE_W - 0.2, L - 0.2), (0.2, L - 0.2)], "fill": PAPER}]
-    part.art += [{"kind": "line", "pts": [(0.3, y), (GAUGE_W - 0.3, y)], "stroke": INK, "sw": 0.4} for y in (GAUGE_END, GAUGE_END + c)]
-    return part
-
-
 @_filling
 def _tab(p):
-    tw, L, gl = p["tab_width"], p["tab_length"], p["tab_glue"]
+    """脚: 1 本の帯を 3 本の折り線で三角に折って閉じる。刷る順は上から、閉じる糊代・つなぎ・脚・背に貼る面
+    （貼る面を下に刷るのは、姿の背に貼った時と同じ向き＝脚との折り目が上、で見せるため）。
+    色の面を外にして山折りする。貼る面の斜線は姿の背を、閉じる糊代の斜線は貼る面の裏（三角の内）を向く。"""
+    e = easel(p)
+    tw, w, L, r = p["tab_width"], p["tab_glue"], p["tab_length"], e["r"]
+    k = min(CLOSE_GLUE, w)
+    y1, y2, y3, y4 = k, k + r, k + r + L, k + r + L + w
     # 札「3 脚」は字の幅が 7mm ほどで、RANGES の下限（6mm）の脚からはみ出し、F5.text_overlap で落ちた。狭い脚は番号だけにする。
     label = "3 脚" if tw >= 8 else "3"
-    part = Part(3, "tab", "脚", [(0, 0), (tw, 0), (tw, gl + L), (0, gl + L)], label_xy=(1, gl + 2), label=label)
-    part.valley = [((0, gl), (tw, gl))]
-    part.glue = [[(0, 0), (tw, 0), (tw, gl), (0, gl)]]
-    part.art = [{"kind": "poly", "pts": [(0.2, gl + 0.2), (tw - 0.2, gl + 0.2), (tw - 0.2, gl + L - 0.2), (0.2, gl + L - 0.2)], "fill": STAND_FILL}]
+    part = Part(3, "tab", "脚", [(0, 0), (tw, 0), (tw, y4), (0, y4)], label_xy=(1, y2 + 2), label=label)
+    part.mountain = [((0, y), (tw, y)) for y in (y1, y2, y3)]
+    part.glue = [[(0, 0), (tw, 0), (tw, y1), (0, y1)], [(0, y3), (tw, y3), (tw, y4), (0, y4)]]
+    panel = lambda a, b, fill: {"kind": "poly", "pts": [(0.2, a + 0.2), (tw - 0.2, a + 0.2), (tw - 0.2, b - 0.2), (0.2, b - 0.2)], "fill": fill}
+    # つなぎは薄い色、脚は濃い色（組み方の文が色で辺を指す）。
+    part.art = [panel(y1, y2, PAPER), panel(y2, y3, STAND_FILL)]
     return part
 
 
 @_filling
 def base_net(p):
     """台の箱の展開図: 上の面・後ろの壁・底・前の壁を縦に、左右の壁を底の横に。上の面に溝を切る。
-    上の面は後ろの壁から倒して閉じ、前の糊代と左右の糊代を壁の内に貼る。左右の壁の糊代は前後の壁の内に貼る。"""
+    上の面は後ろの壁から倒して閉じ、前の糊代と左右の糊代を壁の内に貼る。左右の壁の糊代は前後の壁の内に貼る。
+    折り線は全部山折り（色の面が外）。糊代の斜線は刷った面にあるので、山折りで内へ入れた糊代は斜線が壁の内を向く。"""
     L, D, Hb, g = p["base_length"], p["base_depth"], p["base_height"], p["base_glue"]
     f = min(g, Hb - 1)  # 上の面の左右の糊代は壁の高さより短く（底に当たらない）
     X0, X1, X2, X3 = 0, Hb, Hb + L, 2 * Hb + L
@@ -973,7 +1037,7 @@ def base_net(p):
     net = unary_union(faces + [Polygon(q) for q in glue])
     outline = list(orient(Polygon(net.exterior.coords), sign=1.0).exterior.coords)[:-1]
     part = Part(3, "base", "台の箱", outline, label_xy=(X1 + 2, Y2 + 1.5), label="3 台")
-    part.valley = [((X1, Y1), (X2, Y1)), ((X1, Y2), (X2, Y2)), ((X1, Y3), (X2, Y3)), ((X1, Y4), (X2, Y4)),
+    part.mountain = [((X1, Y1), (X2, Y1)), ((X1, Y2), (X2, Y2)), ((X1, Y3), (X2, Y3)), ((X1, Y4), (X2, Y4)),
                    ((X1, Y1), (X1, Y2)), ((X2, Y1), (X2, Y2)), ((X1, Y3), (X1, Y4)), ((X2, Y3), (X2, Y4)),
                    ((X0, Y3), (X1, Y3)), ((X2, Y3), (X3, Y3)), ((X0, Y4), (X1, Y4)), ((X2, Y4), (X3, Y4))]
     part.glue = glue
@@ -990,7 +1054,7 @@ def parts(p):
     out = [_figure_part(1, "front", "表の姿", p, False)]
     if p["back"]:
         out.append(_figure_part(2, "back", "裏の姿", p, True))
-    out += [_tab(p), _gauge(p)] if p["stand"] == "easel" else [base_net(p)]
+    out.append(_tab(p) if p["stand"] == "easel" else base_net(p))
     return out
 
 
@@ -998,7 +1062,7 @@ def place(by_key, page, top, gap):
     """表・裏・立てる部品を、左から右へ、入らなければ次の段へ並べる。
     説明の列は最後の段の右に置く。物差し（100mm）が入らない時は、全部の部品の下に置く。"""
     x, y, row_h, right = page.x0, top, 0, page.x0
-    for key in ("front", "back", "tab", "gauge", "base"):
+    for key in ("front", "back", "tab", "base"):
         if key not in by_key:
             continue
         q = by_key[key]
@@ -1027,8 +1091,6 @@ def bom(p):
     if p["stand"] == "easel":
         rows.append({"number": 3, "key": "tab", "name": "脚", "qty": 1, "material": paper, "substituted": True,
                      "original_guess": "無し（元の玩具は立体で、脚は型紙のために足した）", "reason": "平らな紙の姿を立てるため"})
-        rows.append({"number": 4, "key": "gauge", "name": "開きの物差し", "qty": 1, "material": paper, "substituted": True,
-                     "original_guess": "無し（型紙のために足した）", "reason": "倒れないかは脚の開きで決まるので、開きを測るため"})
     else:
         rows.append({"number": 3, "key": "base", "name": "台の箱", "qty": 1, "material": paper, "substituted": True,
                      "original_guess": "無し（元の玩具は立体で、台は型紙のために足した）", "reason": "平らな紙の姿を立てるため"})
@@ -1043,25 +1105,39 @@ def materials(p):
 
 @_filling
 def steps(p):
-    out = ["刷った物差しに定規を当て、10cm か確かめる", "部品を実線で切る"]
+    """組み方の文。手順の番号は「手順 n:」、型紙の部品の番号は「部品 n」と書いて分ける（どちらも数なので、裸の数だと取り違える。
+    作った人の報告は、困った所を手順の番号で言う）。
+    表と裏は、粗く切って貼り合わせてから実線で 2 枚いっしょに切る。先に 1 枚ずつ実線で切ると、貼る時に縁がずれて白い縁が出て、
+    台の形では 2 枚の舌の幅がそろわず溝に合わない。粗く切る余白は 2mm（部品の間は 4mm 空けて並べてある）。"""
+    base = p["stand"] == "base"
+    out = ["刷った物差しに定規を当て、10cm か確かめる"]
     if p["back"]:
-        out.append("1 表の姿と 2 裏の姿を、絵を外にして背中合わせに貼る")
-    if p["stand"] == "easel":
+        out += ["部品 1 表の姿と部品 2 裏の姿を、実線の外に 2mm ほど残して粗く切り取る（まだ実線では切らない）",
+                "2 枚を、絵を外にして背中合わせに貼る（明るい方へ透かして輪郭を重ねる）。乾いたら、表の実線で 2 枚いっしょに切る"
+                + ("（縁と舌がそろう）" if base else "（縁がそろう）")]
+    else:
+        out.append("部品 1 表の姿を実線で切る")
+    if not base:
         e = easel(p)
         cx = geometry(p)["cx"]
         # 脚は重心の真後ろに置く（横へずれると足の形が片寄り、横へ倒れる）。裏の印が無い時は、横の位置も高さも言う。
-        where = ("2 裏の姿の四角い印（重心の真後ろ）" if p["back"]
-                 else f"姿の背の、表から見て左の端から {cx:.0f}mm（重心の真後ろ）を真ん中に、下の縁から {e['s']:.0f}mm の高さ")
-        out += [f"3 脚の糊代を、{where}に貼る（折り線が下）",
-                f"脚を破線で後ろへ折り、4 開きの物差しの上の線を姿の下の縁に当て、下の線（{e['c']:.0f}mm 後ろ）に脚の先を置いて立てる"
-                f"（開き約 {p['tab_angle']:g}°）"]
+        where = ("部品 2 裏の姿の四角い印（重心の真後ろ）" if p["back"]
+                 else f"姿の背の、表から見て左の端から {cx:.0f}mm（重心の真後ろ）を真ん中に、下の縁から {e['h']:.1f}〜{e['s']:.1f}mm の高さ")
+        # 貼る面を先に背に貼ってから三角を閉じる（閉じてから貼ると、小さい三角は内から押さえられない。背に貼ってあれば、
+        # 閉じる糊代を姿ごと指で挟める）。閉じる糊代の折り目を貼る面の下の端にそろえさせる（ずれると、つなぎの長さが変わる）。
+        out += ["部品 3 脚を実線で切り、3 本の一点鎖線を山折りにして（色の面が外）折り目を付け、いったん開く（濃い色の面が脚、薄い色の面がつなぎ）",
+                f"脚の長い糊代の面（斜線）を、{where}に貼る（脚との折り目を{'印の上の辺' if p['back'] else '上の高さ'}にそろえる。帯の残りは上へ出る）",
+                "脚を付け根から後ろへ折り返し、つなぎを前へ戻して、三角にする。短い糊代（斜線）を、貼った面の白い面の下の端に、"
+                "折り目を端にそろえて貼り、三角を閉じる",
+                f"姿の下の縁と脚の先（三角の後ろの角）を机に着けて立てる。脚の先は姿の下の縁から約 {e['c']:.0f}mm 後ろに来る"
+                f"（開き約 {p['tab_angle']:g}°。三角の辺の長さで決まるので、手で広げない）"]
     else:
-        out += [f"3 台の箱の上の面と底の面の溝（幅 {p['slot_width']:g}mm）を、2 本の線の間の細い帯ごと切り取る（1 本の切れ目にしない。カッターは大人がする）",
-                "3 台の箱を破線で谷折りし、糊代を内に貼って箱にする（上の溝と底の溝が上下にそろう）",
+        out += [f"部品 3 台の箱を実線で切り、上の面と底の面の溝（幅 {p['slot_width']:g}mm）を、2 本の線の間の細い帯ごと切り取る（1 本の切れ目にしない。カッターは大人がする）",
+                "部品 3 台の箱を一点鎖線で山折りし（色の面が外）、糊代を内に貼って箱にする（上の溝と底の溝が上下にそろう）",
                 f"姿の下の舌を上の溝から底の溝まで通し、舌の先を机に着ける。姿の下の縁は上の面から約 {TONGUE_EXTRA:g}mm 浮く（浮くのでよい。"
                 "舌は溝をほぼ埋めるので、姿の置き場は溝で決まる）"]
     out.append("机を軽く叩いて、倒れないか見る")
-    return out
+    return [f"手順 {i + 1}: {x}" for i, x in enumerate(out)]
 
 
 RESULTS = ("立った", "倒れた")
@@ -1074,25 +1150,28 @@ def measures(p):
 
 
 def diagram(x, y, w, h, p):
-    """横から見た組み上がり。寸法の図ではなく、姿・脚・台の並びを見せるだけ。"""
+    """横から見た組み上がり。寸法の図ではなく、姿・脚（付け根から脚の先、脚の先から貼る面の下の端へ戻るつなぎ）・台の並びを見せるだけ。"""
     # p は最後の引数なので _filling（先頭の引数を埋める）が使えない。ここで埋める。
     p = filled(p)
     H = figure_height(p)
     shapes = []
     if p["stand"] == "easel":
         e = easel(p)
-        s = min(w / (e["c"] + 20), h / (H + 4))
+        # 上下の空き 4mm は、縮めた後の長さで取る（縮める前の高さに 4 を足して割ると、背の高い姿で絵が枠の上へ出る）
+        s = min(w / (e["c"] + 20), (h - 4) / H)
         bx, by = x + 6 * s, y + h - 2
         lean = math.radians(LEAN_DEG)
         top = (bx + H * math.sin(lean) * s, by - H * math.cos(lean) * s)
         hinge = (bx + e["s"] * math.sin(lean) * s, by - e["s"] * math.cos(lean) * s)
+        low = (bx + e["h"] * math.sin(lean) * s, by - e["h"] * math.cos(lean) * s)  # 貼る面の下の端（つなぎが戻る所）
         shapes.append({"kind": "line", "x1": bx, "y1": by, "x2": top[0], "y2": top[1]})
         shapes.append({"kind": "line", "x1": hinge[0], "y1": hinge[1], "x2": bx + e["c"] * s, "y2": by})
+        shapes.append({"kind": "line", "x1": bx + e["c"] * s, "y1": by, "x2": low[0], "y2": low[1]})
         shapes.append({"kind": "line", "x1": x, "y1": by, "x2": x + w, "y2": by, "dash": "1,0.6"})
     else:
         # 舌は箱より TONGUE_EXTRA 長く、姿の下の縁は上の面から浮く。姿と舌を 1 本の線で描くので、長さは舌の長さで足す。
         tot = H + tongue(p)[2]
-        s = min(w / (p["base_depth"] + 10), h / (tot + 4))
+        s = min(w / (p["base_depth"] + 10), (h - 4) / tot)
         cx, by = x + w / 2, y + h - 2
         shapes.append({"kind": "rect", "x": cx - p["base_depth"] / 2 * s, "y": by - p["base_height"] * s, "w": p["base_depth"] * s, "h": p["base_height"] * s})
         shapes.append({"kind": "line", "x1": cx, "y1": by, "x2": cx, "y2": by - tot * s})

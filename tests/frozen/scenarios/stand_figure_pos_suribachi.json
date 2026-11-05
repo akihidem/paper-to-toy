@@ -5,8 +5,8 @@
     "figure": "suribachi",
     "stand": "easel",
     "tab_width": 10,
-    "tab_length": 16,
-    "tab_glue": 8
+    "tab_length": 28,
+    "tab_glue": 25
   },
   "inject": {},
   "expect": {
