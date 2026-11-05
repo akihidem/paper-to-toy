@@ -20,7 +20,7 @@
 - 話した事（#65）: 作る前の考え・作りながらの工夫・できた後の話を、声から字にした物として束で受ける（声そのものは束に無い）。
   手順の番号つきの工夫は、止まった所を別の人がどう越えたかの材料なので、止まった段の案に付ける。止まったの札が重なっていない段でも、
   同じ段で工夫を話した人が重なれば案にする。作る前の考えは仮説についての言葉なので、それだけでは案にしない。
-終了: 0 = できた / 3 = 落ちた・断った / 4 = できない（置き場や束が読めない）。
+終了: 0 = できた / 3 = 落ちた・断った / 4 = できない（置き場や束が読めない・呼び方の誤り）。1 と 2 は使わない。
 """
 import argparse
 import datetime
@@ -601,7 +601,12 @@ def main(argv=None):
     rl.add_argument("--note", default="")
     sub.add_parser("compare", help="版ごとの数を並べる（判定はしない）")
     sub.add_parser("version", help="今のエンジンの版と、次の版の予定")
-    args = ap.parse_args(argv)
+    try:
+        args = ap.parse_args(argv)
+    except SystemExit as e:
+        # 呼び方の誤り（引数なし・知らない命令・要る引数が無い）は 4。argparse の既定の 2 は使わない（1 と 2 は使わない決まり。
+        # 検査の結果と道具の故障を読み分けるため）。--help は 0。
+        return 0 if e.code == 0 else 4
 
     def fail(fails):
         for f in fails:

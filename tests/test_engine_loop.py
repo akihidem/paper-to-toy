@@ -306,4 +306,10 @@ assert real["versions"] and real["versions"][0]["version"] == 1
 assert all(set(p) <= {"id", "target", "title", "numbers", "adopted_at"} for v in real["versions"] for p in v["proposals"])
 assert all(set(p) <= {"id", "target", "title", "numbers", "adopted_at"} for p in real["next"])
 
+# 10. 呼び方の誤り（引数なし・知らない命令・要る引数が無い・知らない印）は rc 4。1 と 2 は使わない（終了の番号の決まり。#71）。--help は rc 0
+for wrong in ((), ("no_such_command",), ("take",), ("adopt",), ("release", "--no-such-flag"), ("compare", "extra")):
+    r = cli(*wrong)
+    assert r.returncode == 4, (wrong, r.returncode, r.stderr[-200:])
+assert cli("--help").returncode == 0 and cli("take", "--help").returncode == 0
+
 print("OK test_engine_loop")
