@@ -42,3 +42,8 @@ for form in ({**DEFAULTS, "mount": "neck"}, hang):
     assert len(b.mountain) == 10 and not b.valley, (form["mount"], len(b.mountain), len(b.valley))
     assert "1 胴を破線で山折りし、糊代で貼って箱にする。上の面は後で閉じる" in steps(form), steps(form)
 print("ok 胴の折る向き")
+# 用意する物の道具（本人の確認 2026-11-06）: 首の形は前の壁の四角い穴を切るので、カッターを書く。吊る形には書かない
+from omochae.templates.pivot_counterweight import materials
+assert materials({**DEFAULTS, "mount": "neck"})[1] == "のり、はさみ、定規、カッター", materials({**DEFAULTS, "mount": "neck"})
+assert materials(hang)[1] == "のり、はさみ、定規", materials(hang)
+print("ok 用意する物")

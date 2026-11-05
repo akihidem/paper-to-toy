@@ -15,7 +15,7 @@ import subprocess
 import sys
 import tempfile
 
-from omochae import fold3d
+from omochae import fold3d, ops3d
 from omochae.__main__ import load_source
 from omochae.compose import compose
 from omochae.templates import slider_fan
@@ -38,7 +38,18 @@ def built(params):
 pc, p = built(TAB)
 notes, fails = fold3d.check(list(pc.values()), p)
 assert not fails, [f.line() for f in fails]
-assert [n.split()[:2] for n in notes] == [["閉じる", "1"], ["外向き", "1"], ["閉じる", "2"], ["並ぶ", "竹串:"]], notes
+# 所見の頭には、確かめた操作が組み方の手順の何番かを添える（組んだ過程と手順書を番号で結ぶ。手順の文は同じ操作から作る）
+# 手順の文を作る操作の並び（omochae.ops3d）を、その順に 3D で行う。1 つの操作に 1 行（外筒は閉じると色の面の向きの 2 行）
+heads = ["閉じる 1 外筒（手順 3）: ", "外向き 1 外筒（手順 3）: ", "閉じる 2 内筒（手順 5）: ", "通す 竹串（手順 6）: ",
+         "入れる 2 内筒（手順 12）: ", "押し上げる 竹串（手順 13）: ", "開く 4 扇（手順 13）: "]
+assert len(notes) == 7 and all(n.startswith(h) for n, h in zip(notes, heads)), notes
+assert "69mm 上がり" in notes[5], notes[5]
+# 13 の後半（扇が口から出て開く）。台と扇は折らずに置いた形で見る事と、見ない事（蛇腹の折り・開く仕組み）も言う
+assert all(w in notes[6] for w in ("口より 2.0mm 下（隠れる）", "要が口より 21.0mm 上", "1 面目に平行に開き（開く糸の穴のある 2・4 面目に垂直な向き）", "上限（284°", "縁までの余り 1.8mm",
+                                   "折らずに置いた形", "開く仕組み")), notes[6]
+# 手順の番号を添えるのに扇などの部品は要らない。外筒と内筒だけを渡しても確かめられる
+only = fold3d.check([pc["tube"], pc["pusher"]], p)
+assert not only[1] and only[0][-1].startswith("開く 扇（手順 13）: 扇の部品を渡していないので、扇は見ない"), only
 # 外筒は色の面を外にする山折り（見える面）。内筒は破線を刷る谷折りのまま（隠れる部品）
 assert "山折り 4 本" in notes[0] and "谷折り 4 本" in notes[2] and all("糊代は1 面目に" in notes[i] for i in (0, 2)), notes
 
@@ -134,6 +145,23 @@ def scale_x(k):
     return fn
 
 
+def fan_x(fn):
+    """扇の外形の x（要の側の縁 0 から先の縁 h へ）を fn(x, h) で描き直す。"""
+    def go(q):
+        h = max(x for x, _ in q.outline)
+        q.outline = [(fn(x, h), y) for x, y in q.outline]
+    return go
+
+
+def fan_leg(dx):
+    """扇の足（x < 0 の所。足の先・糊代・糊代の境の折り線）を dx だけずらす。正は足が短く、負は長くなる。"""
+    def go(q):
+        q.outline = [(x + dx if x < 0 else x, y) for x, y in q.outline]
+        q.glue = [[(x + dx, y) for x, y in g] for g in q.glue]
+        q.valley = [((a[0] + dx, a[1]), (b[0] + dx, b[1])) if abs(a[0] - b[0]) < 1e-9 and a[0] < 0 else (a, b) for a, b in q.valley]
+    return go
+
+
 def swap_first_points(q):
     q.outline = [q.outline[1], q.outline[0]] + q.outline[2:]  # 外形が自分と交わる
 
@@ -163,6 +191,18 @@ NEG = [
     ("pusher", move_hole(1, dy=2.0), "3D.skewer", "竹串", "傾"),   # 片方の穴を 2mm 上げる → 竹串が傾く
     ("pusher", move_hole(1, dx=2.0), "3D.skewer", "竹串", "向かい合って"),  # 片方の穴を 2mm 横へ → 竹串が面へ斜めに交わる
     ("pusher", lambda q: q.holes.__setitem__(1, q.holes[0]), "3D.skewer", "竹串", "同じ所"),  # 2 つの穴が同じ所 → 0 で割らずに落とす
+    # 扇（手順 13 の後半）。扇の部品の描いた形だけを崩す
+    ("fan", fan_x(lambda x, h: x + 10 if x == h else x), "3D.fan", "4 扇", "隠れない"),       # 板を 10mm 高く描く → 静かな時に口から出る
+    ("fan", fan_x(lambda x, h: x + 2.0 if x == h else x), "3D.fan", "4 扇", "同じ高さ"),       # ちょうど 2mm 高く → 口と同じ高さも隠れていない
+    ("fan", lambda q: q.holes.clear(), "3D.fan", "4 扇", "要の穴か足"),                       # 軸の形なのに要の穴が無い → 口の台と取り違えない
+    ("tube", lambda q: q.holes.pop(), "3D.fan", "1 外筒", "向かい合う"),                      # 開く糸の穴が 1 つだけ → 向きが決まらない
+    ("tube", lambda q: q.holes.__setitem__(1, (2.5 * A, q.holes[1][1], q.holes[1][2])), "3D.fan", "1 外筒", "向かい合う"),  # 隣の面へ
+    ("fan", lambda q: setattr(q, "valley", [(a, b) for a, b in q.valley if not (abs(a[0] - b[0]) < 1e-9 and a[0] < 0)]),
+     "3D.fan", "4 扇", "要の穴か足"),                                                       # 足の糊代の境の折り線が無い
+    ("fan", fan_leg(-10.0), "3D.fan", "4 扇", "隠れない"),                                  # 足を 10mm 長く描く → 扇ごと上がって口から出る
+    ("fan", fan_leg(12.0), "3D.fan", "4 扇", "口の縁に当たる"),                             # 足を 12mm 短く描く → 要が低く、開くと縁に当たる
+    ("fan", lambda q: setattr(q, "outline", [(x, y + 4 * p["fold_width"] if y == max(v for _, v in q.outline) else y) for x, y in q.outline]),
+     "3D.fan", "4 扇", "口の縁に当たる"),                                                   # 帯を 4 枚分長く描く → 開く角が広がり、縁に当たる
 ]
 for key, fn, floor, where, word in NEG:
     fl = fold3d.check(tampered(key, fn), p)[1]
@@ -172,7 +212,16 @@ two = copy.deepcopy(pc)
 two["tube"].valley, two["tube"].mountain = two["tube"].mountain, []
 move_fold(0, 2.0)(two["pusher"])
 fl = fold3d.check(list(two.values()), p)[1]
-assert [(f.floor, f.where) for f in fl] == [("3D.close", "2 内筒"), ("3D.face", "1 外筒")], [f.line() for f in fl]
+assert [(f.floor, f.where) for f in fl] == [("3D.face", "1 外筒"), ("3D.close", "2 内筒")], [f.line() for f in fl]
+# 落ちた行にも、その操作の手順の番号を添える（直す所を手順で引ける）。外筒を折る 3・内筒を折る 5・通す 6・入れる 12・押し上げる 13
+assert fl[0].message.endswith("（手順 3）") and fl[1].message.endswith("（手順 5）"), [f.line() for f in fl]
+for key, fn, want in (("pusher", move_hole(1, dy=2.0), "（手順 6）"), ("pusher", scale_x(31 / 26), "（手順 12）"),
+                      ("tube", notch(dx=3.0), "（手順 12）"), ("tube", notch(down=5.0), "（手順 13）")):
+    fl = fold3d.check(tampered(key, fn), p)[1]
+    assert len(fl) == 1 and fl[0].message.endswith(want), (want, [f.line() for f in fl])
+# 開く糸の穴が全く無い時だけ、1 面目に平行と置いて続け、その事を所見で言う（落とさない）
+none = fold3d.check(tampered("tube", lambda q: q.holes.clear()), p)
+assert not none[1] and "開く糸の穴が無いので、この向きと置いた" in none[0][-1], none
 # 崩す前の部品はそのまま通る（上の負の対照が、写し方のせいで落ちたのでない事）
 assert not fold3d.check(tampered("tube", lambda q: None), p)[1]
 print("ok 2")
@@ -193,13 +242,54 @@ assert not fails_m and "山折り 4 本" in notes_m[2], (notes_m, [f.line() for 
 print("ok 3")
 
 
+# 5. 手順の文を 3D の操作から作る（段 B。本人の決定 2026-11-06）。つまみの形の、3D で組める部品の手順だけを、型紙のデータから作る
+st = slider_fan.steps(p)
+made = dict(ops3d.ops(list(pc.values()), p))
+# 手順の番号はずらさない（作った人の報告が鍵にしている）。1〜12 は前の組み方と同じ並びで、最後の動き（押し上げて蛇腹が開く）を 13 に足した
+BEFORE = ["刷った物差しに定規を当て、10cm か確かめる", "まず 1 外筒だけを実線で切る。溝は下の端からはさみで切り込む（くり抜かない）",
+          "1 外筒を色の境で山折りし、糊代で貼って角筒にする", "残りの部品を実線で切る。穴は竹串の先であける",
+          "2 内筒は破線で谷折りし、糊代で貼って角筒にする", "竹串を 2 内筒の 2 つの穴に通す", "3 台で 2 の上に蓋をする",
+          "4 扇を色の境で、端から谷折り・山折りを交互にして蛇腹に畳む", "糸を 5 像の穴と 4 扇の中心側の穴の列に通し、ゆるく結ぶ",
+          "4 扇の真ん中の足を、糊代の境の破線で折り、足の糊代を 3 台の印に貼る", "5 像の足を 3 台に貼る", "内筒を 1 外筒に入れ、竹串の端を溝から出す"]
+assert st[:12] == BEFORE and len(st) == 13, st
+assert [st[i - 1] for i in (3, 5, 6, 12, 13)] == [made[k] for k in ("fold_outer", "fold_inner", "thread", "insert", "push")], st
+# 操作の種類から手順の番号を引ける（文の突き合わせでなく、雛形が文と種類を 1 つの並びで持つ）
+assert slider_fan.step_ops(p) == {"fold_outer": 3, "fold_inner": 5, "thread": 6, "insert": 12, "push": 13}
+assert slider_fan.step_ops({**p, "hub": "rim"}) == {"fold_outer": 3, "fold_inner": 5, "thread": 6, "insert": 10, "push": 11}
+assert slider_fan.step_ops({**slider_fan.DEFAULTS, "push_part": "tube", "pusher_height": 84}) == {}
+# 本人の決定の手順 2 の文が、データから一字も違わずにできる（外筒と折り方が違うので「は」）
+assert made["fold_inner"] == "2 内筒は破線で谷折りし、糊代で貼って角筒にする", made
+# 手順 13 は本人の答え（2026-11-06「上に押し上げる」だけでいい・長さは言わない）の文そのもの
+assert made["push"] == "竹串の端を溝に沿って上に押し上げると、4 扇が 1 外筒の口から出て、蛇腹が開く", made
+# 文はデータに従う: 外筒を谷折りに戻すと文も谷折りと言う。内筒を外筒と同じ折り方（色の境・山折り）にすると「も」になる
+back = copy.deepcopy(pc)
+back["tube"].valley, back["tube"].mountain = back["tube"].mountain, []
+assert dict(ops3d.ops(list(back.values()), p))["fold_outer"] == "1 外筒を色の境で谷折りし、糊代で貼って角筒にする"
+same = copy.deepcopy(pc)
+same["pusher"].hide_folds, (same["pusher"].mountain, same["pusher"].valley) = True, (same["pusher"].valley, [])
+assert dict(ops3d.ops(list(same.values()), p))["fold_inner"] == "2 内筒も色の境で山折りし、糊代で貼って角筒にする"
+# 押し上げる量は文に入れない（長さは 3D.skewer が竹串の行程として見て、所見に出す）。量を変えても文は同じ
+longer, _ = built({**TAB, "push_amount": 80, "tube_height": 110})
+assert dict(ops3d.ops(list(longer.values()), {**p, "push_amount": 80}))["push"] == made["push"]
+# 口の台の形（hub rim）も、最後の動きが最後に来る（前の 10 本の後ろ）。ほかの押し方の形は、まだ 3D で組めないので文のまま
+# 口の台の形の扇は、まだ 3D に置いていない（扇の端を台に貼る別の作り）。黙って通さず、最後の手順の番号で言う
+rim_parts, rim_p = built({**TAB, "hub": "rim", "fold_count": 16})  # 口の台は口の高さで開くので、帯を短く（180° まで）
+rim_notes, rim_fails = fold3d.check(list(rim_parts.values()), rim_p)
+assert not rim_fails and rim_notes[-1].startswith("開く 4 扇（手順 11）: 口の台の形の扇は、まだ置いていない"), rim_notes[-1]
+rim = slider_fan.steps({**p, "hub": "rim"})
+assert len(rim) == 11 and rim[-1] == made["push"] and rim[-2] == made["insert"], rim
+for form in ("tube", "stick"):
+    other = slider_fan.steps({**slider_fan.DEFAULTS, "push_part": form, "pusher_height": 84})
+    assert len(other) == 11 and not any("押し上げると" in s for s in other), (form, other)
+print("ok 5")
+
 # 4. 入口（python -m omochae.fold3d）の終了の番号: 0 確かめて通った / 3 落ちた / 4 確かめられない
 def cli3d(*args, env=ENV):
     return subprocess.run([sys.executable, "-m", "omochae.fold3d", *args], cwd=ROOT, env=env, capture_output=True, text=True)
 
 
 r = cli3d("--scenario", str(ROOT / "examples/fan_tab.json"))
-assert r.returncode == 0 and "並ぶ 竹串:" in r.stdout and not r.stderr, (r.returncode, r.stdout, r.stderr)
+assert r.returncode == 0 and "通す 竹串（手順 6）: " in r.stdout and "開く 4 扇（手順 13）: " in r.stdout and not r.stderr, (r.returncode, r.stdout, r.stderr)
 r = cli3d("--scenario", str(ROOT / "tests/frozen/scenarios/neg_overlap.json"))
 assert r.returncode == 3 and "F5.overlap" in r.stderr, r.stderr
 with tempfile.TemporaryDirectory() as d:

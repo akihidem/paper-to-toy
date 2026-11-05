@@ -6,12 +6,14 @@
   同じ床で落とす（式と絵のずれそのものなので）
 - 3D.face: 見える面の部品（折り線を刷らず色の境で折る外筒）の刷った面（色の面）が、閉じた筒の外を向く。本人の答え（2026-11-06
   「色がついている所が外を向くよう折った」）で足した。隠れる部品（破線を刷る内筒）は、向きが組み立てに効かないので見ない
+- 3D.fan: 押し上げて扇が口から出て開く所（最後の手順の後半）。台と扇は折らずに置き、静かな時に扇が隠れる・押し上げると要が口より上に出る・
+  開いた扇形が横の面の口の縁に当たらない、を見る（本人の追加 2026-11-06）
 - 3D.skewer: 折った内筒が外筒の中に入り、内筒の 2 つの穴が向かい合い（高さも横もずれない）、穴を通す竹串が水平で、
   内筒を外筒に入れて静かな時から押し上げ切るまで、外筒の溝の中を通る
 判断の芯:
 - 寸法の式（check_physics・slot_span）でなく、刷る部品（外形・折り線・糊代・穴・溝の切り込み）から形を組む。式と絵がずれた時に見つけるため
 - 面は硬い板、折り線は蝶番と見る。紙の厚み・たわみ・摩擦は入れないので、通っても紙で動く保証ではない
-- 入口は python -m omochae.fold3d だけで、型紙の検査（compose）には繋がない。3D.close・3D.face・3D.skewer は凍結の基準
+- 入口は python -m omochae.fold3d だけで、型紙の検査（compose）には繋がない。3D.close・3D.face・3D.skewer・3D.fan は凍結の基準
   （tests/frozen/criteria.md）の床（2026-11-05 と 11-06 の本人の決定で足した。試験は tests/test_fold3d.py）
 前提と限り:
 - 谷と山の向き（どちらの面が筒の外を向くか）は、見える面の部品だけを 3D.face で見る。3D.close は向きを見ない（谷を全部山に替えても、
@@ -34,6 +36,7 @@ from dataclasses import dataclass
 from .__main__ import Parser, load_source, scenario_from_args
 from .compose import TEMPLATES, compose
 from .model import Failure, ToolMissing
+from .ops3d import ops as assembly_ops
 
 # ここだけが使う shapely の部分も、読めなければ 4 にする。読み込みは main の囲いより前に走るので、
 # 囲わないとトレースバックの 1 になる（__main__ の囲いと同じ考え。レビューの指摘）。
@@ -52,7 +55,11 @@ EPS = 1e-6
 # 糊代が相手の面に重なる割合の下限。角を落とした糊代は面の中に収まるので、ほぼ全部が重なる。
 GLUE_COVER = 0.95
 FOLD_DEG = 90  # 角筒は 4 面なので、折り線ごとに 90°
-OUTER, INNER = "tube", "pusher"
+OUTER, INNER, FAN = "tube", "pusher", "fan"
+# 扇が開く面は、外筒の開く糸の穴のある 2 つの面（向かい合う面）に垂直な向き（扇の両端をその 2 つの面へ糸でつなぐので）を、
+# 型紙のデータから読む。今の型紙では 2・4 面目に穴があり、1 面目に平行（雛形の注「扇は 1 面目に平行に開く」と同じ）。
+# 穴が無い時だけ、この面に平行と置き、その事を所見で言う。この向きは本人が実物どおりと確かめた（2026-11-06）
+FAN_PLANE_PANEL = 1
 
 
 def _sub(a, b):
@@ -339,18 +346,69 @@ def _section(faces, up, c):
     return MultiPoint([(_dot(m, e1), _dot(m, e2)) for m in mids]).convex_hull
 
 
-def _skewer(outer_part, outer, inner_part, inner, p):
-    """竹串の線が水平で、行程の全部で外筒の溝の中を通るか。Returns (所見の文, 失敗)。"""
+def _op_fold(st, key):
+    """筒を折って閉じる操作（fold_outer・fold_inner）。閉じた筒だけを後の操作に渡す。見える面の部品は、色の面の向きも見る。"""
+    q = st["by"][key]
+    try:
+        faces = fold(q)
+    except FoldError as e:
+        return [(None, Failure("3D.close", q.label, str(e)))]
+    note, fail = _close(q, faces)
+    if fail:
+        return [(None, fail)]
+    st["folded"][key] = faces
+    out = [(note, None)]
+    if q.hide_folds:
+        # 見える面の部品（色の境で折る）だけ、色の面の向きを見る。隠れる部品（破線を刷る内筒）の向きは組み立てに効かない。
+        # 向きは竹串の形に効かない（鏡に映した筒でも穴と溝は並ぶ）ので、3D.face で落ちても後の操作は続ける
+        out.append(_face(q, faces))
+    return out
+
+
+def _op_thread(st):
+    """竹串を内筒の 2 つの穴に通す操作。内筒が閉じなければ見ない（1 つの崩れに 1 行）。"""
+    if INNER not in st["folded"]:
+        return []
+    inner_part, inner = st["by"][INNER], st["folded"][INNER]
     holes = inner_part.holes
     if len(holes) != 2:
-        return None, Failure("3D.skewer", "竹串", f"竹串を通す穴が 2 つでない（{len(holes)} 個）")
+        return [(None, Failure("3D.skewer", "竹串", f"竹串を通す穴が 2 つでない（{len(holes)} 個）"))]
     centers, walls_of = [], []
     for x, y, _ in holes:
         f = next((f for f in inner if f.poly.contains(Point(x, y))), None)
         if f is None:
-            return None, Failure("3D.skewer", "竹串", "竹串を通す穴が面の中に無い（折り線の上か外形の外）")
+            return [(None, Failure("3D.skewer", "竹串", "竹串を通す穴が面の中に無い（折り線の上か外形の外）"))]
         centers.append(f.at((x, y)))
         walls_of.append(f)
+    up_i = tube_axis(inner)[0]
+    d = _sub(centers[1], centers[0])
+    if math.sqrt(_dot(d, d)) <= EPS:
+        # 2 つの穴が同じ所にあると竹串の向きが決まらない。先へ進むと 0 で割って 4 になった（レビューの指摘）
+        return [(None, Failure("3D.skewer", "竹串", "2 つの穴が同じ所にあり、竹串の向きが決まらない"))]
+    tilt = abs(_dot(d, up_i))
+    if tilt > TOL:
+        return [(None, Failure("3D.skewer", "竹串", f"2 つの穴の高さが {tilt:.1f}mm 違い、竹串が傾く（溝の中で引っかかる）"))]
+    # 横のずれも同じく見る。高さだけがそろい、穴が向かい合わずに横へずれると、竹串が面へ斜めに交わる（レビューの指摘）。
+    # 穴のある面に垂直な向きと、軸の向きのどちらでもない向きの長さ
+    n1 = walls_of[0].normal
+    side = math.sqrt(max(0.0, _dot(d, d) - _dot(d, n1) ** 2 - _dot(d, up_i) ** 2))
+    if side > TOL:
+        return [(None, Failure("3D.skewer", "竹串", f"2 つの穴が向かい合っておらず（横に {side:.1f}mm ずれ）、竹串が斜めになる（溝の中で引っかかる）"))]
+    st["skewer"] = centers
+    return [(f"通す 竹串: 2 つの穴は向かい合い（高さの差 {tilt:.2f}mm・横のずれ {side:.2f}mm）、竹串は水平", None)]
+
+
+def _op_insert(st):
+    """内筒を外筒に入れ、竹串の端を溝から出す操作。外筒・内筒が閉じ、竹串を通した後だけ見る。
+
+    竹串が出る面は、静かな時に竹串の切り口から紙までの余りが一番大きい面（溝のある面）。前は行程の全部の余りで選んでいて、
+    溝の上の端が短い時は 2 つの面が同じ値になり、面の並びの順で決まっていた。
+    """
+    if OUTER not in st["folded"] or INNER not in st["folded"] or "skewer" not in st:
+        return []
+    outer_part, outer = st["by"][OUTER], st["folded"][OUTER]
+    inner_part, inner = st["by"][INNER], st["folded"][INNER]
+    p, centers = st["p"], st["skewer"]
     up_o, c_o, bot_o, top_o = tube_axis(outer)
     up_i, c_i, bot_i, top_i = tube_axis(inner)
     # 折った内筒が外筒の中に入るか。寸法の式（F5.slide_clearance）でなく、折った形の断面で見る（絵の内筒が式より大きくずれた時に
@@ -361,20 +419,7 @@ def _skewer(outer_part, outer, inner_part, inner, p):
     else:
         fit = -max(sec_o.distance(Point(pt)) for pt in sec_i.exterior.coords)
     if fit <= EPS:
-        return None, Failure("3D.skewer", inner_part.label, f"内筒の断面が外筒の断面に収まらず（すき間 {fit:.1f}mm）、外筒に入らない")
-    d = _sub(centers[1], centers[0])
-    if math.sqrt(_dot(d, d)) <= EPS:
-        # 2 つの穴が同じ所にあると竹串の向きが決まらない。先へ進むと 0 で割って 4 になった（レビューの指摘）
-        return None, Failure("3D.skewer", "竹串", "2 つの穴が同じ所にあり、竹串の向きが決まらない")
-    tilt = abs(_dot(d, up_i))
-    if tilt > TOL:
-        return None, Failure("3D.skewer", "竹串", f"2 つの穴の高さが {tilt:.1f}mm 違い、竹串が傾く（溝の中で引っかかる）")
-    # 横のずれも同じく見る。高さだけがそろい、穴が向かい合わずに横へずれると、竹串が面へ斜めに交わる（レビューの指摘）。
-    # 穴のある面に垂直な向きと、軸の向きのどちらでもない向きの長さ
-    n1 = walls_of[0].normal
-    side = math.sqrt(max(0.0, _dot(d, d) - _dot(d, n1) ** 2 - _dot(d, up_i) ** 2))
-    if side > TOL:
-        return None, Failure("3D.skewer", "竹串", f"2 つの穴が向かい合っておらず（横に {side:.1f}mm ずれ）、竹串が斜めになる（溝の中で引っかかる）")
+        return [(None, Failure("3D.skewer", inner_part.label, f"内筒の断面が外筒の断面に収まらず（すき間 {fit:.1f}mm）、外筒に入らない"))]
     H, L, s, r = top_o - bot_o, top_i - bot_i, p["push_amount"], p["knob_width"] / 2
     rest, push = H - s - L, H - L  # 内筒の底の、外筒の底からの高さ
 
@@ -399,65 +444,180 @@ def _skewer(outer_part, outer, inner_part, inner, p):
         if not all(hull.covers(Point(pt)) for pt in q):
             continue  # 行程の端で面の外（筒の上か下）を通る面は、竹串が出る所ではない
         # 竹串が面へ斜めに交わると、面の上の切り口は楕円になり、長い方の半径は r / cos。安全側に、その半径の円で見る
-        # （上の横のずれの床を通った後は、斜めは 1° ほどまでなので、円にした分の差は小さい）
+        # （横のずれの床を通った後は、斜めは 1° ほどまでなので、円にした分の差は小さい）
         rf = r / abs(_dot(u, n))
-        clear = f.poly.distance(LineString(q)) - rf
-        if best is None or clear > best[0]:
-            best = (clear, f, q, rf)
+        at_rest = f.poly.distance(Point(q[0])) - rf
+        if best is None or at_rest > best[0]:
+            best = (at_rest, f, q, rf)
     if best is None:
-        return None, Failure("3D.skewer", "竹串", "竹串の線が、行程の間ずっと外筒の面を横切る所が無い（筒の外を通る）")
-    clear, f, (q0, q1), rf = best  # rf はその面の上の竹串の切り口の半径（文に出す太さは r のまま）
+        return [(None, Failure("3D.skewer", "竹串", "竹串の線が、行程の間ずっと外筒の面を横切る所が無い（筒の外を通る）"))]
+    at_rest, f, (q0, q1), rf = best  # rf はその面の上の竹串の切り口の半径（文に出す太さは r のまま）
+    if at_rest < -EPS:
+        return [(None, Failure("3D.skewer", "竹串", f"静かな時から、竹串（太さ {2 * r:g}mm）が外筒の紙に {-at_rest:.1f}mm 掛かり、溝を通らない"))]
     rest_h, push_h = (_dot(_sub(placed(centers[0], t), c_o), up_o) - bot_o for t in (rest, push))
-    if clear < -EPS:
-        at_rest = f.poly.distance(Point(q0)) - rf
-        if at_rest < -EPS:
-            return None, Failure("3D.skewer", "竹串", f"静かな時から、竹串（太さ {2 * r:g}mm）が外筒の紙に {-at_rest:.1f}mm 掛かり、溝を通らない")
+    st["slot"] = {"face": f, "q": (q0, q1), "rf": rf, "r": r, "travel": push - rest, "h": (rest_h, push_h)}
+    return [(f"入れる {inner_part.label}: 内筒は外筒の中に入る（断面のすき間 {fit:.2f}mm）。内筒を外筒の真ん中に入れると、静かな時は竹串の中心が"
+             f"底から {rest_h:.1f}mm で、竹串（太さ {2 * r:g}mm）の端が溝から出る（紙までの余り {at_rest:.2f}mm）", None)]
+
+
+def _op_push(st):
+    """竹串の端を溝に沿って押し上げる操作。入れた後だけ見る。竹串の中心が通る線分から紙までで、行程の全部を一度に見る。"""
+    if "slot" not in st:
+        return []
+    sl = st["slot"]
+    f, (q0, q1), rf, r = sl["face"], sl["q"], sl["rf"], sl["r"]
+    if f.poly.distance(LineString([q0, q1])) - rf < -EPS:
         # 動きは真っ直ぐなので、紙に当たる所は行程の途中の 1 か所。二分で探す
         lo, hi = 0.0, 1.0
         for _ in range(40):
             mid = (lo + hi) / 2
             end = (q0[0] + (q1[0] - q0[0]) * mid, q0[1] + (q1[1] - q0[1]) * mid)
             lo, hi = (mid, hi) if f.poly.distance(LineString([q0, end])) - rf >= -EPS else (lo, mid)
-        short = (1 - lo) * (push - rest)
-        return None, Failure("3D.skewer", "竹串", f"押し上げ切る {short:.1f}mm 手前で、竹串が外筒の紙に当たり、溝を通り切らない")
-    c_rest, c_push = (f.poly.distance(Point(pt)) - rf for pt in (q0, q1))
+        short = (1 - lo) * sl["travel"]
+        return [(None, Failure("3D.skewer", "竹串", f"押し上げ切る {short:.1f}mm 手前で、竹串が外筒の紙に当たり、溝を通り切らない"))]
+    c_push = f.poly.distance(Point(q1)) - rf
     stop = ""
     if c_push < TOL and nearest_points(f.poly, Point(q1))[0].y < q1[1] - EPS:
         stop = "。押し上げ切ると溝の上の端に届いて止まる"
-    return (f"並ぶ 竹串: 内筒は外筒の中に入る（断面のすき間 {fit:.2f}mm）。2 つの穴は向かい合い（高さの差 {tilt:.2f}mm・横のずれ {side:.2f}mm）、竹串は水平。"
-            f"内筒を外筒の真ん中に入れ、竹串（太さ {2 * r:g}mm）の中心が底から "
-            f"{rest_h:.1f}mm（静かな時）から {push_h:.1f}mm（押し上げ切る）まで、溝の中を通る（紙までの余り 静かな時 {c_rest:.2f}mm・"
-            f"押し上げ切った時 {c_push:.2f}mm{stop}）"), None
+    rest_h, push_h = sl["h"]
+    return [(f"押し上げる 竹串: 竹串の中心は底から {rest_h:.1f}mm から {push_h:.1f}mm まで {sl['travel']:g}mm 上がり、行程の全部で溝の中を通る"
+             f"（押し上げ切った時の紙までの余り {c_push:.2f}mm{stop}）", None)] + _fan(st)
+
+
+def _fan_shape(fan_part):
+    """扇の部品の形から読む値。Returns (板の高さ h, 帯の長さ, 要の穴の x, 足の折り線の x) か、足が無ければ None。
+
+    頁の x は要の側の縁（x = 0）から先の縁（x = h）へ、y は帯の長さの向き。足は真ん中の板から要の側（x < 0）へ伸び、
+    足の糊代の境の折り線（x 一定）が台の上の面に乗る。寸法の式でなく描いた形から読む（式と絵のずれを見つけるため）。
+    """
+    legs = [a[0] for a, b in fan_part.valley + fan_part.mountain if abs(a[0] - b[0]) < EPS and a[0] < 0]
+    if not legs or not fan_part.holes:
+        return None
+    h = max(x for x, _ in fan_part.outline)
+    ys = [y for _, y in fan_part.outline]
+    return h, max(ys) - min(ys), min(hx for hx, _, _ in fan_part.holes), legs[0]
+
+
+def _fan(st):
+    """押し上げて扇が開く所（手順 13 の後半）。台と扇は折らずに置いた形で見る。Returns [(所見の文, 失敗)]。
+
+    台の上の面は内筒の上の端の高さ、扇は足の折り線が台の上の面に乗る高さに置く。畳んだ扇は箱（上の端の高さだけを見る）、
+    開いた扇は要のまわりの扇形（半径は要の穴から先の縁まで、開く角は見込みの上限の帯の長さ÷板の高さ。雛形の F5.fan_clearance と同じ見込みで、
+    実際は折り目で紙が立つので小さい。上限まで開いても当たらないかを、安全側で見る）。
+    見る事: 静かな時に扇の上の端が口より下（隠れる）・押し上げ切ると要が口より上・開いた扇形が横の面の口の縁に当たらない。
+    見ない事: 蛇腹の折り・開く仕組み（糸・紙のばね）・畳んだ扇の厚さが断面に収まるか（台の奥の縁に寄るので、式の床と食い違いうる）。
+    """
+    by, p = st["by"], st["p"]
+    if FAN not in by:
+        # 外筒と内筒だけを渡した呼び方。黙って通さず、扇は見ていないと言う
+        return [("開く 扇: 扇の部品を渡していないので、扇は見ない", None)]
+    where = by[FAN].label
+    if p.get("hub") != "axle":
+        # 口の台の形（hub rim）は、扇の端を台に貼る別の作り。まだ置いていないと言う（黙って通さない）
+        return [(f"開く {where}: 口の台の形の扇は、まだ置いていない（要と足が無い作り）", None)]
+    shape = _fan_shape(by[FAN])
+    if shape is None:
+        # 軸の形なのに要の穴か足の折り線が無いのは、描いた扇の崩れ。口の台の形と取り違えて通さない（レビューの指摘）
+        return [(None, Failure("3D.fan", where, "軸の形の扇に、要の穴か足の糊代の境の折り線が無く、台に置けない"))]
+    h, strip, hole_x, leg_x = shape
+    outer_part, outer = by[OUTER], st["folded"][OUTER]
+    up, c, bot, top = tube_axis(outer)
+    H, s = top - bot, p["push_amount"]
+    # 静かな時は内筒の上の端（＝台の上の面）が口より押し上げる量だけ下。畳んだ扇の上の端は、台の上の面から h − 足の折り線の x。
+    # 口と同じ高さは隠れていない（凍結の行の「口より下」。型紙の検査に通る寸法では 2mm 以上の余りがある）
+    hidden = s - (h - leg_x)
+    if hidden <= EPS:
+        said = f"口より {-hidden:.1f}mm 上に出る" if hidden < -EPS else "口と同じ高さに来る"
+        return [(None, Failure("3D.fan", where, f"静かな時に、畳んだ扇の上の端が{said}（隠れない）"))]
+    d = hole_x - leg_x  # 押し上げ切った時の、要の口からの高さ（台の上の面が口の高さに来る）
+    if d <= EPS:
+        return [(None, Failure("3D.fan", where, f"押し上げ切っても、要が口より上に出ない（口から {d:.1f}mm）"))]
+    R, theta = h - hole_x, min(360.0, math.degrees(strip / h))
+    sides = sorted((f for f in outer if f not in _glue_faces(outer_part, outer)), key=lambda f: f.poly.bounds[0])
+    # 開く面: 開く糸の穴のある面が向かい合う 2 面なら、その 2 面に垂直（＝ほかの 2 面に平行）。無ければ FAN_PLANE_PANEL に平行と置く
+    holed = [f for f in sides if any(f.poly.contains(Point(x, y)) for x, y, _ in outer_part.holes)]
+    if holed and not (len(holed) == 2 and _dot(holed[0].normal, holed[1].normal) < -1 + EPS):
+        # 穴はあるのに、向かい合う 2 面に無い（1 面だけ・3 面以上・隣の面）のは、描いた穴の崩れ。穴が無い時と取り違えて
+        # 決めた向きで続けない（レビューの指摘）
+        faces = "・".join(str(sides.index(f) + 1) for f in holed)
+        return [(None, Failure("3D.fan", outer_part.label, f"開く糸の穴が向かい合う 2 つの面に無く（穴のある面: {faces} 面目）、扇の開く向きが決まらない"))]
+    if holed:
+        fan_n = _cross(up, holed[0].normal)
+        plane = next(i for i, f in enumerate(sides, 1) if abs(abs(_dot(f.normal, fan_n)) - 1) < EPS)
+        how = f"{plane} 面目に平行に開き（開く糸の穴のある {'・'.join(str(sides.index(f) + 1) for f in holed)} 面目に垂直な向き）"
+    else:
+        fan_n, plane = sides[FAN_PLANE_PANEL - 1].normal, FAN_PLANE_PANEL
+        how = f"{plane} 面目に平行に開き（開く糸の穴が無いので、この向きと置いた）"
+    mouth = _add(c, _mul(up, top))
+    margins = []
+    for f in sides:
+        if abs(_dot(f.normal, fan_n)) > EPS:
+            continue  # 扇の面と平行な面には、扇は当たらない（扇はその面に平行に開く）
+        off = _dot(_sub(f.at(f.poly.exterior.coords[0]), mouth), f.normal)
+        a = abs(off)  # 軸から横の面までの距離
+        out_dir = _mul(f.normal, 1 if off > 0 else -1)
+        if R <= a:
+            continue  # 扇の先が横の面まで届かない
+        half = math.radians(theta / 2)
+        phi = math.asin(a / R)
+        if half <= phi:
+            continue  # 開いても横の面まで届かない角
+        reach = math.sqrt(R * R - a * a)
+        low = d + a / math.tan(half) if half < math.pi - phi else d - reach
+        seg = [f.flat(_add(_add(mouth, _mul(out_dir, a)), _mul(up, z)))[0] for z in (low, d + reach)]
+        margins.append(f.poly.distance(LineString(seg)) if low < 0 else low)
+    margin = min(margins, default=None)
+    if margin is not None and margin <= EPS:
+        return [(None, Failure("3D.fan", where, f"開く角の見込みの上限（{theta:.0f}°）まで開くと、扇が横の面の口の縁に当たる"))]
+    edge = "横の面の口の縁に当たらない" + (f"（縁までの余り {margin:.1f}mm）" if margin is not None else "（横の面まで届かない）")
+    return [(f"開く {where}: 静かな時、畳んだ扇の上の端は口より {hidden:.1f}mm 下（隠れる）。押し上げ切ると、要が口より {d:.1f}mm 上に出て、"
+             f"扇は {how}、開く角の見込みの上限（{theta:.0f}°。帯の長さ÷板の高さで、実際は折り目で紙が立つので小さい）まで開いても、"
+             f"{edge}。台と扇は折らずに置いた形で見る（畳んだ扇は箱、開いた扇は要の"
+             "まわりの扇形）。蛇腹の折りと、開く仕組み（糸・紙のばね）は見ない", None)]
+
+
+# 操作の種類ごとに、3D で行う事。並びは omochae.ops3d の操作の並び（手順の文と同じ元）で決める
+OPS = {"fold_outer": lambda st: _op_fold(st, OUTER), "fold_inner": lambda st: _op_fold(st, INNER),
+       "thread": _op_thread, "insert": _op_insert, "push": _op_push}
+
+
+def _step_numbers(p):
+    """3D の操作の種類ごとの、手順の番号（雛形の組み方の何番目か）。雛形が、手順の文と操作の種類を 1 つの並びで持つ（step_ops）。
+
+    文を突き合わせて引くと、文の小さな直しで黙って外れた（レビューの指摘）。扇などの部品も要らない。
+    """
+    return TEMPLATES["slider_fan"].step_ops(p)
+
+
+def _tag(note, nums, *kinds):
+    """所見の文の頭に、確かめた操作の手順の番号を添える（組んだ過程と手順書を、番号で結ぶため）。"""
+    ns = [str(nums[k]) for k in kinds if k in nums]
+    if not ns:
+        return note
+    head, rest = note.split(": ", 1)
+    return f"{head}（手順 {'・'.join(ns)}）: {rest}"
 
 
 def check(parts, p):
-    """刷る部品（compose の配置の部品）と寸法から、外筒と内筒を折って組み、確かめる。Returns (所見の文の並び, 失敗の並び)。"""
+    """刷る部品（compose の配置の部品）と寸法から、外筒と内筒を折って組み、確かめる。Returns (所見の文の並び, 失敗の並び)。
+
+    手順の文を作る操作の並び（omochae.ops3d）を、その順に 3D の中で行う。前の操作が落ちると、それに頼る後の操作は見ない
+    （1 つの崩れに 1 行。compose と同じ考え）。所見と失敗の行には、その操作の手順の番号を添える（直す所を手順で引けるように）。
+    """
     by = {q.key: q for q in parts}
     if OUTER not in by or INNER not in by:
         raise ToolMissing("外筒と内筒が無い（最小の 1 本は、御来迎 つまみの形だけを組む）")
-    notes, failures, faced, folded = [], [], [], {}
-    for q in (by[OUTER], by[INNER]):
-        try:
-            folded[q.key] = fold(q)
-        except FoldError as e:
-            failures.append(Failure("3D.close", q.label, str(e)))
-            continue
-        note, fail = _close(q, folded[q.key])
-        if fail:
-            failures.append(fail)
-            continue
-        notes.append(note)
-        if q.hide_folds:
-            # 見える面の部品（色の境で折る）だけ、色の面の向きを見る。隠れる部品（破線を刷る内筒）の向きは組み立てに効かない
-            note, fail = _face(q, folded[q.key])
-            (faced if fail else notes).append(fail or note)
-    if failures:
-        # 筒が閉じなければ、竹串の線の形が決まらない。続けて見ると、1 つの崩れに別の行が続いて狙いが読めなくなる（compose と同じ考え）
-        # 外筒の 3D.face は外筒が閉じた後に見た物なので、ほかの部品が閉じなくても捨てない（レビューの指摘）
-        return notes, failures + faced
-    # 色の面の向きは竹串の形に効かない（鏡に映した筒でも穴と溝は並ぶ）ので、3D.face で落ちても竹串は見る
-    note, fail = _skewer(by[OUTER], folded[OUTER], by[INNER], folded[INNER], p)
-    return (notes + [note], faced) if note else (notes, faced + [fail])
+    nums = _step_numbers(p)
+    st = {"by": by, "p": p, "folded": {}}
+    notes, failures = [], []
+    for kind, _ in assembly_ops(parts, p):
+        for note, fail in OPS[kind](st):
+            if note:
+                notes.append(_tag(note, nums, kind))
+            else:
+                n = nums.get(kind)
+                failures.append(Failure(fail.floor, fail.where, f"{fail.message}（手順 {n}）" if n else fail.message))
+    return notes, failures
 
 
 def run(template_id, params, source, title=None, inject=None):
