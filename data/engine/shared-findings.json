@@ -1,0 +1,31 @@
+[
+ {
+  "finding": "線の種類だけでは折る向きが伝わらない。凡例に、谷折り（手前にへこむ）と山折り（手前に出る）の意味を添える",
+  "where": "凡例（compose）",
+  "reach": "all",
+  "loops": [
+   3
+  ],
+  "material": [
+   2
+  ],
+  "from": "goraigo-v8（11-04 の実作の試行）",
+  "commit": "8de0f94"
+ },
+ {
+  "finding": "色のある見える面は、外を向くように折る。谷折りは刷った面がへこむ向きなので、谷折りで刷ると色が内に入る",
+  "where": "雛形の折り線と、3D の確かめ 3D.face",
+  "reach": [
+   "slider_fan",
+   "pivot_counterweight"
+  ],
+  "loops": [
+   3
+  ],
+  "material": [
+   2
+  ],
+  "from": "本人の答え（11-04 に作った時の話）",
+  "commit": "739167b"
+ }
+]
