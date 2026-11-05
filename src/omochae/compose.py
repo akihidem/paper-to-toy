@@ -4,7 +4,7 @@ import pkgutil
 
 from .floors import check_art, check_bom, check_holes, check_layout
 from .marks import mark_lines
-from .model import Failure, TextBox
+from .model import Failure, TextBox, ToolMissing
 from .page import PAGES
 from .textfit import text_width, wrap
 
@@ -17,11 +17,15 @@ def _discover():
     from . import templates
     found = {}
     for info in sorted(pkgutil.iter_modules(templates.__path__), key=lambda i: i.name):
-        mod = importlib.import_module(f"{templates.__name__}.{info.name}")
+        # 1 つ壊れていると、関係の無い雛形の場面も止まる。どの雛形かを言う（#25）。
+        try:
+            mod = importlib.import_module(f"{templates.__name__}.{info.name}")
+        except Exception as e:
+            raise ToolMissing(f"雛形 {info.name} が読めない（{type(e).__name__}: {e}）") from e
         if not hasattr(mod, "ID"):
             continue
         if mod.ID in found:
-            raise RuntimeError(f"雛形の ID が重なる: {mod.ID}（{found[mod.ID].__name__} と {mod.__name__}）")
+            raise ToolMissing(f"雛形の ID が重なる: {mod.ID}（{found[mod.ID].__name__} と {mod.__name__}）")
         found[mod.ID] = mod
     return found
 

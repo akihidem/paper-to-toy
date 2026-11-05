@@ -9,9 +9,14 @@ import shutil
 import sys
 import tempfile
 
-from .compose import TEMPLATES, compose
-from .marks import check_image_count, check_pdf
-from .model import ToolMissing
+# 読み込みは main の囲いより前に走るので、ここで落ちるとトレースバックの 1 になる（#25）。omochae.foldsim もここを通る。
+try:
+    from .compose import TEMPLATES, compose
+    from .marks import check_image_count, check_pdf
+    from .model import ToolMissing
+except Exception as e:
+    print(f"検査できない: {type(e).__name__}: {e}", file=sys.stderr)
+    sys.exit(4)
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
