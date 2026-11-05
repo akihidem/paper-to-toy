@@ -3,6 +3,8 @@
 
 本人の言葉（2026-11-05）: 作る過程の記録を「フィードバックとして型紙を改善するほか、型紙を生成するエンジンごと改善する」。
 段: take（入口）→ propose（案）→ adopt・reject（人の採否）→ release（次の版を刻む）→ compare（版ごとの数を並べる）。
+束を受けたら、人の操作を待たずに案を起こし、Issue の下書きまで置き場に置く（#72。take の命令が propose まで続けて回す）。
+人がするのは、束を渡す・下書きを読んで採否を決める・Issue を立てる・直しが入ったら版を刻む、の 4 つ。この道具は外へ何も送らない。
 判断の芯:
 - 型紙 1 枚の直し（寸法を 1 つ変えた次の版）は、サイトの側の輪が持つ。ここが見るのは、雛形から刷る全部の紙に効く直しだけ。
   行き先は 3 種: 雛形（その雛形の手順の文・部品の形）・部品（雛形をまたぐ共有の所。刷り方・凡例・位置の印）・
@@ -77,6 +79,9 @@ CRAFT_PEOPLE = 2  # 同じ手順で工夫を話した人（印のある人）が
 CRAFT_TALKS = 3  # 印の無い記録だけの時は、話した工夫がこの数から（1 人が続けて話した分と分けられないので、人より高く置く）
 MOTION_TEXTS = 10  # 動きの床の案に付ける文の上限（感想は数が多く、全部を付けると読めない）
 MATERIAL = "手元の材料"  # Issue の下書きの中で、作った人の言葉を分けて置く所の呼び名
+# 下書きの頭に書く、案の状態。下書きは採る前から置き場に出る（#72）ので、読む人が「まだ決まっていない物」と分かるように書く。
+STATUS_JA = {"draft": "まだ採っていない案（採るか・採らないかは人が決める）", "adopted": "採った案（次の版の予定に入っている）",
+             "released": "採って、版に刻んだ案", "rejected": "採らないと決めた案"}
 # 文から拾う、雛形をまたぐ困り事の種類と、当たる共有の所。語は少なく保つ（広げるほど、関係の無い文を拾う）。拾い方は荒いので、
 # 案には当たった文をそのまま付け、人が読んで確かめる。
 SHARED = {
@@ -414,19 +419,35 @@ def proposals():
     return [_load(p) for p in sorted(_dirs()["proposals"].glob("EP-*.json"))]
 
 
+def _issue_path(pid):
+    return _dirs()["issues"] / f"{pid}.md"
+
+
 def propose():
-    """置き場の束から案を起こし、まだ無い案だけを下書きとして置く。Returns 新しく置いた案の list。"""
-    have = {p["key"] for p in proposals()}
+    """置き場の束から案を起こす。Returns (新しく置いた案の list, 新しくした案の list)。
+    - まだ無い案は、下書きとして置く。
+    - まだ決まっていない案は、束が増えて数や文が変わったら、新しくする（番号は同じ。いつ新しくしたかを残す）。新しくしないと、
+      束をいくつか受けた後の下書きが、最初の束の数のままになる。
+    - 人が決めた案（採った・採らない・版に刻んだ）は書き換えない。決めた時に見た数を残すため（決め直しはしない）。
+    どちらの時も、Issue の下書きを置き場に置く（#72。人の操作を待たない）。立てるのは人で、ここから外へは送らない。"""
+    have = {p["key"]: p for p in proposals()}
     d = _dirs()["proposals"]
-    made = []
+    made, renewed = [], []
     for dr in drafts(groups(bundles())):
-        if dr["key"] in have:
+        old = have.get(dr["key"])
+        if old is None:
+            n = max((int(p.stem[3:]) for p in d.glob("EP-*.json")), default=0) + 1
+            p = {"id": f"EP-{n:04d}", "status": "draft", **dr, "made_at": _now()}
+            _dump(d / f"{p['id']}.json", p, exclusive=True)
+            made.append(p)
+        elif old["status"] == "draft" and any(old.get(k) != v for k, v in dr.items()):
+            p = {**old, **dr, "renewed_at": _now()}
+            _dump(d / f"{p['id']}.json", p)
+            renewed.append(p)
+        else:
             continue
-        n = max((int(p.stem[3:]) for p in d.glob("EP-*.json")), default=0) + 1
-        p = {"id": f"EP-{n:04d}", "status": "draft", **dr, "made_at": _now()}
-        _dump(d / f"{p['id']}.json", p, exclusive=True)
-        made.append(p)
-    return made
+        _issue_path(p["id"]).write_text(issue_draft(p), encoding="utf-8")
+    return made, renewed
 
 
 def ledger():
@@ -449,7 +470,8 @@ def issue_draft(p):
     作った人の言葉（当たった文）は、4 つの見出しの外の「手元の材料」に分ける（#65）。声から字にした話は、作る側だけが読む約束で
     残した言葉なので、公開の Issue にそのまま写すと約束の外に出る。Issue に書くのは、数と、人が読んで自分の言葉でまとめた事。"""
     ja = {"template": "雛形", "part": "部品（共有の所）", "rule": "生成の決まり"}[p["target"]["kind"]]
-    lines = [f"# {p['title']}", "", f"（下書き。立てるのは人。末尾の「{MATERIAL}」は作った人の言葉なので、Issue にそのまま写さず、読んで自分の言葉でまとめる）", "",
+    lines = [f"# {p['title']}", "", f"（下書き。{STATUS_JA.get(p.get('status'), STATUS_JA['draft'])}。立てるのは人。"
+             f"末尾の「{MATERIAL}」は作った人の言葉なので、Issue にそのまま写さず、読んで自分の言葉でまとめる）", "",
              "## 目的", f"{ja}「{p['target']['name']}」を、作る過程の記録に合わせて直す。", "",
              "## なぜか（根拠）", f"- {p['why']}", f"- 案の番号 {p['id']}。数: " + "、".join(f"{NUMBER_JA.get(k, k)} {v}" for k, v in p["numbers"].items())]
     if not p.get("in_engine"):
@@ -482,7 +504,9 @@ def decide(pid, by, accept, note=""):
         led.setdefault("next", []).append({**_entry(p), "adopted_at": _now()[:10]})
         ledger_path().parent.mkdir(parents=True, exist_ok=True)
         _dump(ledger_path(), led)
-        (_dirs()["issues"] / f"{pid}.md").write_text(issue_draft(p), encoding="utf-8")
+        _issue_path(pid).write_text(issue_draft(p), encoding="utf-8")
+    else:
+        _issue_path(pid).unlink(missing_ok=True)  # 採らないと決めた案の下書きを、立てる物と間違えないように消す（案の記録は残る）
     _dump(path, p)
     return []
 
@@ -512,7 +536,9 @@ def release(commit, by, sheet_sets=None, note=""):
     for pid in ids:
         path = _dirs()["proposals"] / f"{pid}.json"
         if path.exists():  # 案の記録は git の外なので、別の機械で刻む時は無い事がある
-            _dump(path, {**_load(path), "status": "released", "version": n})
+            p = {**_load(path), "status": "released", "version": n}
+            _dump(path, p)
+            _issue_path(pid).write_text(issue_draft(p), encoding="utf-8")
     return n, []
 
 
@@ -559,9 +585,9 @@ def main(argv=None):
                                                                         "次の版を刻み（release）、版ごとの数を並べる（compare）。終了: 0 できた / 3 落ちた・断った / 4 できない")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("check", help="束の形と連絡先の形を確かめる（置かない）").add_argument("file")
-    sub.add_parser("take", help="束を受ける。連絡先の形のある文は落として数だけ残す").add_argument("file")
-    sub.add_parser("propose", help="置き場の束から、直しの案（下書き）を起こす")
-    sub.add_parser("list", help="案の一覧（番号・状態・行き先・題）")
+    sub.add_parser("take", help="束を受ける。連絡先の形のある文は落として数だけ残す。続けて案を起こし、Issue の下書きを置く").add_argument("file")
+    sub.add_parser("propose", help="置き場の束から、直しの案と Issue の下書きを起こす（take が続けて回すので、手で打つのは確かめたい時だけ）")
+    sub.add_parser("list", help="案の一覧（番号・状態・行き先・題。下書きが置き場にある案に印）")
     sub.add_parser("show", help="案 1 つを、当たった文つきで出す（作る側だけが読む）").add_argument("id")
     for name, text in (("adopt", "案を採る（次の版の予定に入り、Issue の下書きが出る）"), ("reject", "案を採らない")):
         sp = sub.add_parser(name, help=text)
@@ -582,6 +608,18 @@ def main(argv=None):
             print(f.line(), file=sys.stderr)
         return 3
 
+    def label(p):
+        """案の 1 行。同じ雛形の案が刷った組ごとに起きるので、組の名も並べる（題は台帳に入る決まった形なので、変えない）。"""
+        return f"[{p['target']['kind']}] {p['title']}" + (f"（刷った組 {p['sheet_set']}）" if p.get("sheet_set") else "")
+
+    def raise_drafts():
+        """案を起こして、起きた物を出す。題と数の呼び方だけで、作った人の文は画面に出さない。"""
+        made, renewed = propose()
+        for p in made + renewed:
+            print(f"{p['id']} {label(p)}" + ("（新しくした）" if p in renewed else ""))
+        print(f"新しい案 {len(made)} 件・新しくした案 {len(renewed)} 件（下書き。採るかは人が決める）。"
+              f"Issue の下書きは置き場の issues の下（立てるのは人）")
+
     try:
         if args.cmd in ("check", "take"):
             try:
@@ -596,16 +634,14 @@ def main(argv=None):
             if fails:
                 return fail(fails)
             print(f"受けた: {path.name}（連絡先の形で落とした文 {dropped} 件）")
+            raise_drafts()  # 人の操作を待たずに、案と Issue の下書きまで出す（#72）
             return 0
         if args.cmd == "propose":
-            made = propose()
-            for p in made:
-                print(f"{p['id']} [{p['target']['kind']}] {p['title']}")
-            print(f"新しい案 {len(made)} 件（下書き。採るかは人が決める）")
+            raise_drafts()
             return 0
         if args.cmd == "list":
             for p in proposals():
-                print(f"{p['id']} {p['status']} [{p['target']['kind']}] {p['title']}")
+                print(f"{p['id']} {p['status']} {label(p)}" + ("（下書きあり）" if _issue_path(p["id"]).exists() else ""))
             return 0
         if args.cmd == "show":
             if not PROPOSAL_ID.fullmatch(args.id) or not (_dirs()["proposals"] / f"{args.id}.json").exists():
@@ -616,7 +652,7 @@ def main(argv=None):
             fails = decide(args.id, args.by, args.cmd == "adopt", args.note)
             if fails:
                 return fail(fails)
-            print(f"{args.id} を{'採った。次の版の予定に入れ、Issue の下書きを置いた' if args.cmd == 'adopt' else '採らないと決めた'}")
+            print(f"{args.id} を{'採った。次の版の予定に入れ、Issue の下書きを採った案として書き直した' if args.cmd == 'adopt' else '採らないと決めた。Issue の下書きは置き場から消した'}")
             return 0
         if args.cmd == "release":
             pairs = [s.split("=", 1) for s in args.sheet_set]

@@ -229,14 +229,15 @@ PYTHONPATH=src .venv/bin/python -m omochae.foldsim --scenario examples/fan_tab.j
 
 ## エンジンごとの改善の輪（作る過程の記録 → 直しの案 → 人の採否 → 次の版）
 
-型紙 1 枚の直し（寸法を 1 つ変えた次の版）とは別に、雛形から刷る全部の紙に効く直しを、作る過程の記録から起こす（Issue #63・#65・#68）。
+型紙 1 枚の直し（寸法を 1 つ変えた次の版）とは別に、雛形から刷る全部の紙に効く直しを、作る過程の記録から起こす（Issue #63・#65・#68・#72）。
 機械は材料を束ねるだけで、採るかどうかも、直した後にどうなったかも決めない。
+束を受けたら、人の操作を待たずに、直しの案と Issue の下書き（4 つの見出し）までを置き場に出す。人がするのは 4 つ: 束を渡す・下書きを読んで採否を決める・Issue を立てる・直しが入ったら版を刻む。この道具は、外へ何も送らない。
 
 ```sh
 PYTHONPATH=src .venv/bin/python -m omochae.engine_loop check examples/bundles/sample_made_up.json   # 束の形と連絡先の形（0 通る / 3 落ちる）
-PYTHONPATH=src .venv/bin/python -m omochae.engine_loop take examples/bundles/sample_made_up.json    # 入口。連絡先の形のある文は落として数だけ残す
-PYTHONPATH=src .venv/bin/python -m omochae.engine_loop propose                  # 直しの案（下書き）を起こす
-PYTHONPATH=src .venv/bin/python -m omochae.engine_loop list                     # 案の一覧（show <番号> で当たった文つき）
+PYTHONPATH=src .venv/bin/python -m omochae.engine_loop take examples/bundles/sample_made_up.json    # 入口。連絡先の形のある文は落として数だけ残す。続けて案を起こし、Issue の下書きを置く
+PYTHONPATH=src .venv/bin/python -m omochae.engine_loop list                     # 案の一覧（下書きが置き場にある案に印。show <番号> で当たった文つき）
+PYTHONPATH=src .venv/bin/python -m omochae.engine_loop propose                  # 案と下書きを起こし直す（take が続けて回すので、手で打つのは確かめたい時だけ）
 PYTHONPATH=src .venv/bin/python -m omochae.engine_loop adopt EP-0001 --by <人>   # 人が採る（reject で採らない）
 PYTHONPATH=src .venv/bin/python -m omochae.engine_loop release --commit <番号> --by <人> --sheet-set slider_fan=<組の名>   # 直しが main に入った後、次の版を刻む
 PYTHONPATH=src .venv/bin/python -m omochae.engine_loop compare                  # 版ごとの数を並べる（判定はしない）
@@ -251,7 +252,10 @@ PYTHONPATH=src .venv/bin/python -m omochae.engine_loop compare                  
   - 部品（雛形をまたぐ共有の所。刷り方・凡例・位置の印など）: 同じ種類の困り事が 2 つ以上の雛形で出た時。
   - 生成の決まり（床と既定の寸法）: 検査を通って刷られた紙で、動かない側の札が 2 件から。「わからない」は動かない側に数えない。作る前の考えは、この案に付く（考えだけでは案にしない）。
 - 束の上の段の `current_sets` は、雛形の id ごとの今の刷った組の名（無くてもよい。サイトの側が書く）。記録の紙の組が今の組と違う群から起きた案には、「今の組は ○○。この記録は前の組の紙の物（もう直っているかを、先に見る）」と並ぶ。前の組の記録だからといって、案を捨てはしない（直っていない事もある。決めるのは人）。`compare` では、今の組の行に印が付く。
-- 案は数と当たった文だけを持ち、新しい寸法の値を持たない。採否は、人が名前を書いて決める。採った案は「次の版の予定」に入り、4 つの見出しの Issue の下書きが出る（立てるのは人）。
+- 案は数と当たった文だけを持ち、新しい寸法の値を持たない。採否は、人が名前を書いて決める。採った案は「次の版の予定」に入る。
+- Issue の下書きは、案が起きた時に置き場（`local/engine-loop/issues/`。git の外）に出る。採るのを待たない。頭に、今の状態（まだ採っていない案・採った案・版に刻んだ案）が出る。立てるのは人。
+  - まだ決まっていない案は、束が増えて数や文が変わると、案と下書きが新しくなる（番号は同じ）。人が決めた案は、決めた時に見た数のまま書き換えない。
+  - 採らないと決めた案の下書きは、置き場から消える（立てる物と間違えないため。案の記録は残る）。
 - Issue の下書きは、作った人の言葉（当たった文）を、4 つの見出しの外の「手元の材料」に分けて置く。声から字にした話は、作る側だけが読む約束で残した言葉なので、Issue にはそのまま写さず、人が読んで自分の言葉でまとめる。
 - 直しが main に入ったら、人が `release` で次の版を刻む。版の台帳は `data/engine/versions.json`（版の番号・採った案の番号と行き先と題・件数・commit・変わった刷った組）。作った人の文と、決めた人の名前は台帳に入れない。
 - `compare` は、雛形ごとに刷った組ごとの数（報告の数・動きの札の数・止まった段の札と人の数・やめた段・最初に動くまでの分の幅・話した事の数）を並べる。上下や割合は出さない。件数が少ないと、差があっても偶然と分けられず、作った人も作り方も版ごとに違うため、読むのは人。
@@ -263,6 +267,7 @@ PYTHONPATH=src .venv/bin/python -m omochae.engine_loop compare                  
   - 版の印は紙に刷らない（必須 2 種の刷った絵を変えないため）。版と紙は、束の「刷った組」と、`release` で書く刷った組でつなぐ。
   - 入口の床（F13.bundle・F13.pii・F13.proposal・F13.human・F13.version）は、この道具の床。凍結の基準の一覧には、まだ載せていない。
   - 束は、同じ出し元の物は新しい 1 つだけを数える（束はその時までの記録の全部なので）。
+  - 採らないと決めた案は、後で数が増えても起こし直さない（別の案として起こす道は、まだ無い）。まだ決まっていない案が、新しい束で数の線を下回っても、案と下書きは置き場に残る（消すのは人）。
 
 ## 終了の番号
 
