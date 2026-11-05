@@ -141,6 +141,7 @@ def _src(canvas, side):
 # 測る）が既定の台（奥行き 30・高さ 16）に、溝の横の傾きを足しても余白を持って入る高さまで下げた。台の奥行きを広げる勧め（base_depth 40）
 # で通した姿もある。どちらも見込みで、scale で大きさを変えられる（台の奥行きの勧めも付いて来る）。
 # stand はその玩具に勧める立て方（下の縁が広い物は脚、細い物は台）。source は組になる出典（場面が同じ組を渡す）。
+# suggest_base は、勧めが脚の姿に台を書いた時の台の寸法。既定の長さでは台が次の段へ落ち、凡例や物差しが紙の下へはみ出す姿だけに持たせる。
 # 1 頁に玩具が幾つもある時は、1 つの玩具を 1 つの値にし、出典は同じ頁の記録を使う。
 # 描き分けの省略: 細い棒（面の柄・首の竿）は、紙で切れて差せるよう、図より太くした（【解釈】）。
 FIGURES = {
@@ -190,7 +191,7 @@ FIGURES = {
         ],
     },
     "mimizuku": {
-        "title": "張子の木菟", "source": _src(27, "L"), "height": 100, "stand": "easel",
+        "title": "張子の木菟", "source": _src(27, "L"), "height": 100, "stand": "easel", "suggest_base": {"base_length": 50},
         "frame": "コマ 27 左頁の縮図の座標", "fill": "#d8b46a",
         "body": [[(330, 525), (345, 508), (365, 528), (420, 528), (470, 520), (490, 512), (500, 540), (495, 580), (540, 610), (580, 665), (590, 730),
                   (585, 800), (575, 860), (548, 885), (540, 920), (520, 945), (350, 945), (342, 915), (335, 880), (300, 820), (280, 760), (275, 690),
@@ -402,7 +403,7 @@ FIGURES = {
         ],
     },
     "fushimi": {
-        "title": "伏見人形", "source": _src(27, "R"), "height": 110, "stand": "easel",
+        "title": "伏見人形", "source": _src(27, "R"), "height": 110, "stand": "easel", "suggest_base": {"base_length": 50},
         "frame": "コマ 27 右頁の縮図の座標。子を連れた女の人形。子の足は図より下へ伸ばした（【解釈】）", "fill": "#e7b48c",
         "body": [[(265, 598), (300, 582), (350, 580), (402, 598), (372, 612), (362, 640), (395, 690), (430, 735), (455, 795), (430, 810), (395, 800),
                   (392, 860), (410, 925), (415, 962), (285, 962), (262, 900), (255, 850), (220, 760), (208, 700), (230, 660), (270, 625)],
@@ -462,7 +463,7 @@ FIGURES = {
         ],
     },
     "suribachi": {
-        "title": "ままごとの擂鉢", "source": _src(21, "L"), "height": 40, "stand": "easel", "suggest": {"tab_width": 10, "tab_length": 28, "tab_glue": 25},
+        "title": "ままごとの擂鉢", "source": _src(21, "L"), "height": 40, "stand": "easel", "suggest_base": {"base_length": 50}, "suggest": {"tab_width": 10, "tab_length": 28, "tab_glue": 25},
         "frame": "コマ 21 左頁の縮図の座標。擂鉢（頁のままごと道具の代表）。下の縁は平らにした", "fill": "#c98a5a",
         "body": [[(175, 830), (230, 800), (340, 785), (450, 790), (505, 815), (505, 845), (500, 870), (550, 870), (552, 920), (520, 925), (495, 905),
                   (480, 945), (195, 945), (180, 905), (178, 870)]],
@@ -694,15 +695,21 @@ def _slot_window(figure, scale):
             math.floor((2 * SLOT_END + width) * 10) / 10)
 
 
-def figure_defaults(figure, scale=1.0):
+def figure_defaults(figure, scale=1.0, stand=None):
     """その姿の既定: 共通の出発点に、姿に勧める立て方と寸法を重ねた物。scale が 1 でなければ、姿に付いて伸び縮みする寸法を
-    同じ倍率にする（0.1mm に丸め、RANGES の内に収める）。1 倍は手で決めた勧めのまま。"""
+    同じ倍率にする（0.1mm に丸め、RANGES の内に収める）。1 倍は手で決めた勧めのまま。
+    stand は書いた立て方。勧めが脚の姿に台を書くと、溝の既定は脚の姿に合わせた物でないので、舌が足に合わない。
+    台の勧めを重ね、溝を窓に収める。勧めの立て方の値は変えない（今の紙を変えない）。"""
     f = FIGURES[figure]
     d = {**BASE_DEFAULTS, "stand": f["stand"], **f.get("suggest", {})}
+    written_base = stand == "base" and f["stand"] != "base"
+    if written_base:
+        d.update(f.get("suggest_base", {}))
     if scale != 1.0:
         for k in _SCALE_ALWAYS + (_SCALE_DOWN if scale < 1 else _SCALE_UP):
             lo, hi = RANGES[k]
             d[k] = min(hi, max(lo, round(d[k] * scale, 1)))
+    if scale != 1.0 or written_base:
         lo, hi = RANGES["slot_length"]
         floor, ceiling = _slot_window(figure, scale)
         d["slot_length"] = min(hi, max(lo, min(ceiling, max(floor, d["slot_length"]))))
@@ -717,7 +724,7 @@ def filled(p):
     # 倍率が数でない・範囲の外の時は、1 倍の勧めで埋める（倍率の誤りは範囲の検査が落とす。ここでは止めない）。
     sc = p.get("scale")
     ok = isinstance(sc, (int, float)) and not isinstance(sc, bool) and RANGES["scale"][0] <= sc <= RANGES["scale"][1]
-    base = figure_defaults(p["figure"], float(sc) if ok else 1.0)
+    base = figure_defaults(p["figure"], float(sc) if ok else 1.0, p.get("stand"))
     return {**p, **{k: base[k] for k in base if p.get(k) is None}}
 
 
