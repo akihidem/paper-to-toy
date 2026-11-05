@@ -306,4 +306,26 @@ for k in t.KINDS:
         body = x.split(": ", 1)[1]
         assert not re.match(r"[0-9]+ ", body), x  # 文の頭に裸の番号を置かない
         assert {int(n) for n in re.findall(r"部品 ([0-9]+)", body)} <= nums, x
+
+# 9 回目の見直し 1: 厚紙に貼る部品を粗く切る余白は、型紙の上で隣の部品までの距離より小さい（余白で隣の部品を切り落とさない）
+import re as _re
+from omochae.__main__ import load_source
+from omochae.compose import compose
+from omochae.floors import part_poly
+for k in ("karakuri", "saru_take", "saru_sao"):
+    q = {**P, "kind": k}
+    _, lay, fs = compose("lever_link", q, load_source(t.SOURCES[k]))
+    assert not fs, fs
+    polys = {x.key: part_poly(x) for x in lay["parts"]}
+    card = [x.key for x in lay["parts"] if "厚紙" in next(r for r in t.bom(q) if r["key"] == x.key)["material"]]
+    near = min(polys[a].distance(polys[b]) for a in card for b in polys if b != a)
+    step = next(x for x in t.steps(q) if "粗く" in x)
+    margin = float(_re.search(r"周りに ([0-9.]+)mm", step).group(1))
+    assert margin < near, (k, margin, near)
+
+# 9 回目の見直し 2: 組んだ後に竹串を切りそろえる手順は、同じ手順の中で大人がすると言う
+for k in t.KINDS:
+    for x in t.steps({**P, "kind": k}):
+        if "切りそろえる" in x:
+            assert "大人がする" in x, x
 print("ok")
