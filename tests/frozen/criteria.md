@@ -10,6 +10,8 @@ exit code: 0 = 通る / 3 = 落ちる（検査の名前を出す）/ 4 = 検査�
 |---|---|---|---|
 | F1.marks | 型紙の PDF から pdftotext で、所蔵（国立国会図書館デジタルコレクションと永続 ID）・改変・出典 ID・「仮説」が取り出せる | `neg_marks_all`・`neg_marks_source_id` | 3・F1.marks |
 | F1.source | 刷る形ごとに出典が違う雛形（SOURCES を持つ雛形）で、形と合わない出典を渡すと落とす。既定の出典も形から選ぶ | `tests/test_guards.py` の 10・`spinner_neg_source`・`whistle_neg_source`・`popup_jar_neg_source`・`slide_box_neg_source`・`wheel_cart_neg_source`・`balance_neg_source`・`twist_drum_neg_source`・`pull_nod_neg_source`・`lever_link_neg_source`・`launcher_neg_source`・`float_neg_source`・`pull_nod_neg_source`・`lever_link_neg_source`・`launcher_neg_source`・`stand_figure_neg_source` | 3・F1.source |
+| F12.report | 作った人の報告（omochae.feedback）の形。知らない雛形・その雛形に無い形・決まりの外の値（moved・finish・built・困り事の種類・手順の番号）を落とす | `tests/test_feedback.py` の 1 | 3・F12.report |
+| F12.pii | 報告に名前・連絡先を入れない。決まりの外の欄と、普通に書いた連絡先（文の中の数字の多い所＝電話番号・郵便番号、@・メール・電話・LINE・SNS の名・URL などの語と印。全角・見えない文字はそろえてから）を式で落とす。わざと崩した書き方（語の文字の間に空白を挟む等）と名前・住所は式では落とさず、受け入れの前に人が全文を読んで止める。落とした報告の中身は出し直さない | `tests/test_feedback.py` の 2・4・7 | 3・F12.pii |
 | F2.bom | 部品表の素材が空でない。置き換えには元の素材（推定）と理由がある | `neg_bom_material`・`neg_bom_original` | 3・F2.bom |
 | F5.range | 寸法が雛形の範囲の中で、知らない名前が無い | `neg_range` | 3・F5.range |
 | F5.print_area | 全部品と全文字が印字域に収まる | `neg_print_area` | 3・F5.print_area |

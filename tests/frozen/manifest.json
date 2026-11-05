@@ -1,5 +1,5 @@
 {
- "criteria.md": "20b0f5373cf8bfd446daf472f8825367da883430fe41b122f5973106303640eb",
+ "criteria.md": "4396910226c821ced54abb0f48d6a4520c1bfd3fb81069a1f15028ee79ce0e97",
  "scenarios": {
   "balance_neg.json": {
    "floors": [
@@ -1123,11 +1123,13 @@
   "test_engine_loop",
   "test_exit_codes",
   "test_fan_model",
+  "test_feedback",
   "test_float",
   "test_foldsim",
   "test_frozen_manifest",
   "test_guards",
   "test_init_python",
+  "test_intake",
   "test_launcher",
   "test_lever_link",
   "test_neg_exact_fails",
