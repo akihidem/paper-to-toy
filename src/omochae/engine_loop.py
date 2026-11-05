@@ -564,7 +564,7 @@ def issue_draft(p):
         lines.append("- この雛形は、この repo の雛形の一覧に無い（サイトの側の雛形）。当たる雛形を人が決める。")
     lines += ["", "## どうしたらいいか", "- 直し方は、この下書きでは決めていない（機械は寸法の値を出さない）。当たる所を読み、比べた案と推しを書く。", "",
               "## ゴールの要件", "- 直しの前後で、必須 2 種の刷った絵と凍結の場面が変わらない（変える時は理由を書く）。",
-              "- 直しが main に入ったら `python -m omochae.engine_loop release` で次の版を刻み、次の束の数を `compare` で並べて人が読む。", "",
+              "- 直しが main に入ったら `PYTHONPATH=src .venv/bin/python -m omochae.engine_loop release` で次の版を刻み、次の束の数を `compare` で並べて人が読む。", "",
               "---", f"{MATERIAL}（Issue に写さない。作った人の言葉。名前や連絡先が無いかも、人が読む）:"]
     lines += [f"- {TEXT_JA[t['kind']]}" + (f"（手順 {t['step']}）" if t.get("step") else "") + (f"（{t['template']}）" if t.get("template") else "") + _on(t.get("paper"))
               + f": 「{t['text']}」× {t['count']}" for t in p["evidence"]] or ["- （当たった文は無い）"]

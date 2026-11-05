@@ -5,7 +5,7 @@
 回す前に、凍結した場面と基準を照合の表（tests/frozen/manifest.json）と照らす（#26）。
 なぜ照らすか: 場面も試験も、その時にあるファイルを回すだけなので、1 つ消すと合計が黙って減って全部通る。
 期待の値は場面の中にあるので、場面を書き換えると期待も一緒に変わる。合わない時は rc 4（検査できない）でファイルを名指しする。
-凍結を変える時は、理由を commit に書き、`python tests/run_floors.py --write-manifest` で表も同じ commit で直す
+凍結を変える時は、理由を commit に書き、`.venv/bin/python tests/run_floors.py --write-manifest` で表も同じ commit で直す
 （表の差分に、何を変えたかが出る）。
 """
 import hashlib
@@ -166,7 +166,7 @@ def main():
     if wrong:
         for line in wrong:
             print(f"検査できない: 凍結の表と合わない … {line}", file=sys.stderr)
-        print("凍結を変えたなら、理由を commit に書き、python tests/run_floors.py --write-manifest で表も同じ commit で直す", file=sys.stderr)
+        print("凍結を変えたなら、理由を commit に書き、.venv/bin/python tests/run_floors.py --write-manifest で表も同じ commit で直す", file=sys.stderr)
         return 4
     for tool in ("pdftotext", "pdftoppm", "pdfimages", "fc-match"):
         if not shutil.which(tool):
