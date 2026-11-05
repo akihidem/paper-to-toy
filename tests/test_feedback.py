@@ -90,7 +90,8 @@ reports = [OK, {**OK, "moved": "moved", "finish": 5, "problems": []},
 s = fb.summarize(reports)
 pw = s[("spinner", "pinwheel")]
 assert pw["n"] == 3 and pw["moved"] == {"moved": 1, "partly": 1, "not": 1}, pw
-assert abs(pw["finish_mean"] - 10 / 3) < 1e-9
+scores = [3, 5, 2]  # 3 つの報告の仕上がりの点
+assert abs(pw["finish_mean"] - sum(scores) / len(scores)) < 1e-9
 assert pw["problems"][0]["kind"] == "fit" and pw["problems"][0]["count"] == 2 and pw["problems"][0]["steps"] == {4: 2}
 assert "F5.spin" in pw["problems"][0]["target"], pw["problems"][0]["target"]
 assert s[("balance", "okiagari")]["n"] == 1
