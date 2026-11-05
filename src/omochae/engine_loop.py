@@ -53,14 +53,15 @@ TEXT_KEYS = {"kind", "step", "text", "count"}
 # 文の種類: 止まった所・直した点（工夫）・次の思いつき（工夫）・感想・聞く口の質問・試した記録への人の説明。
 # 話した事の 3 つ（#65）: think 作る前の考え・craft 作りながらの工夫（手順の番号つき）・keep できた後の話。
 # 報告の欄の案（#62）の when とは、idea = think・making = craft・made = keep で対応する（idea はここでは試した後の思いつきなので、名を分けた）。
-TEXT_KINDS = ("stuck", "fix", "idea", "impression", "question", "explain", "think", "craft", "keep")
+# review は、作る前の型紙のレビュー（経験者が作らずに型紙を読んだ指摘）。人が確かめた字だけが束に来る。
+TEXT_KINDS = ("stuck", "fix", "idea", "impression", "question", "explain", "think", "craft", "keep", "review")
 TEXT_JA = {"stuck": "止まった所", "fix": "直した点", "idea": "思いつき", "impression": "感想", "question": "質問", "explain": "人の説明",
-           "think": "作る前の考え", "craft": "話した工夫", "keep": "できた後の話"}
-TALK_JA = {"think": "考え", "craft": "工夫", "keep": "できた後"}  # 版ごとの数の並びで、話した事の列に出す短い呼び方
+           "think": "作る前の考え", "craft": "話した工夫", "keep": "できた後の話", "review": "作る前のレビュー"}
+TALK_JA = {"think": "考え", "craft": "工夫", "keep": "できた後", "review": "レビュー"}  # 版ごとの数の並びで、話した事の列に出す短い呼び方
 # 案が持つ数の呼び方（Issue の下書きで使う）。どれも件数で、寸法の値ではない。
 NUMBER_JA = {"stuck_taps": "止まったの札", "stuck_people": "止まった人（印のある分）", "quit_people": "その段でやめた人", "reports": "報告",
              "fixes": "直した点", "ideas": "思いつき", "not_moved": "動かない側の札", "moved": "動いた側の札", "templates": "雛形", "texts": "当たった文",
-             "craft_talks": "話した工夫", "craft_people": "工夫を話した人（印のある分）", "keeps": "できた後の話"}
+             "craft_talks": "話した工夫", "craft_people": "工夫を話した人（印のある分）", "keeps": "できた後の話", "reviews": "レビューの指摘"}
 MAX_TEXT = 300  # 文 1 つの長さ。上限を先に見てから連絡先の形を探す（長い文で探す時間が延びないように）
 MAX_TEXTS = 2000
 MAX_GROUPS = 500
@@ -460,6 +461,15 @@ def drafts(gs):
                         "numbers": {"fixes": n_fix, "ideas": n_idea, "craft_talks": n_talk, "keeps": n_keep, "reports": g["reports"]},
                         "why": f"{where}で、作った人が直した点が {n_fix} 件、思いつきが {n_idea} 件、作りながら話した工夫が {n_talk} 件、できた後の話が {n_keep} 件。",
                         "evidence": craft, "record_ids": g["record_ids"], "in_engine": here})
+        # 雛形: 作る前の型紙のレビュー。経験者が読んで人が確かめた指摘なので 1 件から案にする。作っていないので、止まった段・工夫の案には混ぜない。
+        reviews = [t for t in g["texts"] if t["kind"] == "review"]
+        if reviews:
+            n_review = sum(t["count"] for t in reviews)
+            out.append({"key": f"review:{tid}:{ss}", "target": {"kind": "template", "name": tid}, "template": tid, "sheet_set": ss, "paper": None, "step": None,
+                        "title": f"{tid}: 作る前のレビューの指摘を、雛形に入れるか見る",
+                        "numbers": {"reviews": n_review, "reports": g["reports"]},
+                        "why": f"{where}について、作る前のレビューの指摘が {n_review} 件（人が確かめた物）。",
+                        "evidence": reviews, "record_ids": g["record_ids"], "in_engine": here})
         # 生成の決まり: 検査を通って刷られた紙なのに、動かない側の札が重なった所。「わからない」は動かない側に数えない。
         # 作る前の考え（仮説を見て、どう動くと思ったか）もここに付ける。考えだけでは案にしない。
         not_moved = g["results"].get(g["not_moved_word"], 0) if g["not_moved_word"] else 0

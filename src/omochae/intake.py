@@ -11,7 +11,6 @@
 - 写真は受け付けない（権利と人の写り込みの確認が要るため）。
 終了: 0 = できた / 3 = 落ちた・断った / 4 = できない。
 """
-import argparse
 import datetime
 import html
 import json
@@ -23,6 +22,7 @@ import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
 
+from .__main__ import Parser
 from .compose import TEMPLATES
 from .feedback import FINISH, KINDS, MOVED, check
 
@@ -242,7 +242,7 @@ def make_server(port):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="omochae.intake", description="作った人の報告の入口。終了: 0 できた / 3 落ちた・断った / 4 できない")
+    ap = Parser(prog="omochae.intake", description="作った人の報告の入口。終了: 0 できた / 3 落ちた・断った / 4 できない")
     ap.add_argument("--base", default=str(BASE), help="置き場（既定 local/reports。git の外）")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sv = sub.add_parser("serve", help="手元の機械（127.0.0.1）で報告の画面を開く")
