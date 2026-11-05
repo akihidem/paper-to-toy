@@ -142,6 +142,7 @@ def _src(canvas, side):
 # で通した姿もある。どちらも見込みで、scale で大きさを変えられる（台の奥行きの勧めも付いて来る）。
 # stand はその玩具に勧める立て方（下の縁が広い物は脚、細い物は台）。source は組になる出典（場面が同じ組を渡す）。
 # suggest_base は、勧めが脚の姿に台を書いた時の台の寸法。既定の長さでは台が次の段へ落ち、凡例や物差しが紙の下へはみ出す姿だけに持たせる。
+# suggest_easel は、勧めが台の姿に脚を書いた時の脚の寸法。既定の脚が背に貼れないか横へ倒れる姿で、脚の寸法で通る姿だけに持たせる。1 倍の値で、倍率を書いた時は重ねない。
 # 1 頁に玩具が幾つもある時は、1 つの玩具を 1 つの値にし、出典は同じ頁の記録を使う。
 # 描き分けの省略: 細い棒（面の柄・首の竿）は、紙で切れて差せるよう、図より太くした（【解釈】）。
 FIGURES = {
@@ -343,7 +344,7 @@ FIGURES = {
         ],
     },
     "fukumen": {
-        "title": "覆面の人形", "source": _src(11, "L"), "height": 98, "stand": "base",
+        "title": "覆面の人形", "source": _src(11, "L"), "height": 98, "stand": "base", "suggest_easel": {"tab_width": 22},
         "frame": "コマ 11 左頁の縮図の座標。図の板の台は、型紙の箱の台に置き換えた", "fill": "#d6b178",
         "body": [[(345, 452), (360, 465), (375, 490), (378, 528), (372, 555), (490, 570), (496, 700), (490, 770), (440, 780), (405, 770), (410, 860),
                   (430, 900), (445, 962), (280, 965), (270, 900), (262, 780), (240, 750), (190, 740), (184, 600), (182, 585), (295, 570), (285, 545),
@@ -360,7 +361,7 @@ FIGURES = {
         ],
     },
     "mino": {
-        "title": "蓑人形", "source": _src(10, "L"), "height": 90, "stand": "base", "suggest": {"slot_length": 11},
+        "title": "蓑人形", "source": _src(10, "L"), "height": 90, "stand": "base", "suggest_easel": {"tab_width": 25, "tab_glue": 16}, "suggest": {"slot_length": 11},
         "frame": "コマ 10 左頁の縮図の座標。左の人形（網の竿を持つ）。図の板の台は、型紙の箱の台に置き換えた", "fill": "#a8432c",
         "body": [[(157, 632), (205, 612), (262, 632), (240, 642), (238, 662), (255, 675), (270, 700), (278, 760), (270, 800), (240, 810), (237, 900),
                   (220, 900), (215, 820), (200, 820), (198, 900), (181, 900), (180, 810), (168, 800), (160, 750), (165, 700), (178, 675), (178, 652),
@@ -522,7 +523,7 @@ FIGURES = {
         ],
     },
     "yamaneko": {
-        "title": "毛の山猫", "source": _src(18, "R"), "height": 60, "stand": "base",
+        "title": "毛の山猫", "source": _src(18, "R"), "height": 60, "stand": "base", "suggest_easel": {"tab_length": 40, "tab_glue": 23},
         "frame": "コマ 18 右頁の縮図の座標。尾の輪は、輪の中を切り抜かず帯にした", "fill": "#d9c08a",
         "body": [[(60, 848), (110, 850), (185, 855), (205, 840), (240, 825), (330, 800), (420, 760), (500, 712), (550, 720), (545, 745), (500, 770),
                   (530, 790), (450, 830), (440, 880), (420, 920), (380, 950), (330, 950), (280, 955), (250, 960), (215, 940)],
@@ -555,7 +556,7 @@ FIGURES = {
         ],
     },
     "nobori": {
-        "title": "幟", "source": _src(31, "R"), "height": 120, "stand": "base", "suggest": {"base_depth": 40},
+        "title": "幟", "source": _src(31, "R"), "height": 120, "stand": "base", "suggest_easel": {"tab_width": 17}, "suggest": {"base_depth": 40},
         "frame": "コマ 31 右頁の縮図の座標。幟の箱の形を真上に向けて回し、下を切って平らにした",
         "axis": ((380, 880), (475, 420)), "clip": 0.03, "fill": "#e3c98a",
         "body": [[(400, 425), (450, 405), (550, 432), (525, 520), (450, 850), (395, 892), (310, 860), (330, 760)]],
@@ -567,7 +568,7 @@ FIGURES = {
         ],
     },
     "sakana": {
-        "title": "魚の体の人形", "source": _src(12, "R"), "height": 96, "stand": "base", "suggest": {"slot_length": 8},
+        "title": "魚の体の人形", "source": _src(12, "R"), "height": 96, "stand": "base", "suggest_easel": {"tab_length": 70, "tab_glue": 14}, "suggest": {"slot_length": 8},
         "frame": "コマ 12 右頁の縮図の座標。斜めの魚を、尾から頭が真上を向くよう回し、尾の端を切って平らにした",
         "axis": ((90, 935), (432, 632)), "clip": 0.08, "fill": "#e8dfc6",
         "body": [[(320, 598), (345, 645), (390, 690), (480, 710), (485, 725), (410, 775), (290, 870), (200, 935), (180, 960), (178, 1040), (145, 970),
@@ -648,7 +649,7 @@ FIGURES = {
         ],
     },
     "fumei_tsutsu": {
-        "title": "不明（絵のある筒と丸い物の形）", "source": _src(19, "R"), "height": 90, "stand": "base",
+        "title": "不明（絵のある筒と丸い物の形）", "source": _src(19, "R"), "height": 90, "stand": "base", "suggest_easel": {"tab_width": 20, "tab_length": 42, "tab_glue": 30, "tab_angle": 30},
         "frame": "コマ 19 右頁の縮図の座標。斜めに立つ絵入りの筒と、横の丸い物。何の玩具かは分からない。下の縁は平らにした", "fill": "#e8d49a",
         "body": [[(128, 488), (185, 445), (240, 450), (300, 560), (360, 780), (362, 1012), (265, 1012), (175, 880), (118, 640), (118, 520)],
                  _circ(440, 880, 85, 24)],
@@ -698,18 +699,19 @@ def _slot_window(figure, scale):
 def figure_defaults(figure, scale=1.0, stand=None):
     """その姿の既定: 共通の出発点に、姿に勧める立て方と寸法を重ねた物。scale が 1 でなければ、姿に付いて伸び縮みする寸法を
     同じ倍率にする（0.1mm に丸め、RANGES の内に収める）。1 倍は手で決めた勧めのまま。
-    stand は書いた立て方。勧めが脚の姿に台を書くと、溝の既定は脚の姿に合わせた物でないので、舌が足に合わない。
-    台の勧めを重ね、溝を窓に収める。勧めの立て方の値は変えない（今の紙を変えない）。"""
+    stand は書いた立て方。勧めと違う立て方を書くと、勧めの寸法は書いた立て方に合わせた物でないので、その立て方の勧めを重ねる。
+    台は溝も窓に収める（既定の溝は脚の姿に合わせた物でなく、舌が足に合わない）。脚の勧めは 1 倍の時だけ重ねる（覆面の幅は 22mm しか通らず、
+    縮めると貼る面が背に収まらないので、倍率を書いて前は通った値が落ちる）。勧めの立て方の値は変えない（今の紙を変えない）。"""
     f = FIGURES[figure]
     d = {**BASE_DEFAULTS, "stand": f["stand"], **f.get("suggest", {})}
-    written_base = stand == "base" and f["stand"] != "base"
-    if written_base:
-        d.update(f.get("suggest_base", {}))
+    written = stand if stand in STANDS and stand != f["stand"] else None
+    if written == "base" or (written == "easel" and scale == 1.0):
+        d.update(f.get(f"suggest_{written}", {}))
     if scale != 1.0:
         for k in _SCALE_ALWAYS + (_SCALE_DOWN if scale < 1 else _SCALE_UP):
             lo, hi = RANGES[k]
             d[k] = min(hi, max(lo, round(d[k] * scale, 1)))
-    if scale != 1.0 or written_base:
+    if scale != 1.0 or written == "base":
         lo, hi = RANGES["slot_length"]
         floor, ceiling = _slot_window(figure, scale)
         d["slot_length"] = min(hi, max(lo, min(ceiling, max(floor, d["slot_length"]))))
