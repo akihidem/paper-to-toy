@@ -32,8 +32,23 @@ for pii in ({**OK, "motion_notes": "電話090-1234-5678"}, {**OK, "motion_notes"
             {**OK, "source_id": "山田太郎 090-1234-5678"}, {**OK, "params": {"name": "山田", "tel": "090-1234-5678"}},
             {**OK, "reported_at": "a@b.jp"}, {**OK, "problems": [{"kind": "fit", "step": 1, "note": "", "tel": "090-1234-5678"}]}):
     assert any(f.floor in ("F12.pii", "F12.report") for f in fb.check(pii)), pii
-# 2c. 普通の寸法・日付・記号は落とさない
-for fine in ("12-34mm", "2026-11-05", "糊代@3.0mm", "長さ 100-1500 mm", "03-12-150 mm", "羽 8 枚・半径 46mm"):
+# 2b2. 区切りの違う番号・漢数字・前に数が付く番号・空白の郵便番号・崩したメール・連絡先の印も、文の欄で F12.pii で落とす
+for t in ("090/1234/5678", "090・1234・5678", "090_1234_5678", "090,1234,5678", "090～1234～5678", "090の1234の5678",
+          "〇九〇-一二三四-五六七八", "2.5 090 1234 5678", "手順3 03 1234 5678", "〒123 4567", "〒 123 4567", "1234567",
+          "郵便123-4567.", "a @ b.jp", "a@b . jp", "a(at)b.jp", "山田@例え.日本", "LINE: yamada_taro", "@yamada_taro",
+          "https://x.com/yamada"):
+    assert any(f.floor == "F12.pii" for f in fb.check({**OK, "motion_notes": t})), t
+# 2b3. 決まった形の欄も、値を絞る（自由な文を入れさせない）。深い入れ子は落ちずに F12.report
+for bad in ({**OK, "params": {"kind": "山田太郎 横浜市"}}, {**OK, "source_id": "NDL-1-R1-L-yamada_taro"},
+            {**OK, "reported_at": "9999-99-99"}):
+    assert any(f.floor == "F12.report" for f in fb.check(bad)), bad
+deep = []
+for _ in range(3000):
+    deep = [deep]
+assert any(f.floor == "F12.report" for f in fb.check({**OK, "params": {"radius": deep}}))
+# 2c. 普通の寸法・日付・記号・小数の並び・範囲は落とさない
+for fine in ("12-34mm", "2026-11-05", "糊代@3.0mm", "長さ 100-1500 mm", "03-12-150 mm", "羽 8 枚・半径 46mm",
+             "2026-11-05 10:30", "0.1 0.2 0.3 0.4 0.5", "厚さ 0.3 0.5 0.8 1.0 1.2", "200-1000円", "120-1500 rpm", "100-2000%"):
     assert not [f for f in fb.check({**OK, "motion_notes": fine}) if f.floor == "F12.pii"], fine
 # 2d. 型の崩れた入力でも落ちずに F12.report を返す。落とした報告の値は知らせに出さない
 for broken in ({**OK, "template": ["spinner"]}, {**OK, "problems": [{"kind": ["fit"]}]}, {**OK, "template": "a@b.jp"},
