@@ -8,7 +8,9 @@ from .model import Failure
 from .tools import run_tool
 
 HOLDER = "国立国会図書館デジタルコレクション"
-HYPOTHESIS = "仮説: 復元ではなく、試すための 1 つの翻案です。答えではありません"
+# 本人の言葉（2026-11-05）「型紙が正解ではなくて、とりあえずAIが考えた仮説であるということを明示する」による。
+# 文言は窓口に出して決める（#57）。刷った後の検査（F1.marks）は、この文がそのまま PDF から読める事を見る。
+HYPOTHESIS = "仮説: AI が考えた、試すための 1 つの翻案です。正解ではありません。作って、動きを確かめて、直していきます"
 
 
 def mark_lines(source, omit=None):
