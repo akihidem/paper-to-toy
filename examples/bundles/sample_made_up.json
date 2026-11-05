@@ -29,7 +29,8 @@
     {"kind": "craft", "step": 3, "text": "折る前に、定規で折り線をなぞった", "count": 1},
     {"kind": "craft", "step": 5, "text": "つまみは最後に付けた", "count": 1},
     {"kind": "craft", "step": 6, "text": "内筒に糊が付かないよう、紙をはさんで貼った", "count": 2},
-    {"kind": "keep", "step": null, "text": "扇の紙を薄い紙に替えたら、開きやすかった", "count": 1}
+    {"kind": "keep", "step": null, "text": "扇の紙を薄い紙に替えたら、開きやすかった", "count": 1},
+    {"kind": "review", "step": 8, "text": "このつまみの幅だと、大人の指では押しにくそう", "count": 1}
    ]
   },
   {

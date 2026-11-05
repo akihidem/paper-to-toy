@@ -50,7 +50,7 @@ assert cli("check", "examples/bundles/sample_made_up.json").returncode == 0
 # 話した事（#65）: 文の種類 3 つと、群の craft_steps。前の形の束（どちらも無い）も、そのまま通る
 assert set(el.TEXT_KINDS) >= {"think", "craft", "keep"} and "craft_steps" in el.GROUP_KEYS
 assert {"think", "craft", "keep"} <= {t["kind"] for g in SAMPLE["groups"] for t in g["texts"]}
-TALK = ("think", "craft", "keep")
+TALK = ("think", "craft", "keep", "review")
 
 
 def old_shape(b):
@@ -160,7 +160,18 @@ assert by_key["talk:pivot_counterweight:tora-v3:4"]["numbers"]["craft_talks"] ==
 few = el.groups([variant(lambda b: b["groups"][1]["craft_steps"].update({"4": {"talks": 2, "people": 0}}))])
 assert not any(d["key"].startswith("talk:pivot_counterweight") for d in el.drafts(few))
 # 前の形の束からは、前と同じ鍵の案だけが起きる（話した事の案は起きない）
-assert {d["key"] for d in el.drafts(el.groups([OLD]))} == {k for k in by_key if not k.startswith("talk:")}
+assert {d["key"] for d in el.drafts(el.groups([OLD]))} == {k for k in by_key if not k.startswith(("talk:", "review:"))}
+# 作る前の型紙のレビュー（経験者が、作らずに型紙を読んだ指摘）: 人が確かめた字だけが束に来るので、1 件から案にする。作っていないので、
+# 止まった段にも工夫の数にも、報告の数にも入れない
+rv = by_key["review:slider_fan:goraigo-v10"]
+assert rv["target"] == {"kind": "template", "name": "slider_fan"} and rv["numbers"] == {"reviews": 1, "reports": 5} and "レビュー" in rv["title"]
+assert [(t["kind"], t["step"], t["text"]) for t in rv["evidence"]] == [("review", 8, "このつまみの幅だと、大人の指では押しにくそう")]
+assert not [k for k in by_key if k.endswith(":8") and k.startswith(("stuck:", "talk:"))]
+assert "review" not in {t["kind"] for t in by_key["craft:slider_fan:goraigo-v10"]["evidence"]}
+assert "作る前のレビュー（手順 8）" in el.issue_draft({**rv, "id": "EP-0000"}).split("---")[1]
+only_review = variant(lambda b: b.update(groups=[{"template": "slider_fan", "sheet_set": "goraigo-v10", "reports": 0,
+                                                  "texts": [{"kind": "review", "step": None, "text": "外筒の糊代が細く見える", "count": 1}]}]))
+assert el.check_bundle(only_review) == [] and [d["key"] for d in el.drafts(el.groups([only_review]))] == ["review:slider_fan:goraigo-v10"]
 assert "motion:pivot_counterweight:tora-v3" not in by_key
 fold = by_key["shared:fold:pivot_counterweight+slider_fan"]
 assert fold["target"]["kind"] == "part" and fold["numbers"]["templates"] == 2
@@ -292,7 +303,7 @@ out = r.stdout
 rows = [ln for ln in out.splitlines() if ln.startswith("| goraigo-")]
 # 今の組の行に印が付く。今の組は、新しい束の値で読む（前の束では v10 が今の組だった）
 assert [ln.split("|")[1].strip() for ln in rows] == ["goraigo-v9", "goraigo-v10", "goraigo-v11（今の組）"], rows
-assert "| goraigo-v10 | — | 5 件 | 動いた 2・動かない 2・わからない 1 | 手順 3: 4 回・2 人、手順 5: 1 回・1 人 | 手順 3: 1 | 20〜40（3 件） | 考え 1・工夫 5・できた後 1 |" in out, out
+assert "| goraigo-v10 | — | 5 件 | 動いた 2・動かない 2・わからない 1 | 手順 3: 4 回・2 人、手順 5: 1 回・1 人 | 手順 3: 1 | 20〜40（3 件） | 考え 1・工夫 5・できた後 1・レビュー 1 |" in out, out
 assert f"| goraigo-v11（今の組） | 版 1（{sid}） | 3 件 | 動いた 3 | 手順 3: 1 回・1 人 | — | 10〜25（3 件） | 工夫 1 |" in out, out
 assert "| tora-v3（今の組） |" in out
 assert "| den_den-v1 | — | 2 件 | 鳴った 2 | sample-toy.H-A の手順 4: 2 回・2 人 | — | — | — |" in out, out  # 紙の名がある群は、どの紙の手順かが並ぶ
