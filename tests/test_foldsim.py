@@ -2,6 +2,7 @@
 
 元の repo の tests/test_foldsim.py を、仮説でなく雛形と寸法から書き出す入口に合わせて写した。
 足した事: 検査に落ちる寸法は書き出さず 3、刷る形の寸法が無ければ 4（python -m omochae と同じ入口の決まり）。
+5 の節は、3D の中で折って組む確かめ（omochae.fold3d）。同じ「折る」の試験なのでここに置く（試験のファイルを増やすと凍結の照合の表が変わる）。
 """
 import json
 import os
@@ -123,4 +124,132 @@ with tempfile.TemporaryDirectory() as d:
     assert r.returncode == 4 and "折りのある部品が無い" in r.stderr, r.stderr
     r = cli("--scenario", str(ROOT / "tests/frozen/scenarios/neg_overlap.json"))
     assert r.returncode == 3 and "F5.overlap" in r.stderr, r.stderr
+
+# 5. 3D の中で折って組む（omochae.fold3d）。本人の決定で、提出の前は御来迎 つまみの形の 2 つだけを見る。
+#    3D.close: 外筒（と、竹串の線の前提になる内筒）を、刷った折り線で 90° ずつ谷折りすると角筒に閉じ、糊代が 1 面目に重なる
+#    3D.skewer: 内筒の 2 つの穴を通す竹串が水平で、静かな時から押し上げ切るまで、外筒の溝の中を通る
+#    狙いは式と絵のずれを見つける事なので、刷る部品を 1 か所だけ崩した負の対照で、それぞれ 1 行だけ落ちる事も見る。
+import copy
+import itertools
+
+from omochae import fold3d
+from omochae.compose import compose
+
+TAB = {"push_part": "tab"}
+
+
+def built(params):
+    """型紙と同じ検査（compose）を通した部品（key ごと）と、既定を合わせた寸法。"""
+    p, layout, failures = compose("slider_fan", params, src)
+    assert not failures, [f.line() for f in failures]
+    return {q.key: q for q in layout["parts"]}, p
+
+
+pc, p = built(TAB)
+notes, fails = fold3d.check(list(pc.values()), p)
+assert not fails, [f.line() for f in fails]
+# 何を確かめたかを、閉じる（外筒・内筒）・並ぶ（竹串）の順に 1 行ずつ言う
+assert [n.split()[:2] for n in notes] == [["閉じる", "1"], ["閉じる", "2"], ["並ぶ", "竹串:"]], notes
+
+# 寸法を変えても、型紙の検査に通る組は 3D でも通る。通らない組が見つかったら、刷る紙は変えずに知らせる（今は無い）。
+# 寸法は互いに縛り合う（押し上げる量・筒の高さ・内筒の長さ・溝の上の余白・扇の台の大きさ）ので、範囲の端の総当たりでは
+# 型紙の検査に通る組が既定の近くの 6 組しか無かった。縛りに沿って動かした組で見る（75 組のうち 57 組が型紙の検査に通る）。
+SIZES = [(28, 26), (30, 26), (30, 22), (31, 28), (32, 28)]  # (外筒の一辺, 内筒の一辺)
+STROKES = [(69, 15, 84), (69, 20, 95), (75, 25, 110), (80, 15, 110), (90, 15, 110)]  # (押し上げる量, 内筒の長さ, 外筒の高さ)
+passed = 0
+for (side, inner_side), (amount, length, height), knob in itertools.product(SIZES, STROKES, (2, 4, 5)):
+    params = {**TAB, "tube_side": side, "pusher_side": inner_side, "base_side": min(26, inner_side),
+              "push_amount": amount, "pusher_height": length, "tube_height": height, "knob_width": knob}
+    q, layout, failures = compose("slider_fan", params, src)
+    if failures:
+        continue
+    fl = fold3d.check(layout["parts"], q)[1]
+    assert not fl, (params, [f.line() for f in fl])
+    passed += 1
+assert passed >= 40, passed  # 型紙の検査に通る組が少なすぎると、この確かめが空回りする
+
+A, H = p["tube_side"], p["tube_height"]
+
+
+def tampered(key, fn):
+    parts = copy.deepcopy(pc)
+    fn(parts[key])
+    return list(parts.values())
+
+
+def move_fold(i, dx):
+    def fn(q):
+        (a, b), (c, d) = q.valley[i]
+        q.valley[i] = ((a + dx, b), (c + dx, d))
+    return fn
+
+
+def notch(dx=0.0, down=0.0, narrow=0.0):
+    """溝の切り込み（外形のうち 2 面目の中にある 4 点）を、横へ dx、上の端を下へ down、幅を両側から narrow ずつ動かす。"""
+    def fn(q):
+        x0, x1 = sorted({x for x, _ in q.outline if A < x < 2 * A})
+
+        def mv(pt):
+            x, y = pt
+            if x not in (x0, x1):
+                return pt
+            return (x + dx + (narrow if x == x0 else -narrow), y + down if y < H else y)
+        q.outline = [mv(pt) for pt in q.outline]
+    return fn
+
+
+def raise_hole(i, dy):
+    def fn(q):
+        x, y, r = q.holes[i]
+        q.holes[i] = (x, y - dy, r)  # 頁の y は下向きなので、上げるのは引く
+    return fn
+
+
+def widen_first(dx):
+    def fn(q):
+        q.outline = [(x - dx if x == 0 else x, y) for x, y in q.outline]  # 1 面目の切る縁（x = 0）だけを外へ出す
+    return fn
+
+
+NEG = [
+    ("tube", move_fold(2, 2.0), "3D.close", "1 外筒", "継ぎ目"),    # 3 本目の折り線を 2mm ずらす → 90° ずつでは閉じない
+    ("tube", widen_first(2.0), "3D.close", "1 外筒", "継ぎ目"),     # 1 面目だけ 2mm 広い → 継ぎ目が 1 面目の縁に来ない
+    ("tube", lambda q: q.glue.clear(), "3D.close", "1 外筒", "糊代"),  # 糊代の印が無い → 継ぎ目を貼れない
+    ("pusher", move_fold(0, 2.0), "3D.close", "2 内筒", "継ぎ目"),  # 内筒が閉じなければ、竹串の線は見ない（1 行だけ）
+    ("tube", notch(dx=3.0), "3D.skewer", "竹串", "溝"),            # 溝を面の真ん中から 3mm ずらす
+    ("tube", notch(narrow=1.0), "3D.skewer", "竹串", "溝"),        # 溝を竹串より細くする（幅 5mm → 3mm、竹串 4mm）
+    ("tube", notch(down=5.0), "3D.skewer", "竹串", "溝"),          # 溝の上の端を 5mm 下げる → 押し上げ切る前に当たる
+    ("pusher", raise_hole(1, 2.0), "3D.skewer", "竹串", "傾"),     # 片方の穴を 2mm 上げる → 竹串が傾く
+]
+for key, fn, floor, where, word in NEG:
+    fl = fold3d.check(tampered(key, fn), p)[1]
+    assert [(f.floor, f.where) for f in fl] == [(floor, where)] and word in fl[0].message, (floor, where, [f.line() for f in fl])
+# 崩す前の部品はそのまま通る（上の負の対照が、写し方のせいで落ちたのでない事）
+assert not fold3d.check(tampered("tube", lambda q: None), p)[1]
+
+
+# 入口（python -m omochae.fold3d）の終了の番号: 0 確かめて通った / 3 落ちた / 4 確かめられない
+def cli3d(*args):
+    return subprocess.run([sys.executable, "-m", "omochae.fold3d", *args], cwd=ROOT, env=ENV, capture_output=True, text=True)
+
+
+r = cli3d("--scenario", str(ROOT / "examples/fan_tab.json"))
+assert r.returncode == 0 and "並ぶ 竹串:" in r.stdout and not r.stderr, (r.returncode, r.stdout, r.stderr)
+r = cli3d("--scenario", str(ROOT / "tests/frozen/scenarios/neg_overlap.json"))
+assert r.returncode == 3 and "F5.overlap" in r.stderr, r.stderr
+with tempfile.TemporaryDirectory() as d:
+    def params_file(name, body):
+        f = pathlib.Path(d) / name
+        f.write_text(json.dumps(body), encoding="utf-8")
+        return str(f)
+
+    r = cli3d("--params", params_file("bad.json", {"push_part": "tab", "fold_height": 50}))
+    assert r.returncode == 3 and "F5.fan_height" in r.stderr, r.stderr
+    # 最小の 1 本はつまみの形だけ。ほかの形・雛形は「まだ組めない」で 4（通ったとは言わない）
+    r = cli3d("--params", params_file("stick.json", {"push_part": "stick"}))
+    assert r.returncode == 4 and "まだ 3D で組めない" in r.stderr, r.stderr
+    r = cli3d("--template", "pivot_counterweight", "--params", params_file("neck.json", {"mount": "neck"}))
+    assert r.returncode == 4 and "まだ 3D で組めない" in r.stderr, r.stderr
+    r = cli3d("--template", "nothing", "--params", params_file("tab.json", TAB))
+    assert r.returncode == 4 and "知らない雛形" in r.stderr, r.stderr
 print("ok")
