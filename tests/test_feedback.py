@@ -141,10 +141,12 @@ assert sv["minutes"]["median"] == 47.5, sv["minutes"]
 assert all(p["kind"] not in fb.SERVICE_KINDS for p in fb.summarize([MK])[("spinner", "pinwheel")]["problems"])
 
 # 7. 工作の語（折りライン・部品ID・fold line・red dot）は連絡先と見ない。ID・LINE・メールは、ID らしい形が続く時だけ当てる
-for fine in ("折りライン2.5mmずれた", "部品のIDが分からない", "出典IDを確かめた", "fold line bent", "line them up",
+for fine in ("折りライン2.5mmずれた", "部品のIDが分からない", "出典IDを確かめた", "fold line bent", "line them up", "good ideas",
              "look at the red dot", "カットラインが細い"):
     assert not fb.has_pii(fine), fine
-for text in ("email me", "LINE ID: taro_123", "ライン:taro123", "ラインID taro123", "id:taro99", "taro at gmail dot com"):
+for text in ("email me", "LINE ID: taro_123", "ライン:taro123", "ラインID taro123", "id:taro99", "taro at gmail dot com",
+             "LINE ID は taro_123", "LINEのIDはtaro_123", "ID は taro_123", "ラインのIDはtaro_123",
+             "name at " + "x" * 50 + " dot com"):
     assert fb.has_pii(text), text
 # 長すぎる文は、式を当てる前に落とす（長い文で連絡先の式が 2 乗の時間をかけた）。困り事が list でなくても例外にせず落とす
 import time
@@ -152,5 +154,11 @@ t0 = time.monotonic()
 assert [f.floor for f in fb.check({**OK, "motion_notes": "a" * 19000})] == ["F12.report"]
 assert time.monotonic() - t0 < 1
 assert any(f.floor == "F12.report" and "problems" in f.line() for f in fb.check({**OK, "problems": 1}))
+# 短い文でも、幅の広い list に大量に並べた物は式の前に断る。困り事の文は画面と同じ 300 字まで
+t0 = time.monotonic()
+assert [f.floor for f in fb.check({**OK, "problems": [{"kind": "fit", "note": "a"}] * 100000})] == ["F12.report"]
+assert time.monotonic() - t0 < 2
+assert any("problems[0].note" in f.line() for f in fb.check({**OK, "problems": [{"kind": "fit", "note": "あ" * 301}]}))
+assert fb.check({**OK, "problems": [{"kind": "fit", "note": "あ" * 300}]}) == []
 
 print("ok")

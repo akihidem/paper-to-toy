@@ -46,9 +46,14 @@ KINDS = {
 SERVICE_KINDS = ("guide", "answer", "site")
 MAX_STEP = 40  # 手順の番号の上限。どの雛形の組み方も 40 手順より短い。上限が無いと、数の欄で電話番号を運べた
 MAX_MINUTES = 600  # かかった時間の上限（分）。一続きの工作で考えにくい長さは書き間違いと見る
-# 文 1 つの長さの上限（字）。画面の欄の maxlength（感想 600・困り事 300）と同じ。上限が無いと、連絡先の式が長い文で
+# 文の長さの上限（字）。画面の欄の maxlength と同じ（感想 MAX_TEXT・困り事 MAX_NOTE）。上限が無いと、連絡先の式が長い文で
 # 2 乗の時間をかけ（1 万字で約 2 秒）、大きな報告 1 つで summarize が止まった。長い文は式を当てる前に落とす
 MAX_TEXT = 600
+MAX_NOTE = 300
+# 報告 1 つの文の数と合計の長さの上限。1 つずつ短くても、幅の広い list に大量に並べると同じく止まった。
+# 画面から来る報告は、感想 2 つ（600 字）・困り事 3 つ（300 字）と短い名だけなので、この中に十分収まる
+MAX_STRINGS = 100
+MAX_TOTAL = 4000
 # 雛形ごとの動きの床。雛形を足したら、ここにも足す（test_feedback の 5 で漏れを見る）。
 FLOORS = {
     "slider_fan": "F5.fan_clearance・F5.slide_clearance ほか", "pivot_counterweight": "F5.pivot",
@@ -68,15 +73,17 @@ REPORTED_AT_MAX_DEPTH = 8  # 報告の入れ子の深さの上限。深い入れ
 KANJI_DIGITS = str.maketrans("〇一二三四五六七八九零壱弐参", "01234567890123")  # 大字（零壱弐参）も
 CONTACT = re.compile(r"(?i)@|アット|メアド|メール|電話|携帯|https?://|www\.|[a-z0-9-]+\.(com|net|org|jp|io|me|co|app|dev)\b"
                      # at と dot は、dot の後にドメインの終わりが続く時だけ（「look at the red dot」の様な普通の文で落とした）
-                     r"|\bat\b.{0,40}?\bdot\b\s*(com|net|org|jp|io|me|co|app|dev)\b|(?<![a-z])(tel|e-?mail|mail)(?![a-z])"
-                     # ID は「部品ID」「出典ID」の工作の語と重なるので、: か = か、ID らしい英数字が続く時だけ連絡先と見る
-                     r"|(?<![a-z])id(?:[:：=]|(?=[a-z0-9_.]{3,}))|twitter|ツイッター|インスタ|instagram|tiktok|youtube"
+                     r"|\bat\b.*?\bdot\b\s*(com|net|org|jp|io|me|co|app|dev)\b|(?<![a-z])(tel|e-?mail|mail)(?![a-z])"
+                     # ID は「部品IDが」「出典IDを」の工作の語と重なるので、は・:・=・is か空白の後に英数字が続く時だけ連絡先と見る
+                     # （空白を消した文では「ID は taro」が「IDはtaro」になり、空白を残した文（_norm）では「ID taro」で当たる。
+                     #  区切り無しの「ideas」を当てないため、区切りは必ず要る）
+                     r"|(?<![a-z])id(?:\s*(?:は|is|[:：=])\s*|\s+)[a-z0-9_.]{3,}|twitter|ツイッター|インスタ|instagram|tiktok|youtube"
                      r"|facebook|フェイスブック|discord|ディスコード|スレッズ|gmail|yahoo"
                      # LINE は工作の語（折りライン・fold line）と重なるので、ID が続く時だけ連絡先と見る
                      # （「折りライン2.5mm」「fold line bent」で落としていたので、ライン は英字で始まる名が続く時、英語の line は ID か : が続く時だけ）
-                     r"|(?<![a-z])line\s*(id)?\s*[:：]|(?<![a-z])line\s*id\s*[a-z0-9_.]{3,}|ライン\s*(?:id\s*[:：]?|[:：])?\s*[a-z_][a-z0-9_.]{3,}")
+                     r"|(?<![a-z])line\s*(id)?\s*[:：]|(?<![a-z])line\s*id\s*[a-z0-9_.]{3,}|ライン\s*(?:の?\s*id)?\s*(?:は|[:：=])?\s*[a-z_][a-z0-9_.]{3,}")
 # 大文字の LINE の後に名が続く形（LINE yamada）。大文字と小文字を分けて見るのは、工作の英語（line them up）と分けるため
-LINE_HANDLE = re.compile(r"(?<![A-Za-z])LINE\s*[A-Za-z_][A-Za-z0-9_.]{3,}")
+LINE_HANDLE = re.compile(r"(?<![A-Za-z])LINE\s*(?:の?\s*ID)?\s*(?:は|[:：=])?\s*[A-Za-z_][A-Za-z0-9_.]{3,}")
 
 
 def _norm(text):
@@ -147,8 +154,8 @@ def check(r):
         texts = list(_strings({k: v for k, v in r.items() if k not in ("source_id", "reported_at", "reviewed_at")}))
     except ValueError:
         return [Failure("F12.report", "報告", "入れ子が深すぎる")]
-    if any(len(t) > MAX_TEXT for t in texts):
-        return [Failure("F12.report", "報告", f"文が長すぎる（1 つ {MAX_TEXT} 字まで）")]
+    if any(len(t) > MAX_TEXT for t in texts) or len(texts) > MAX_STRINGS or sum(map(len, texts)) > MAX_TOTAL:
+        return [Failure("F12.report", "報告", f"文が長すぎるか多すぎる（1 つ {MAX_TEXT} 字・{MAX_STRINGS} 個・合わせて {MAX_TOTAL} 字まで）")]
     # 数字は、文の欄を全部合わせても数える。欄をまたいで番号を分けたり、間を空けたりすると、1 つの文の幅では通った
     # problems の形は下で見る。ここで list でない物を回すと、数（"problems": 1）で例外になり、rc 3 で落とせなかった
     plist = r.get("problems") if isinstance(r.get("problems"), list) else []
@@ -222,6 +229,8 @@ def check(r):
             out.append(Failure("F12.report", f"problems[{i}].step", f"手順の番号は 1〜{MAX_STEP} の整数か null"))
         if "note" in pr and not isinstance(pr["note"], str):
             out.append(Failure("F12.report", f"problems[{i}].note", "文で書く"))
+        elif len(pr.get("note", "")) > MAX_NOTE:
+            out.append(Failure("F12.report", f"problems[{i}].note", f"困り事の文は {MAX_NOTE} 字まで"))
     return out
 
 

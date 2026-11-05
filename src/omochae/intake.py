@@ -104,8 +104,10 @@ def _log(base, line):
         fh.write(f"{datetime.datetime.now(TZ).isoformat(timespec='seconds')}\t{line}\n")
 
 
-def accept(rid, base=BASE, confirm=None):
-    """受付箱の報告を受け入れる。confirm は人が打った ID。合わなければ断る。受け入れる前にもう一度 check を通す。"""
+def accept(rid, base=BASE, confirm=None, shown=None):
+    """受付箱の報告を受け入れる。confirm は人が打った ID。合わなければ断る。受け入れる前にもう一度 check を通す。
+    shown は人に見せた全文。渡された時は、今のファイルがそれと同じ時だけ受け入れる
+    （見せてから ID を打つ間に書き換えられると、人が読んでいない報告を受け入れられた）。"""
     if not isinstance(rid, str) or not ID_FORM.fullmatch(rid):
         return False, "受付の ID の形でない"
     d = dirs(base)
@@ -114,7 +116,10 @@ def accept(rid, base=BASE, confirm=None):
         return False, "受付箱に無い"
     if confirm != rid:
         return False, "確かめの ID が合わない（人が端末で打つ）"
-    r = json.loads(src.read_text(encoding="utf-8"))
+    text = src.read_text(encoding="utf-8")
+    if shown is not None and text != shown:
+        return False, "見せた後に報告が変わった（受け入れない。もう一度 review accept で読み直す）"
+    r = json.loads(text)
     if check(r):
         return False, "報告が検査に通らない（受け入れない。review reject で却下する）"
     r["reviewed_at"] = datetime.datetime.now(TZ).isoformat(timespec="seconds")
@@ -285,10 +290,11 @@ def main(argv=None):
         if not p.exists():
             print("受付箱に無い", file=sys.stderr)
             return 3
-        print(p.read_text(encoding="utf-8"))
+        shown = p.read_text(encoding="utf-8")
+        print(shown)
         print("上の全文に、名前・住所・連絡先・ほかの人の事が無いかを読んでから、ID を打つ（あれば review reject --reason pii）")
         typed = input(f"受け入れる報告の ID を打つ（{args.id}）: ").strip()
-        ok, msg = accept(args.id, base, typed)
+        ok, msg = accept(args.id, base, typed, shown=shown)
     print(msg, file=sys.stderr if not ok else sys.stdout)
     return 0 if ok else 3
 

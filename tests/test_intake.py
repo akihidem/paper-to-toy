@@ -121,4 +121,10 @@ with tempfile.TemporaryDirectory() as d:
     assert pr.returncode == 0, err
     assert out.index("息で回った") < out.index("受け入れる報告の ID を打つ") < out.index("受け入れた"), out
     assert (pathlib.Path(d) / "accepted" / f"{rid}.json").exists()
+    # 見せた後に書き換えられた報告は受け入れない
+    rid2, _ = intake.submit(GOOD, pathlib.Path(d))
+    shown = (pathlib.Path(d) / "inbox" / f"{rid2}.json").read_text(encoding="utf-8")
+    (pathlib.Path(d) / "inbox" / f"{rid2}.json").write_text(shown.replace("息で回った", "息で回った。山田"), encoding="utf-8")
+    assert intake.accept(rid2, pathlib.Path(d), confirm=rid2, shown=shown)[0] is False
+    assert not (pathlib.Path(d) / "accepted" / f"{rid2}.json").exists()
 print("ok")
