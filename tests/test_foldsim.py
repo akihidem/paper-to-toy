@@ -65,12 +65,16 @@ from omochae.compose import TEMPLATES
 for tpl in TEMPLATES.values():
     for form in tpl.FORMS:
         assert all(re.fullmatch(r"[a-z]+", q.key) for q in tpl.parts({**tpl.DEFAULTS, tpl.FORM: form})), (tpl.ID, form)
-# --name は模様として読まない（[ab] で頭 a・b の SVG を消さない）
+# 模様に読める --name は断り、頭 a・b の SVG を消さない（形の検査は tests/test_path_confine.py。ここは消さない事を見る）
+from omochae.model import ToolMissing
 d = tempfile.mkdtemp()
 for n in ("a", "b"):
     export("slider_fan", tab, src, d, name=n)
-export("slider_fan", {"push_part": "tab", "fold_height": 50}, src, d, name="[ab]")
-assert len(list(pathlib.Path(d).iterdir())) == 8
+try:
+    export("slider_fan", {"push_part": "tab", "fold_height": 50}, src, d, name="[ab]")
+    raise AssertionError("模様に読める名前を通した")
+except ToolMissing:
+    assert len(list(pathlib.Path(d).iterdir())) == 8
 # 寸法が落ちる時も、知らない部品の key を先に落とし、前の SVG を消さない
 try:
     export("slider_fan", {"push_part": "tab", "fold_height": 50}, src, d, name="a", parts={"fna"})

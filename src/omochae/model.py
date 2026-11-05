@@ -1,9 +1,20 @@
 """部品と検査結果の型。雛形の族が変わっても共通に使う形だけをここに置く。"""
+import re
 from dataclasses import dataclass, field
+
+SAFE_NAME = re.compile(r"[A-Za-z0-9_-]{1,80}")
 
 
 class ToolMissing(Exception):
     """検査そのものができない（exit 4）。落ちた（exit 3）と混ぜないために分ける。"""
+
+
+def check_name(value, what):
+    """値をパスにつなぐ前に、決まった形かを確かめる。点も斜線も通さないので、決めた置き場の外を指せない（#30）。
+    つないだ後のパスを比べる形より、理由の文が読みやすく、シンボリックリンクの解き方にも左右されない。"""
+    if not (isinstance(value, str) and SAFE_NAME.fullmatch(value)):
+        raise ToolMissing(f"{what} の形が違う（英数字と - と _ で 80 字まで）: {str(value)[:80]!r}")
+    return value
 
 
 @dataclass

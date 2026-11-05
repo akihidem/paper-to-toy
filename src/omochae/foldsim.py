@@ -18,7 +18,7 @@ import tempfile
 
 from .__main__ import Parser, load_source, scenario_from_args
 from .compose import TEMPLATES, compose
-from .model import ToolMissing
+from .model import ToolMissing, check_name
 
 COLORS = {"outline": "#000000", "mountain": "#ff0000", "valley": "#0000ff"}
 
@@ -73,6 +73,8 @@ def export(template_id, params, source, out_dir, name=None, parts=None, title=No
     書き出しは仮の置き場で作り、全部書けてから、新しい物を先に正しい名前へ移し、その後で今回に無い前の物を消す
     （前の物を先に消すと、移す途中で止まった時に前の物を失った）。限り: 移すのは 1 つずつなので、途中で止まると新旧が混ざりうる。
     """
+    if name is not None:
+        check_name(name, "--name")  # 前の SVG を消す所より先に見る
     if parts is not None:
         # 知らない key は、検査（compose）より先に落とす。雛形の部品の key は、今の寸法でなく雛形の既定の寸法と刷る形ごとに数える
         # （今の寸法で部品を作ると、範囲の外や型の違う寸法で作れず key を確かめられないまま先へ進み、前の SVG を消した）。
