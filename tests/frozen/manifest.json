@@ -1140,6 +1140,7 @@
   "test_pull_nod",
   "test_run_floors",
   "test_sheet_v8",
+  "test_sheets",
   "test_slide_box",
   "test_spinner",
   "test_stand_figure",
