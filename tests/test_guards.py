@@ -283,4 +283,15 @@ if shutil.which("git"):
         shown = sorted(line[3:] for line in r.stdout.splitlines())
         assert shown == [".gitignore", "keep.md"], f"覚え書きが git status に出た: {shown}"
 
+# 12. 型紙は正解でなく、AI が考えた仮説である事を紙に刷る（本人の言葉・#57）。刷った PDF から読める事まで見る
+import shutil as _sh
+from omochae import marks as _marks
+assert "AI が考えた" in _marks.HYPOTHESIS and "正解ではありません" in _marks.HYPOTHESIS, _marks.HYPOTHESIS
+with tempfile.TemporaryDirectory() as d:
+    r = subprocess.run([sys.executable, "-m", "omochae", "--scenario", str(ROOT / "tests/frozen/scenarios/pos_tab.json"), "--out", f"{d}/s"],
+                       cwd=ROOT, capture_output=True, text=True, env={**os.environ, "PYTHONPATH": str(ROOT / "src")})
+    assert r.returncode == 0, r.stderr
+    text = subprocess.run(["pdftotext", f"{d}/s.pdf", "-"], capture_output=True, text=True).stdout.replace(" ", "").replace("\n", "")
+    assert "AIが考えた" in text and "正解ではありません" in text, text[:400]
+
 print("ok")
