@@ -6,7 +6,7 @@
 - 送られた報告は omochae.feedback の check を通し、通った物だけを受付箱に置く。落ちた物は置かず、床の名と理由だけを見せる。
   値を見せ返さないのは、個人の情報の形を含む中身を画面にも記録にも残さないため。IP や端末の情報も残さない。
 - 受付箱も受け入れた物も local/ の下（git の外）に置く。作った人の文を repo に入れない。
-- 受け入れは、端末で人が ID を打たないと進まない（AI や自動の処理だけで受け入れない補助。完全な保証ではない）。
+- 受け入れは、端末に全文を出してから、人が ID を打たないと進まない（AI や自動の処理だけで受け入れない補助。完全な保証ではない）。
 - 却下は中身を消し、ID と確認の記録だけを残す。ID は使い回さない。
 - 写真は受け付けない（権利と人の写り込みの確認が要るため）。
 終了: 0 = できた / 3 = 落ちた・断った / 4 = できない。
@@ -51,7 +51,10 @@ def new_id(now=None):
 def report_from_fields(f):
     """画面の欄（parse_qs の形）から報告の dict を作る。空の困り事の行は入れない。同意の欄は報告に入れない。"""
     one = lambda k: (f.get(k) or [""])[0].strip()
-    r = {"template": one("template"), "form": one("form"), "built": one("built") == "yes", "moved": one("moved"),
+    # yes・no の欄は、決まりの 2 つの値だけを真偽にする。ほかの値（欠けた・細工した）は文のまま残し、check で落とす。
+    # 「yes でなければ false」にすると、壊れた送信が「組み上がらなかった」という正しい報告として集計に入った
+    yes_no = lambda v: {"yes": True, "no": False}.get(v, v)
+    r = {"template": one("template"), "form": one("form"), "built": yes_no(one("built")), "moved": one("moved"),
          "motion_notes": one("motion_notes"), "finish_notes": one("finish_notes"),
          "reported_at": datetime.datetime.now(TZ).isoformat(timespec="seconds")}
     try:
@@ -65,7 +68,7 @@ def report_from_fields(f):
             # 半角の数字だけを数にする。isdigit は ² や ① も真で、int() が落ちた
             r[key] = int(v) if re.fullmatch(r"[0-9]{1,4}", v) else v
     if one("gave_up"):
-        r["gave_up"] = one("gave_up") == "yes"
+        r["gave_up"] = yes_no(one("gave_up"))
     probs = []
     for i in range(MAX_PROBLEMS):
         kind, note, step = one(f"p{i}_kind"), one(f"p{i}_note"), one(f"p{i}_step")
@@ -276,6 +279,14 @@ def main(argv=None):
         if not sys.stdin.isatty():
             print("断った: 受け入れは端末で人が ID を打つ（入力が端末でない）", file=sys.stderr)
             return 3
+        # 受け入れの前に、全文を必ず端末に出す。式は名前・住所を見分けられないので、人が全文を読む事が最後の止め。
+        # show を別に打つ形だと、読まずに ID だけ打って受け入れられた
+        p = d["inbox"] / f"{args.id}.json"
+        if not p.exists():
+            print("受付箱に無い", file=sys.stderr)
+            return 3
+        print(p.read_text(encoding="utf-8"))
+        print("上の全文に、名前・住所・連絡先・ほかの人の事が無いかを読んでから、ID を打つ（あれば review reject --reason pii）")
         typed = input(f"受け入れる報告の ID を打つ（{args.id}）: ").strip()
         ok, msg = accept(args.id, base, typed)
     print(msg, file=sys.stderr if not ok else sys.stdout)

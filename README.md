@@ -202,7 +202,8 @@ print(check_params("slider_fan", {"push_part": "tab", "fold_count": 40}, source)
   - かなで書いた番号（ゼロキュウゼロ…）
   - 一覧に無い SNS や連絡先の言い方
   - 名前・住所
-- 報告の文の中の数字は、全部の欄を合わせて 7 つ以上あると落ちる（番号を分けて書くのを止めるため）。寸法の数字の多い感想も落ちる。
+- 報告の文の中の数字は、文の欄（感想 2 つと困り事の note）を全部合わせて 7 つ以上あると落ちる（番号を分けて書くのを止めるため）。寸法の数字の多い感想も落ちる。
+- 数の欄（仕上がりの点・止まった手順・かかった時間・困り事の手順の番号）の数字は、この合計に入れていない。入れると普通の報告も落ちる（点 4・手順 12・45 分・手順 3, 5, 12 で 9 つ）。それぞれの欄には上限があるが、番号を幾つもの数の欄に分けて運ぶ事は式では止めない。受け入れの前に人が全文を読む。
 - JSON の報告の `params` は、雛形の範囲の中・小数 2 桁までの数だけを通す。ただ、範囲の中の整数を幾つもの欄に分けて番号を運ぶ事までは止めない（画面の入口は params を送らない）。
 <!-- 族の限り -->
 - 同じ入力で、同じ版の道具と同じ字の機械なら、PDF はバイトまで同じになる。作った時刻の欄は今の時刻でなく決まった値にしてある（作った時刻は PDF から読めない）。
@@ -225,7 +226,7 @@ PYTHONPATH=src .venv/bin/python -m omochae.ways --json   # サイトの絞り込
 ## 作った人の報告から型紙を直す
 
 型紙は、組み上がった物の完成度と動きの完成度を高めるように直していく（本人の方針・Issue #21）。材料は作った人の報告。
-報告の入口・確認・公開はサイト（提出物の側）が受け持ち、この repo は報告の形・検査・集計を受け持つ。
+この repo は報告の形・検査・集計と、手元の入口と人の確認（下の omochae.intake。本人の決定でエンジンの側・#22）を受け持つ。公開はサイト（提出物の側）が受け持つ。
 
 ```bash
 PYTHONPATH=src .venv/bin/python -m omochae.feedback check examples/reports/spinner_pinwheel.json   # 0 通る / 3 落ちる
@@ -249,7 +250,7 @@ PYTHONPATH=src .venv/bin/python -m omochae.feedback summarize examples/reports  
 ```bash
 PYTHONPATH=src .venv/bin/python -m omochae.intake serve                  # http://127.0.0.1:8765/ （手元の機械だけ）
 PYTHONPATH=src .venv/bin/python -m omochae.intake review list            # 受付箱の ID
-PYTHONPATH=src .venv/bin/python -m omochae.intake review accept <ID>     # 端末で人が ID を打って受け入れる
+PYTHONPATH=src .venv/bin/python -m omochae.intake review accept <ID>     # 端末に全文を出し、人が読んで ID を打つと受け入れる
 PYTHONPATH=src .venv/bin/python -m omochae.feedback summarize local/reports/accepted
 ```
 

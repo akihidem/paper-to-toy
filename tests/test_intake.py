@@ -101,4 +101,24 @@ assert all(f'name="{k}"' in page for k in intake.CONSENTS)
 assert all(f'name="{k}"' in page for k in ("stuck_step", "gave_up", "minutes")) and 'value="guide"' in page
 # 7. 置き場は git の外（local/ を .gitignore が持つ）
 assert "local/" in (ROOT / ".gitignore").read_text(encoding="utf-8").split()
+# 8. yes・no の欄に決まりの外の値（欠けた・細工した）が来たら、false にせず落とす
+with tempfile.TemporaryDirectory() as d:
+    for bad in ({**GOOD, "built": ["invalid"]}, {**{k: v for k, v in GOOD.items() if k != "built"}}, {**GOOD, "gave_up": ["maybe"]}):
+        assert intake.submit(bad, pathlib.Path(d))[0] is None, bad
+    assert intake.submit({**GOOD, "built": ["no"]}, pathlib.Path(d))[0]
+# 9. 端末からの受け入れは、ID を打たせる前に全文を出す（読まずに ID だけ打って受け入れられた）
+import os, pty
+with tempfile.TemporaryDirectory() as d:
+    rid, _ = intake.submit(GOOD, pathlib.Path(d))
+    master, slave = pty.openpty()
+    pr = subprocess.Popen([sys.executable, "-m", "omochae.intake", "--base", d, "review", "accept", rid], stdin=slave,
+                          stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=ROOT, text=True,
+                          env={"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin"})
+    os.close(slave)
+    os.write(master, (rid + "\n").encode())
+    out, err = pr.communicate(timeout=20)
+    os.close(master)
+    assert pr.returncode == 0, err
+    assert out.index("息で回った") < out.index("受け入れる報告の ID を打つ") < out.index("受け入れた"), out
+    assert (pathlib.Path(d) / "accepted" / f"{rid}.json").exists()
 print("ok")
