@@ -13,6 +13,10 @@
     "rc": 3,
     "floors": [
       "F5.print_area"
+    ],
+    "lines": [
+      "F5.print_area [#] 文字が印字域の外に出ている",
+      "F5.print_area [像] 印字域の外に出ている (#, #, #, #)"
     ]
   }
 }

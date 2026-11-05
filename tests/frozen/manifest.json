@@ -51,7 +51,7 @@
     "F5.float"
    ],
    "rc": 3,
-   "sha256": "155b3830e97f76824992bfcb6501690617d679dceff6d678f95485753c5c838f"
+   "sha256": "a9da05043e87a44dc8eabdc027db30a7fd2da659fea6fc7897f7f25873e12e13"
   },
   "float_neg3.json": {
    "floors": [
@@ -110,7 +110,7 @@
     "F5.launch"
    ],
    "rc": 3,
-   "sha256": "199f7dd6547b2564a497cabaea0da6b2a072736166ca4c747ead9d33e12bfc06"
+   "sha256": "fe754359060dfdfc8786c98ca80f5ecff98320de882f1c941d148b2328a04f34"
   },
   "launcher_neg3.json": {
    "floors": [
@@ -155,14 +155,14 @@
     "F5.link"
    ],
    "rc": 3,
-   "sha256": "f0a3e93cd0a2b98627e892901d9e36e155c275b160bb07b8aa009e87137117c6"
+   "sha256": "07ef065e0d3cca18e463426c5aa74b6ae6fdeaa13fb31720fb3f28cdec0e4d90"
   },
   "lever_link_neg4.json": {
    "floors": [
     "F5.link"
    ],
    "rc": 3,
-   "sha256": "6d9c9fb7c26e4cfc0eda5e552388d991dafb0fb513d7127454d27f20b5001e71"
+   "sha256": "34d9c9cb806b6e0eb75e8f9a5b9ff4a32acaeafc8fe7e92648716a9b477eca95"
   },
   "lever_link_neg5.json": {
    "floors": [
@@ -275,7 +275,7 @@
     "F5.image_box"
    ],
    "rc": 3,
-   "sha256": "6185a2456ee3009cff987ef2f59858a4a8ebde54d134e8a06a067cf35d6d4d45"
+   "sha256": "17df22a44eaae08d34089599770596f2cebabf3212906d968e41433ac296a785"
   },
   "neg_fan_length.json": {
    "floors": [
@@ -310,7 +310,7 @@
     "F5.hole"
    ],
    "rc": 3,
-   "sha256": "4d5ec221a002bc2c5ac044cb8ec459ee66495cc74bae1b12d39542201584bbf5"
+   "sha256": "10c1a39f0f00da808ae2f9edafb9de21da8f714d896ef743ee28e4219f2345ac"
   },
   "neg_image_box.json": {
    "floors": [
@@ -331,7 +331,7 @@
     "F1.marks"
    ],
    "rc": 3,
-   "sha256": "a050b72534963834bb1a8d176f9a273652d1f8502875c63a3e35e2f481385cf9"
+   "sha256": "683ea872c19ef2bb1749c9d4bc68cc590d7ffc65d64227f644ac1b4a252108e6"
   },
   "neg_marks_source_id.json": {
    "floors": [
@@ -352,7 +352,7 @@
     "F5.pivot"
    ],
    "rc": 3,
-   "sha256": "d58713289d1721a3f6d251ad71c01a64b33730b96152e66d49f6dba390818e56"
+   "sha256": "2162d5bca1e27ea2b66474f4d8d502a09ec4c7e4ed915cfdab607bf3bd680715"
   },
   "neg_pivot_floor.json": {
    "floors": [
@@ -380,7 +380,7 @@
     "F5.print_area"
    ],
    "rc": 3,
-   "sha256": "21c6a4faf03360ce4386fe5c305dbff05566f02d8cf22a690dcc63075fdaa307"
+   "sha256": "bc07235ceb6b75d4a28131c086eb9d04139973923c0e7dcb087f4f20b8be754e"
   },
   "neg_range.json": {
    "floors": [
@@ -415,7 +415,7 @@
     "F5.text_overlap"
    ],
    "rc": 3,
-   "sha256": "4a47e0ca81b3a0953bfe7f1daa7efcbdf16ff466c1b438f82a1ea673b689d2a1"
+   "sha256": "c435eed77214ce6342b60caa6500d8008ad0afaa8644fa7df607948d5fcc8833"
   },
   "popup_jar_neg.json": {
    "floors": [
@@ -443,7 +443,7 @@
     "F5.popup"
    ],
    "rc": 3,
-   "sha256": "c15a5583f1f9f9c1013529a8b13d747a1d08e6aa9bef48cf1ff428cae2df7979"
+   "sha256": "ef23d024e1356643b4d82a430b55951ef41d1ada90c7fa24efeceeeb0ca95593"
   },
   "popup_jar_neg5.json": {
    "floors": [
@@ -516,28 +516,28 @@
     "F5.pull_nod"
    ],
    "rc": 3,
-   "sha256": "220a50874fb921e772f4537be307e66ffc8d9afb53fe40f7d28bdf8662459963"
+   "sha256": "b5cd93dbaf252887796fb6ab33bd68860d7e085fceae2dbc105de07699d519b9"
   },
   "pull_nod_neg3.json": {
    "floors": [
     "F5.pull_nod"
    ],
    "rc": 3,
-   "sha256": "a6abeaab5f4d184f301d954802416ca289f75cef3240fd97ebc06a113e2ba539"
+   "sha256": "930a1048b725a44b05660ae5d4c12a9a784b7a6fba293e39ec2151bcf247b42b"
   },
   "pull_nod_neg4.json": {
    "floors": [
     "F5.pull_nod"
    ],
    "rc": 3,
-   "sha256": "453bec88713491ce658aef9c5264bce1bfeba99a0a34ac6a6c1efc2b80ba48b0"
+   "sha256": "ba19cdf5239034803957dc2af23c112bd96de5f66001d9863bdf7e72316c77e4"
   },
   "pull_nod_neg5.json": {
    "floors": [
     "F5.pull_nod"
    ],
    "rc": 3,
-   "sha256": "8a18d599bed42fe96caf8cd372164372f5b9efa7e3110ba54193c910b9d1da65"
+   "sha256": "8d09078489461d004a7d5d3640d4f13f4ffce57d623cc7dc2d002ffdeb4c4df7"
   },
   "pull_nod_neg6.json": {
    "floors": [
@@ -551,7 +551,7 @@
     "F5.pull_nod"
    ],
    "rc": 3,
-   "sha256": "ae5efff89dc3a764a34740bbdb7ea297359d96d1c6fc2de00eab9f5dc4cb4009"
+   "sha256": "f7ef772ccf7892e3fce7e1ff5b2db7ad6900e8495ff2602fe0a2de76d701a272"
   },
   "pull_nod_neg8.json": {
    "floors": [
@@ -919,6 +919,7 @@
   "test_init_python",
   "test_launcher",
   "test_lever_link",
+  "test_neg_exact_fails",
   "test_path_confine",
   "test_pivot_model",
   "test_popup_jar",
