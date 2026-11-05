@@ -9,10 +9,12 @@
   案に新しい寸法の値を持たせないのは、少ない報告から値を決め打つと、仮説の違いと作り方の違いが混ざるため。
 - 報告に名前や連絡先を入れない。提出物の持ち寄りの検査（F10.pii）と同じ見方で、全角や見えない文字をそろえてから落とす。
   落とした報告の中身は、集計にも知らせにも出し直さない。
+- 名前や住所は式では見分けられない。だから、まとめ（summarize の入口）は人が受け入れた報告（reviewed_at がある）だけを数える。
+- メモは信用しない文として扱う。まとめには 1 行にして出し、Markdown では記号を無効にする（見出しや HTML のタグを差し込めた）。
 終了: 0 = 通る / 3 = 落ちる / 4 = 確かめられない（置き場が無い等）。
 """
-import argparse
 import datetime
+import html
 import json
 import pathlib
 import re
@@ -20,6 +22,7 @@ import sys
 import unicodedata
 from collections import Counter
 
+from .__main__ import Parser
 from .compose import TEMPLATES
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -256,6 +259,16 @@ def check(r):
     return out
 
 
+def _one_line(text):
+    """メモを 1 行にする。改行（U+2028 などの字の区切りも）は空白に、制御の文字と見えない文字は消す。"""
+    return "".join(ch for ch in " ".join(str(text).split()) if unicodedata.category(ch)[0] != "C")
+
+
+def _md_text(text):
+    """Markdown の中で字のまま読める形にする。行の頭の記号（# や -）は 1 行にした後は行の頭に来ないので、文の中で働く物だけ無効にする。"""
+    return html.escape(re.sub(r"([\\`*_\[\]|~!])", r"\\\1", text), quote=False)
+
+
 def summarize(reports):
     """通った報告を雛形・形ごとに集める。Returns {(template, form): 集計}。困り事は多い順で、行き先の文を付ける。"""
     out = {}
@@ -276,7 +289,7 @@ def summarize(reports):
             if pr.get("step") is not None:
                 k["steps"][pr["step"]] += 1
             if pr.get("note"):
-                k["notes"].append(pr["note"])
+                k["notes"].append(_one_line(pr["note"]))
     for (tid, _), g in out.items():
         g["moved"] = {m: g["moved"][m] for m in MOVED}
         g["finish_mean"] = sum(g["finish"]) / len(g["finish"])
@@ -307,7 +320,7 @@ def service_summary(reports):
                 if pr.get("step") is not None:
                     k["steps"][pr["step"]] += 1
                 if pr.get("note"):
-                    k["notes"].append(pr["note"])
+                    k["notes"].append(_one_line(pr["note"]))
     return {"n": len(good), "gave_up": sum(1 for r in good if r.get("gave_up")), "stuck": dict(stuck.most_common()),
             "minutes": {"n": len(mins), "median": med, "min": mins[0] if mins else None, "max": mins[-1] if mins else None},
             "problems": [{"kind": kind, "count": v["count"], "steps": dict(v["steps"].most_common()), "target": KINDS[kind],
@@ -324,7 +337,7 @@ def _service_markdown(sv):
     for p in sv["problems"]:
         steps = "・".join(f"手順 {k}×{v}" for k, v in p["steps"].items()) or "手順の番号なし"
         lines.append(f"- {p['kind']} {p['count']} 件（{steps}）→ 行き先: {p['target']}")
-        lines += [f"  - 「{n}」" for n in p["notes"]]
+        lines += [f"  - 「{_md_text(n)}」" for n in p["notes"]]
     return "\n".join(lines + [""])
 
 
@@ -337,17 +350,17 @@ def _markdown(s):
         for p in g["problems"]:
             steps = "・".join(f"手順 {k}×{v}" for k, v in p["steps"].items()) or "手順の番号なし"
             lines.append(f"- {p['kind']} {p['count']} 件（{steps}）→ 行き先: {p['target']}")
-            lines += [f"  - 「{n}」" for n in p["notes"]]
+            lines += [f"  - 「{_md_text(n)}」" for n in p["notes"]]
         lines.append("")
     return "\n".join(lines)
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="omochae.feedback", description="作った人の報告を確かめ（check）、雛形・形ごとに集める（summarize）。"
-                                                                     "終了: 0 通る / 3 落ちる / 4 確かめられない")
+    ap = Parser(prog="omochae.feedback", description="作った人の報告を確かめ（check）、雛形・形ごとに集める（summarize）。"
+                                                     "終了: 0 通る / 3 落ちる / 4 確かめられない")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("check", help="報告の JSON を 1 つ確かめる").add_argument("file")
-    sm = sub.add_parser("summarize", help="置き場の *.json の報告を集め、Markdown で出す（落ちた報告は数えず、名前だけ知らせる）")
+    sm = sub.add_parser("summarize", help="置き場の *.json の報告を集め、Markdown で出す（落ちた報告と人が受け入れていない報告は数えず、名前だけ知らせる）")
     sm.add_argument("dir")
     sm.add_argument("--json", action="store_true", help="Markdown でなく JSON で出す")
     args = ap.parse_args(argv)
@@ -378,6 +391,9 @@ def main(argv=None):
         if fails:
             # 落ちた報告は、ファイルの名と床の名だけを知らせる（個人の情報の形を含む中身を出し直さない）
             print(f"数えない: {p.name}（{'・'.join(sorted({f.floor for f in fails}))}）", file=sys.stderr)
+        elif not r.get("reviewed_at"):
+            # 式は名前や住所を見分けられないので、人が全文を読んでいない報告の文はまとめに出さない
+            print(f"数えない: {p.name}（人が受け入れていない。intake の review accept を通す）", file=sys.stderr)
         else:
             good.append(r)
     s = summarize(good)
