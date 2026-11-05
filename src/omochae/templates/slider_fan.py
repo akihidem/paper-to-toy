@@ -136,6 +136,10 @@ def check_physics(p):
             out.append(Failure("F5.stroke", "溝", f"溝が筒の口から {SLOT_MARGIN}mm 離れない（底から 0〜{high:.1f}）"))
     elif p["push_part"] == "stick" and p["stage_height"] > H - s:
         out.append(Failure("F5.stroke", "土台", f"土台の高さ {p['stage_height']} が静止時の筒の空き {H - s} に収まらない"))
+    elif p["push_part"] == "tube" and s > H:
+        # 静止時の内筒の上の端は外筒の底から H − s。量が高さを超えると、扇の台が外筒の下へ出て扇が筒に入らない。
+        # つまみと柄の形は上の 2 つの検査が同じ事を含むので、内筒を下から押す形だけに足す。
+        out.append(Failure("F5.stroke", "内筒", f"押し上げる量 {s} が筒の高さ {H} を超え、静止時に内筒の上の端が筒の下に出る"))
     if p["push_part"] != "tab" and L < H:
         # L < H だと指が筒の外にある間に押し切れない（行程の計算で見つかった不足）。
         out.append(Failure("F5.stroke", "押す部品", f"長さ {L} が筒の高さ {H} より短く、押し切れない"))

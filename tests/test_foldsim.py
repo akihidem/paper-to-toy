@@ -90,9 +90,9 @@ except ValueError:
 # 雛形の部品でも今の形に無い物（吊る形の drop）は落とし、前の SVG を消さない
 dh = tempfile.mkdtemp()
 tsrc = load_source(pivot_counterweight.SOURCE)
-export("pivot_counterweight", {"mount": "hang"}, tsrc, dh)
+export("pivot_counterweight", {"mount": "hang", "axle_height": 50}, tsrc, dh)
 try:
-    export("pivot_counterweight", {"mount": "hang"}, tsrc, dh, parts={"drop"})
+    export("pivot_counterweight", {"mount": "hang", "axle_height": 50}, tsrc, dh, parts={"drop"})
     raise AssertionError("今の形に無い部品を通した")
 except ValueError as e:
     assert "この形に無い部品: drop" in str(e) and len(list(pathlib.Path(dh).iterdir())) == 2
