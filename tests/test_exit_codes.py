@@ -56,7 +56,8 @@ with tempfile.TemporaryDirectory() as BASE:
     breaks = {"zz_syntax.py": "def (\n", "zz_raise.py": "raise ValueError('読むと落ちる')\n", "zz_import.py": "import no_such_module_here\n"}
     for name, text in breaks.items():
         root, env = engine({name: text})
-        for mod in ("omochae", "omochae.foldsim"):
+        # omochae.fold3d も同じ読み込みの囲いを通る（--out を持たないが、読み込みで先に 4 になる）
+        for mod in ("omochae", "omochae.foldsim", "omochae.fold3d"):
             r = subprocess.run([PY, "-m", mod, "--scenario", scenario, "--out", str(root / "o")], cwd=root, env=env, capture_output=True, text=True)
             assert r.returncode == 4 and name[:-3] in r.stderr and "Traceback" not in r.stderr, (mod, name, r.returncode, r.stderr)
     # ID が重なる雛形も同じ
