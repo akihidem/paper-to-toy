@@ -3,8 +3,8 @@
 本人の言葉（2026-11-05）「一枚の紙から作る選択肢もある」と、本人の決定 (c)「両方を別の印で持つ」による。
 - one_sheet（紙一枚）: A4 1 枚に刷った紙だけで作れる。糊・はさみ・定規・カッター・下敷き・目打ちは道具なので使ってよい。
   ほかの材料（竹串・割ピン・粘土・糸・輪ゴム・テープ・厚紙など）は使わない。
-- fold_only（折るだけ）: 1 枚の紙を切らずに折るだけで作る。部品が 1 つで、外形が長方形、中の切り込みも穴も無い。
-- period（当時の材料）: 紙のほかの材料が、江戸の頃にもあった物（竹・糸・粘土・木・鈴・玉）だけ。
+- fold_only（折るだけ）: 1 枚の紙を切らずに折るだけで作る。部品が 1 つで、外形が長方形、中の切り込みも穴も糊代も無く、折り線が 1 本以上ある。
+- period（当時の材料）: 紙のほかの材料が全部、江戸の頃にもあった物の語の一覧（竹・糸・紐・木・鈴・玉）に当たる。知らない物には付けない。
   本人の言葉「竹とか糸は江戸時代にもあったし使ったらよく再現できるということ」による、再現の良さの別の軸。
   紙一枚の印は優劣の印ではない。今の物で代えた材料（輪ゴム・テープ・割ピン・ストローなど）は modern_substitutes に出す。
 判断の芯:
@@ -24,8 +24,10 @@ from .sheets import is_sheet, reading_of, source_of
 OTHER = re.compile(r"竹串|割り?ピン|粘土|糸|輪ゴム|テープ|ビーズ|割り箸|厚紙|ストロー|水よけ|ろう|鈴|玉")
 
 
-# 江戸の頃に無かった、今の物で代えた材料の語。竹串は竹、割り箸は木、粘土（油粘土）は当時の土や練り物に当たると見る（見立て）。
-MODERN = re.compile(r"輪ゴム|テープ|割り?ピン|ビーズ|ストロー|厚紙|水よけ|ろう")
+# 江戸の頃にもあった材料の語。竹串と竹ひごは竹、楊枝とつまようじと割り箸は木。本人の言葉の竹と糸に、木・鈴・玉を足した。
+PERIOD = re.compile(r"竹串|竹ひご|楊枝|つまようじ|割り箸|糸|紐|鈴|玉")
+# 江戸の頃に無かった、今の物で代えた材料の語。油粘土は当時の土や練り物の代わりで、物としては今の物なので、当時の材料に数えない。
+MODERN = re.compile(r"油粘土|輪ゴム|テープ|割り?ピン|ビーズ|ストロー|厚紙|水よけ|ろう")
 
 
 def _params(tpl, form):
@@ -39,14 +41,14 @@ def _is_paper(material):
 
 
 def fold_only(parts):
-    """部品が 1 つで、外形が軸にそろった長方形、中の切り込み（cuts）も穴（holes）も無い。"""
+    """部品が 1 つで、外形が軸にそろった長方形、中の切り込み（cuts）も穴（holes）も糊代（glue）も無く、折り線が 1 本以上ある。"""
     if len(parts) != 1:
         return False
     q = parts[0]
     xs = sorted({round(x, 6) for x, _ in q.outline})
     ys = sorted({round(y, 6) for _, y in q.outline})
     rect = len(q.outline) == 4 and len(xs) == 2 and len(ys) == 2
-    return rect and not q.cuts and not q.holes
+    return rect and not q.cuts and not q.holes and not q.glue and bool(q.valley or q.mountain)
 
 
 def details(template_id, form):
@@ -60,7 +62,9 @@ def details(template_id, form):
                 others.append(w)  # 同じ語を 2 度数えない
     text = " ".join([str(r.get("material", "")) for r in rows] + [str(m) for m in tpl.materials(p)])
     modern = sorted(set(MODERN.findall(text)))
-    return {"one_sheet": not others, "fold_only": fold_only(tpl.parts(p)), "period": not modern,
+    # 部品表の紙でない素材と、用意する物の文の中の材料の語を、全部一覧に当てる。どちらの一覧にも無い物は知らない物なので、印を付けない
+    materials = [str(r.get("material", "")) for r in rows if not _is_paper(r.get("material", ""))] + [w for m in tpl.materials(p) for w in OTHER.findall(str(m))]
+    return {"one_sheet": not others, "fold_only": fold_only(tpl.parts(p)), "period": not modern and all(PERIOD.search(m) for m in materials),
             "other_materials": others, "modern_substitutes": modern}
 
 
