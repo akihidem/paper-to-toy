@@ -13,7 +13,7 @@ import tempfile
 try:
     from .compose import TEMPLATES, compose
     from .marks import check_image_count, check_pdf
-    from .model import ToolMissing
+    from .model import ToolMissing, check_name
 except Exception as e:
     print(f"検査できない: {type(e).__name__}: {e}", file=sys.stderr)
     sys.exit(4)
@@ -39,10 +39,11 @@ def _drop(stem):
 
 def load_source(source_id):
     """data/sources の出典の記録を読む。型紙の書き出し（omochae.foldsim）と同じ物を使う。"""
-    src = ROOT / "data/sources" / f"{source_id}.json"
+    src = ROOT / "data/sources" / f"{check_name(source_id, 'source_id')}.json"
     if not src.exists():
         # 出典の記録を作る道具（元の repo の omochae.ingest）はこの repo に無いので、置き場だけを言う。
-        raise ToolMissing(f"出典の記録が無い: {src}（data/sources に出典の記録の JSON を置く）")
+        # 機械の絶対のパスは出さない（受付の画面などへ、そのまま返る文なので）。
+        raise ToolMissing(f"出典の記録が無い: {source_id}（data/sources に出典の記録の JSON を置く）")
     return json.loads(src.read_text(encoding="utf-8"))
 
 
