@@ -331,7 +331,7 @@
     "F1.marks"
    ],
    "rc": 3,
-   "sha256": "683ea872c19ef2bb1749c9d4bc68cc590d7ffc65d64227f644ac1b4a252108e6"
+   "sha256": "aa335ca3b7c654092cafb415356b6043d73bbd6414ed134840d668d16aa531e8"
   },
   "neg_marks_source_id.json": {
    "floors": [
@@ -415,7 +415,7 @@
     "F5.text_overlap"
    ],
    "rc": 3,
-   "sha256": "c435eed77214ce6342b60caa6500d8008ad0afaa8644fa7df607948d5fcc8833"
+   "sha256": "53e0e06834823dce98915899d00949ed06133d0457ee36b28a068cefb2c9f9e2"
   },
   "popup_jar_neg.json": {
    "floors": [
@@ -921,6 +921,7 @@
   "test_lever_link",
   "test_neg_exact_fails",
   "test_path_confine",
+  "test_pdf_repeatable",
   "test_pivot_model",
   "test_popup_jar",
   "test_pull_nod",
@@ -928,6 +929,8 @@
   "test_sheet_v8",
   "test_slide_box",
   "test_spinner",
+  "test_template_contract",
+  "test_tool_timeouts",
   "test_twist_drum",
   "test_wheel_cart",
   "test_whistle"
