@@ -19,17 +19,21 @@ for tid, m in sheets.READINGS.items():
         assert sheets.source_of(tid, alt) == sheets.source_of(tid, sheet), (tid, alt, sheet)
 
 # 2. 玩具（雛形と出典の組）ごとに、型紙はちょうど 1 枚。描かれた物が違う形（stand_figure の凧・土人形）は別の玩具なので、
-#    同じ出典に型紙が幾つあってもよい。その組は名指しで許す（新しく足した雛形が、黙って 2 枚の型紙を持たないように）
-DIFFERENT_TOYS = {("stand_figure", sheets.source_of("stand_figure", "tako_ji")),
-                  ("stand_figure", sheets.source_of("stand_figure", "tsuchi_usagi"))}
+#    同じ出典に型紙が幾つかある。その組は、型紙になる形の集まりまで名指しで許す（組ごと許すと、その出典に誤って足した形で
+#    型紙が増えても見えなかった）
+DIFFERENT_TOYS = {("stand_figure", sheets.source_of("stand_figure", "tako_ji")): {"tako_ji", "tako_oni"},
+                  ("stand_figure", sheets.source_of("stand_figure", "tsuchi_usagi")): {"tsuchi_usagi", "tsuchi_kame", "tsuchi_hato"}}
 groups = defaultdict(list)
 for tid, tpl in TEMPLATES.items():
     for f in tpl.FORMS:
         groups[(tid, sheets.source_of(tid, f))].append(str(f))
 for key, forms in groups.items():
-    n = sum(sheets.is_sheet(key[0], f) for f in forms)
-    assert n >= 1, (key, forms)
-    assert n == 1 or key in DIFFERENT_TOYS, (key, forms)
+    got = {f for f in forms if sheets.is_sheet(key[0], f)}
+    if key in DIFFERENT_TOYS:
+        assert got == DIFFERENT_TOYS[key], (key, sorted(got))
+    else:
+        assert len(got) == 1, (key, forms)
+assert set(DIFFERENT_TOYS) <= set(groups)  # 名指しした組が、雛形の変更で消えていない
 
 # 3. 必須 2 種の紙は、型紙の 1 枚（必須の紙を別の読みに回さない）
 for name in ("pos_tab", "pos_tiger_hang"):
