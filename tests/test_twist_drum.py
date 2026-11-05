@@ -83,10 +83,10 @@ assert check_bom(t.bom(K), t.parts(K)) == []
 
 # ---- レビューの指摘（2026-11-04）を押さえる行 ----
 import re
-# 1. 玉は点でない。結び目から面までの軸の向きの距離は、奥行きの半分＋玉の半径（玉の表が面に触れる時、中心は面の外に半径だけ出る）。
-#    下限ちょうどの糸は、その中心の位置で半径の半分の所を打つ。既定の寸法で下限は √(13² + (9 + 4)²) ≒ 18.4mm
+# 1. 玉は点でない。玉の表が面に触れる時、中心は面の外に玉の半径だけ出る。糸は帯の縁で曲がる（38）ので、
+#    下限 ＝ 奥行きの半分 ＋ √((R/2)² + 玉の半径²)。既定の寸法で 9 + √(13² + 4²) ≒ 22.6mm
 low, _ = t.cord_window(P)
-assert abs(low - math.hypot(P["radius"] / 2, P["depth"] / 2 + P["bead_d"] / 2)) < 1e-9, low
+assert abs(low - (P["depth"] / 2 + math.hypot(P["radius"] / 2, P["bead_d"] / 2))) < 1e-9, low
 assert t.check_physics({**P, "cord_length": 17}) != [], "玉の半径を入れると 17mm では面の真ん中に届かない"
 #    諫鼓は玉が軸の側から面へ近づくので、軸から面までの距離から玉の半径を引く（向きが逆で、引くのが正しい）
 assert abs(t.wheel_anchor(K) + t.kanko_window(K)[0] - (K["face_gap"] - K["bead_d"] / 2)) < 1e-9
@@ -386,4 +386,24 @@ for f in sorted(pathlib.Path(__file__).parent.glob("frozen/scenarios/twist_drum_
     if sc["expect"]["floors"] == ["F5.drum"]:
         fs = t.check_physics({**t.DEFAULTS, **sc["params"]})
         assert len(fs) == 1, (f.name, [x.line() for x in fs])
+# ---- 9 回目（2026-11-05・動きの読み直しの続き）を押さえる行 ----
+# 38. でんでん太鼓の糸は胴の中を通れない。結び目（帯の幅の真ん中）から帯の縁まで奥行きの半分を使い、縁で曲がって面の上へ出る。
+#     結び目 → 帯の縁 → 面に触れた玉の中心、の道のりが糸の長さになる
+for L in (23, 27, 31):
+    q = {**P, "cord_length": L}
+    x = t.strike_offset(q)
+    assert abs(P["depth"] / 2 + math.hypot(P["radius"] - x, P["bead_d"] / 2) - L) < 1e-9, L
+    #   結び目と玉の中心を結ぶまっすぐな線は、帯の縁の高さ（奥行きの半分）で面の縁より内を通る ＝ 胴を突き抜けるので、その形では張れない
+    at_rim = P["radius"] - (P["radius"] - x) * (P["depth"] / 2) / (P["depth"] / 2 + P["bead_d"] / 2)
+    assert at_rim < P["radius"]
+    #   前の式（結び目を中心に糸の全長で回る）は、打つ点を面の中心の側へ寄せて出していた
+    assert P["radius"] - math.sqrt(L * L - (P["depth"] / 2 + P["bead_d"] / 2) ** 2) < x
+#     前の式が通していた短い糸（18.4〜22.6mm）は、縁の近く（半径の半分より外）を打つので落ちる。既定の糸は窓の真ん中の近く
+for L in (19, 22):
+    fs = t.check_physics({**P, "cord_length": L})
+    assert [f.where for f in fs] == ["糸"] and t.strike_offset({**P, "cord_length": L}) > t.STRIKE_ZONE * P["radius"], L
+low, high = t.cord_window(P)
+assert abs(P["cord_length"] - (low + high) / 2) < 1 and t.free_cord(P) == P["cord_length"] - P["depth"] / 2
+#     奥行きが深いほど、同じ糸でも面の上へ出る分が減り、打つ点が縁へ寄る
+assert t.strike_offset({**P, "depth": 24}) > t.strike_offset(P)
 print("ok")

@@ -7,11 +7,13 @@
 
 動きの見込み（F5.drum）の前提:
 - 鼓の軸は横、柄（竹串）は胴を縦に貫く。糸は胴の帯の左右（柄から 90° の所）の帯の幅の真ん中に結ぶ。
-- 柄を速く回すと、玉は結び目を中心に、結び目の高さの水平面をほぼ回ると見る（重力と糸のたるみは入れない）。
-  その面で、玉が面（鼓の軸の向きに結び目から半分の奥行きの所）を打つ点が、面の中心から半径の半分の内に入る糸の長さを求める。
-  玉は点でない。糸は玉の中心までの長さなので、玉の表が面に触れる時、中心は面より玉の半径だけ外にある
-  （軸の向きの距離は 奥行きの半分＋玉の半径）。
-  縁に近いと胴の帯が硬く、鳴りが鈍いと見込む（実物で確かめていない）。
+- 柄を速く回すと、玉は結び目の高さの水平面をほぼ回ると見る（重力と糸のたるみは入れない）。
+  糸は胴の中を通れない。結び目（帯の幅の真ん中）から面へ向かう糸は、帯の表に沿って帯の縁（面の縁）まで行き、縁で曲がって面の上へ出る。
+  だから面の上の玉は、帯の縁を中心に、糸の長さから奥行きの半分を引いた残りを半径にして回る。
+  前は、結び目を中心に糸の全長で回ると見ていた（糸が胴の角を突き抜ける形）。その式は打つ点を面の中心の側へ 5mm ほど寄せて出し、
+  縁の近くを打つ短い糸（既定の寸法で 18.4〜22.6mm）を通していた。
+  玉は点でない。糸は玉の中心までの長さなので、玉の表が面に触れる時、中心は面より玉の半径だけ外にある。
+  打つ点が面の中心から半径の半分の内に入る糸の長さを求める。縁に近いと胴の帯が硬く、鳴りが鈍いと見込む（実物で確かめていない）。
 - 玉が垂れた時に、胴の下に出た柄に届くと糸が柄に絡む。結び目から柄の一番近い点（胴の下の縁の柄）までは √2 × 半径。
   柄の太さの半分を引いた長さより、糸の長さ＋玉の半径が短ければ（等しいと届くので落とす）絡まない（たるみ・玉の跳ね返りは入れない）。
 """
@@ -28,7 +30,8 @@ DEFAULTS = {
     "radius": 26, "depth": 18, "tab": 6, "seam_glue": 8,
     # 柄は竹串。太さ 3mm・長さ 180mm は家にある竹串の見込み。
     "stick_d": 3, "handle_length": 90, "wrap_glue": 3,
-    "cord_length": 24, "bead_d": 8,
+    # 糸 27 は、既定の寸法の糸の窓（22.6〜31.3mm）の真ん中。前の 24 は、帯の縁で曲がる分を入れると下限まで 1.4mm しか無かった。
+    "cord_length": 27, "bead_d": 8,
     # 0.15mm はふつうの厚めの紙の見込み。実物の紙を測ったら置き換える。
     "paper_thickness": 0.15,
     # 諫鼓（face=kanko）だけが使う寸法。鼓の形が違う（長い胴を横に寝かせる）ので、でんでん太鼓の寸法と名を分ける。
@@ -151,25 +154,25 @@ def hole_positions(p):
 def cord_window(p):
     """糸の長さ（結び目から玉の中心まで）の下限と上限。前提は module の docstring。
 
-    a = D/2 + 玉の半径（結び目から、面に触れた玉の中心までの軸の向きの距離）とする。
-    下限: 打つ点 x = R − √(L² − a²) が面の中心から STRIKE_ZONE·R の内 → L ≧ √(((1 − k)R)² + a²)。
-    上限: 反対側へ行き過ぎない L ≦ √(((1 + k)R)² + a²) と、柄に絡まない L + 玉の半径 < √2·R の小さい方。
+    帯の縁から先の糸を f = L − D/2（free_cord）、玉の半径を b とする。面に触れた玉の中心は、帯の縁から面に沿って √(f² − b²) 内にある。
+    下限: 打つ点 x = R − √(f² − b²) が面の中心から STRIKE_ZONE·R の内 → L ≧ D/2 + √(((1 − k)R)² + b²)。
+    上限: 反対側へ行き過ぎない L ≦ D/2 + √(((1 + k)R)² + b²) と、柄に絡まない L + b < √2·R − 柄の半径 の小さい方。
     返す上限は 2 つの小さい方の値。柄の側は等号も落とす（check の側で厳密に見る）。
     """
-    R, a, k = p["radius"], axial(p), STRIKE_ZONE
-    low = math.hypot((1 - k) * R, a)
+    R, b, k = p["radius"], p["bead_d"] / 2, STRIKE_ZONE
+    low = p["depth"] / 2 + math.hypot((1 - k) * R, b)
     high = min(far_limit(p), tangle_limit(p))
     return low, high
 
 
-def axial(p):
-    """結び目から、面に触れた玉の中心までの軸の向きの距離。玉の中心は面の外へ玉の半径だけ出る。"""
-    return p["depth"] / 2 + p["bead_d"] / 2
+def free_cord(p):
+    """帯の縁から先の糸の長さ（玉の中心まで）。糸は結び目から縁まで、帯の表に沿って奥行きの半分を使う。"""
+    return p["cord_length"] - p["depth"] / 2
 
 
 def far_limit(p):
     """面の中心を越えて、反対の縁の近くを打つ手前の糸の長さ（この長さまでは通す）。"""
-    return math.hypot((1 + STRIKE_ZONE) * p["radius"], axial(p))
+    return p["depth"] / 2 + math.hypot((1 + STRIKE_ZONE) * p["radius"], p["bead_d"] / 2)
 
 
 def tangle_limit(p):
@@ -180,11 +183,11 @@ def tangle_limit(p):
 
 
 def strike_offset(p):
-    """玉が面を打つ点の、面の中心からの距離（正は結び目の側）。糸が axial に届かなければ None（面に届かない）。"""
-    h = axial(p)
-    if p["cord_length"] <= h:
+    """玉が面を打つ点の、面の中心からの距離（正は結び目の側）。帯の縁から先の糸が玉の半径に届かなければ None（玉が面の上へ出ない）。"""
+    f, b = free_cord(p), p["bead_d"] / 2
+    if f <= b:
         return None
-    return p["radius"] - math.sqrt(p["cord_length"] ** 2 - h * h)
+    return p["radius"] - math.sqrt(f * f - b * b)
 
 
 def check_physics(p):
@@ -485,7 +488,7 @@ _FEEDBACK_HAND = {
     "fold": "歯の山折り（_band）",
     "glue": "糊代の歯 tab・TAB_PITCH（tab_teeth）・継ぎ目 seam_glue・柄の巻き紙 wrap_glue",
     "fit": "柄の穴 stick_hole_r・穴の余白 HOLE_MARGIN・帯の長さ circumference（面の縁と帯の外をそろえる見込み）",
-    "motion": "糸の長さ cord_length の窓（cord_window・tangle_limit・far_limit）・玉 bead_d・面の真ん中で鳴るという見込み STRIKE_ZONE・刷る直しの幅 tune_range",
+    "motion": "糸の長さ cord_length の窓（cord_window・free_cord・tangle_limit・far_limit）・玉 bead_d・面の真ん中で鳴るという見込み STRIKE_ZONE・刷る直しの幅 tune_range",
     "mark": "糸の穴と柄の穴の位置 hole_positions・菱形の印（_band）",
     "material": "竹串の長さ SKEWER_LEN・糸の余り CORD_SPARE・玉（bom）",
     "finish": "面の絵 _face_art・胴の色 BAND・幣の房 _streamer",
