@@ -1,4 +1,5 @@
-"""エンジンごとの改善の輪（omochae.engine_loop・#63）を確かめる。束の入口 → 案 → 人の採否 → 次の版 → 版ごとの数の並び。"""
+"""エンジンごとの改善の輪（omochae.engine_loop・#63）を確かめる。束の入口 → 案 → 人の採否 → 次の版 → 版ごとの数の並び。
+話した事（考え・工夫・できた後の話。#65）も束で受け、手順の番号つきの工夫から案が起きる事を見る。"""
 import copy
 import json
 import os
@@ -43,6 +44,20 @@ assert set(SAMPLE) == el.TOP_KEYS
 assert set().union(*(set(g) for g in SAMPLE["groups"])) == el.GROUP_KEYS
 assert set().union(*(set(t) for g in SAMPLE["groups"] for t in g["texts"])) == el.TEXT_KEYS
 assert cli("check", "examples/bundles/sample_made_up.json").returncode == 0
+# 話した事（#65）: 文の種類 3 つと、群の craft_steps。前の形の束（どちらも無い）も、そのまま通る
+assert set(el.TEXT_KINDS) >= {"think", "craft", "keep"} and "craft_steps" in el.GROUP_KEYS
+assert {"think", "craft", "keep"} <= {t["kind"] for g in SAMPLE["groups"] for t in g["texts"]}
+TALK = ("think", "craft", "keep")
+
+
+def old_shape(b):
+    for g in b["groups"]:
+        g.pop("craft_steps", None)
+        g["texts"] = [t for t in g["texts"] if t["kind"] not in TALK]
+
+
+OLD = variant(old_shape)
+assert el.check_bundle(OLD) == [] and not any("craft_steps" in g for g in OLD["groups"])
 
 # 2. 決まりの外の欄・形は、束ごと断る（rc 3・F13.bundle）。何も置かない。知らせの文に、束の値を出さない
 bads = [variant(lambda b: b.update(name="山田")), variant(lambda b: b["groups"][0].update(who="abc12345")),
@@ -51,7 +66,10 @@ bads = [variant(lambda b: b.update(name="山田")), variant(lambda b: b["groups"
         variant(lambda b: b["groups"][0].update(reports=9012345678)), variant(lambda b: b["groups"][0]["texts"][0].update(text="あ" * (el.MAX_TEXT + 1))),
         variant(lambda b: b["groups"][0]["texts"][0].update(kind="name")), variant(lambda b: b["groups"][0].update(minutes=[30, 20, 3])),
         variant(lambda b: b["groups"][0]["results"].update({"山田さんの家の電話で聞いた長い長い文をここへ": 1})),
-        variant(lambda b: b["groups"].append(copy.deepcopy(b["groups"][0]))), variant(lambda b: b.update(schema="other/1")), ["束でない"]]
+        variant(lambda b: b["groups"].append(copy.deepcopy(b["groups"][0]))), variant(lambda b: b.update(schema="other/1")), ["束でない"],
+        variant(lambda b: b["groups"][0]["craft_steps"].update({"3": {"talks": 2, "people": 2, "who": ["abc12345"]}})),
+        variant(lambda b: b["groups"][0]["craft_steps"].update({"41": {"talks": 1, "people": 1}})),
+        variant(lambda b: b["groups"][0].update(craft_steps=["山田"])), variant(lambda b: b["groups"][0]["texts"][0].update(kind="talk"))]
 for bad in bads:
     fails = el.check_bundle(bad)
     assert fails and all(f.floor == "F13.bundle" for f in fails), bad
@@ -77,6 +95,9 @@ placed = list((tmp / "local/bundles").glob("B-*.json"))
 assert len(placed) == 1 and PHONE not in placed[0].read_text(encoding="utf-8")
 kept = json.loads(placed[0].read_text(encoding="utf-8"))
 assert kept["dropped_pii"] == 1 and len(kept["groups"][0]["texts"]) == len(SAMPLE["groups"][0]["texts"])
+# 話した事（声から字にした物）も同じ床で落ちる。話した数（craft_steps）は数なので残る
+spoken = variant(lambda b: b["groups"][0]["texts"].append({"kind": "craft", "step": 3, "text": f"分からなければ {PHONE} に聞いて", "count": 1}))
+assert [f.floor for f in el.check_bundle(spoken)] == ["F13.pii"] and PHONE not in el.check_bundle(spoken)[0].line()
 
 # 4. 同じ出し元の束は、新しい物だけを数える（束はその時までの全部なので、2 つ数えると 2 重になる）
 newer = variant(lambda b: b.update(exported_at="2026-11-05T16:00+09:00"))
@@ -91,14 +112,32 @@ kinds = {p["target"]["kind"] for p in made}
 assert kinds == {"template", "part", "rule"}, kinds
 by_key = {p["key"]: p for p in made}
 stuck = by_key["stuck:slider_fan:goraigo-v10:3"]
-assert stuck["numbers"] == {"stuck_taps": 4, "stuck_people": 2, "quit_people": 1, "reports": 5}
-assert {t["kind"] for t in stuck["evidence"]} == {"stuck", "question"} and all(t["step"] == 3 for t in stuck["evidence"])
+assert stuck["numbers"] == {"stuck_taps": 4, "stuck_people": 2, "quit_people": 1, "craft_talks": 2, "craft_people": 2, "reports": 5}
+# 止まった段の案には、その段で話された工夫も付く（止まった所を、別の人がどう越えたかが並ぶ）
+assert {t["kind"] for t in stuck["evidence"]} == {"stuck", "question", "craft"} and all(t["step"] == 3 for t in stuck["evidence"])
 assert "stuck:slider_fan:goraigo-v10:5" not in by_key  # 1 人だけの段は案にしない
 assert "stuck:pivot_counterweight:tora-v3:2" in by_key  # 印の無い記録だけの時は、札 3 回から
-assert by_key["craft:slider_fan:goraigo-v10"]["numbers"] == {"fixes": 1, "ideas": 0, "reports": 5}
-assert by_key["craft:pivot_counterweight:tora-v3"]["numbers"] == {"fixes": 0, "ideas": 1, "reports": 2}  # 思いつきだけでも、工夫の言葉として案にする
+assert by_key["craft:slider_fan:goraigo-v10"]["numbers"] == {"fixes": 1, "ideas": 0, "craft_talks": 5, "keeps": 1, "reports": 5}
+assert {t["kind"] for t in by_key["craft:slider_fan:goraigo-v10"]["evidence"]} == {"fix", "craft", "keep"}
+assert by_key["craft:pivot_counterweight:tora-v3"]["numbers"] == {"fixes": 0, "ideas": 1, "craft_talks": 3, "keeps": 0, "reports": 2}  # 思いつきだけでも、工夫の言葉として案にする
 assert by_key["motion:slider_fan:goraigo-v10"]["numbers"] == {"not_moved": 2, "moved": 2, "reports": 5}
-assert "explain" in {t["kind"] for t in by_key["motion:slider_fan:goraigo-v10"]["evidence"]}
+# 作る前の考えは、動かない側の札が重なった時の案に付く。考えだけでは案にならない
+assert {"explain", "think"} <= {t["kind"] for t in by_key["motion:slider_fan:goraigo-v10"]["evidence"]}
+only_think = variant(lambda b: b.update(groups=[{"template": "slider_fan", "sheet_set": "goraigo-v10", "reports": 0,
+                                                 "texts": [{"kind": "think", "step": None, "text": "扇は糸で引くと開くと思う", "count": 3}]}]))
+assert el.check_bundle(only_think) == [] and el.drafts(el.groups([only_think])) == []
+# 手順の番号つきの工夫: 止まったの札が重なっていない段でも、話した人が 2 人から案になる。1 人の段は案にしない。
+# 止まった段の案が起きる段では、工夫はその案に付けるので、別の案を起こさない。印の無い記録だけの時は 3 件から
+talk6 = by_key["talk:slider_fan:goraigo-v10:6"]
+assert talk6["target"] == {"kind": "template", "name": "slider_fan"} and talk6["step"] == 6
+assert talk6["numbers"] == {"craft_talks": 2, "craft_people": 2, "stuck_taps": 0, "stuck_people": 0, "reports": 5}
+assert [(t["kind"], t["step"]) for t in talk6["evidence"]] == [("craft", 6)]
+assert "talk:slider_fan:goraigo-v10:5" not in by_key and "talk:slider_fan:goraigo-v10:3" not in by_key
+assert by_key["talk:pivot_counterweight:tora-v3:4"]["numbers"]["craft_talks"] == 3
+few = el.groups([variant(lambda b: b["groups"][1]["craft_steps"].update({"4": {"talks": 2, "people": 0}}))])
+assert not any(d["key"].startswith("talk:pivot_counterweight") for d in el.drafts(few))
+# 前の形の束からは、前と同じ鍵の案だけが起きる（話した事の案は起きない）
+assert {d["key"] for d in el.drafts(el.groups([OLD]))} == {k for k in by_key if not k.startswith("talk:")}
 assert "motion:pivot_counterweight:tora-v3" not in by_key
 fold = by_key["shared:fold:pivot_counterweight+slider_fan"]
 assert fold["target"]["kind"] == "part" and fold["numbers"]["templates"] == 2
@@ -132,6 +171,12 @@ assert "折り線の向きが分からなかった" not in ledger_text and "作�
 draft = (tmp / "local/issues" / f"{sid}.md").read_text(encoding="utf-8")
 assert all(h in draft for h in ("## 目的", "## なぜか（根拠）", "## どうしたらいいか", "## ゴールの要件")) and "足は山折りですか" in draft
 assert "止まったの札 4" in draft and "stuck_taps" not in draft  # 数は呼び方を付けて出す
+assert "話した工夫（手順 3）: 「折る前に、定規で折り線をなぞった」" in draft and "craft_talks" not in draft
+assert "話した工夫（手順 6）" in el.issue_draft(talk6) and "組み方の文" in el.issue_draft(talk6)
+# 作った人の言葉は、4 つの見出しの外の「手元の材料」にだけ出る（Issue にそのまま写さない物として分ける）
+head, _, material = draft.partition("---")
+assert el.MATERIAL in material and "写さない" in material and "## " not in material
+assert all(t["text"] in material and t["text"] not in head for t in stuck["evidence"]) and len(stuck["evidence"]) >= 4
 assert set(el.NUMBER_JA) >= {k for p in made for k in p["numbers"]}
 assert not (tmp / "local/issues" / f"{fid}.md").exists()
 assert cli("adopt", sid, "--by", "作る人").returncode == 3  # 決め直しはしない
@@ -162,15 +207,17 @@ after = variant(lambda b: (b.update(exported_at="2026-11-06T10:00+09:00"),
                            b["groups"].append({**copy.deepcopy(b["groups"][0]), "sheet_set": "goraigo-v9", "reports": 1}),
                            b["groups"].append({"template": "slider_fan", "sheet_set": "goraigo-v11", "reports": 3, "results": {"動いた": 3},
                                                "moved_word": "動いた", "not_moved_word": "動かない", "stuck_steps": {"3": {"taps": 1, "people": 1}},
-                                               "quit_steps": {}, "minutes": [10, 25, 3], "measures": {}, "record_ids": [], "texts": []})))
+                                               "quit_steps": {}, "minutes": [10, 25, 3], "measures": {}, "record_ids": [],
+                                               "texts": [{"kind": "craft", "step": 3, "text": "足の向きは、絵を見て合わせた", "count": 1}]})))
 assert el.take(after)[0] is not None
 r = cli("compare")
 assert r.returncode == 0, r.stderr
 out = r.stdout
 rows = [ln for ln in out.splitlines() if ln.startswith("| goraigo-")]
 assert [ln.split("|")[1].strip() for ln in rows] == ["goraigo-v9", "goraigo-v10", "goraigo-v11"], rows
-assert "| goraigo-v10 | — | 5 件 | 動いた 2・動かない 2・わからない 1 | 手順 3: 4 回・2 人、手順 5: 1 回・1 人 | 手順 3: 1 | 20〜40（3 件） |" in out, out
-assert f"| goraigo-v11 | 版 1（{sid}） | 3 件 | 動いた 3 | 手順 3: 1 回・1 人 | — | 10〜25（3 件） |" in out, out
+assert "| goraigo-v10 | — | 5 件 | 動いた 2・動かない 2・わからない 1 | 手順 3: 4 回・2 人、手順 5: 1 回・1 人 | 手順 3: 1 | 20〜40（3 件） | 考え 1・工夫 5・できた後 1 |" in out, out
+assert f"| goraigo-v11 | 版 1（{sid}） | 3 件 | 動いた 3 | 手順 3: 1 回・1 人 | — | 10〜25（3 件） | 工夫 1 |" in out, out
+assert "| den_den-v1 | — | 2 件 | 鳴った 2 | 手順 4: 2 回・2 人 | — | — | — |" in out, out
 assert "判定はしない" in out and "den_den（この repo の雛形の一覧に無い）" in out
 for word in ("効いた", "改善し", "良くな", "悪くな", "増えた", "減った", "上がっ", "下がっ", "%", "％", "↑", "↓", "平均"):
     assert word not in out, word
