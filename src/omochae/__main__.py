@@ -7,13 +7,13 @@ import json
 import pathlib
 import shutil
 import sys
-import tempfile
 
 # 読み込みは main の囲いより前に走るので、ここで落ちるとトレースバックの 1 になる（#25）。omochae.foldsim もここを通る。
 try:
     from .compose import TEMPLATES, compose
     from .marks import check_image_count, check_pdf
     from .model import ToolMissing, check_name
+    from .tools import work_dir
 except Exception as e:
     print(f"検査できない: {type(e).__name__}: {e}", file=sys.stderr)
     sys.exit(4)
@@ -82,7 +82,7 @@ def generate(template, params, source_id, out, page="A4", version=1, title=None,
     # 同じ所に置くのは、移す（replace）が同じ機械の中の名前の付け替えで済むようにするため。
     # 限り: 3 つの紙は 1 つずつ移すので、移す途中で止まると新旧が混ざりうる（全部を一度に替える手段が無い。移すのは名前の付け替えだけ）。
     stem.parent.mkdir(parents=True, exist_ok=True)
-    work = pathlib.Path(tempfile.mkdtemp(prefix=".omochae-", dir=stem.parent))
+    work = work_dir(stem.parent, ".omochae-")
     tmp = work / "page"
     try:
         pdf = write_all(layout, tmp)

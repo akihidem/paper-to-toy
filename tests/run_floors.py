@@ -116,6 +116,26 @@ def child_env(environ):
     return {**{k: v for k, v in environ.items() if k != "PYTHONOPTIMIZE"}, "PYTHONPATH": str(ROOT / "src")}
 
 
+def child_timeout(environ):
+    """子 1 本の時間切れ（秒）。雛形の試験は 1 本で数十秒かかり、ほかの作業で混むと延びるので、広めに取る（#29）。"""
+    raw = environ.get("OMOCHAE_CHILD_TIMEOUT", "900")
+    try:
+        value = float(raw)
+    except ValueError:
+        value = 0.0
+    if not 0 < value < float("inf"):  # 読めない値を、黙って時間切れ無しにしない
+        raise ValueError(f"OMOCHAE_CHILD_TIMEOUT の値が読めない: {raw[:40]!r}")
+    return value
+
+
+def run_child(cmd, env, limit):
+    """子を回す。返らない子は打ち切り、検査できない（4）の結果にして、残りの子へ進む。Returns (結果, 打ち切ったか)。"""
+    try:
+        return subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True, timeout=limit), False
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, 4, "", f"検査できない: {limit:g} 秒で返らない"), True
+
+
 def _rel(path):
     return pathlib.Path(path).relative_to(ROOT).as_posix()
 
@@ -158,11 +178,12 @@ def main():
             print(f"検査できない: 場面が読めない … {line}", file=sys.stderr)
         return 4
     env = child_env(os.environ)
+    limit = child_timeout(os.environ)
     rows, bad, broken = [], 0, 0
     for sc, expect in scenarios:
         out = ROOT / "out/scenarios" / sc.stem
         cmd = [PY, "-m", "omochae", "--scenario", str(sc), "--out", str(out)]
-        r = subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True)
+        r, _ = run_child(cmd, env, limit)
         ok, got = scenario_ok(expect, r.returncode, r.stderr)
         broken += r.returncode == 4
         bad += not ok
@@ -171,8 +192,9 @@ def main():
             print(f"NG {sc.stem}: rc={r.returncode} {r.stderr.strip()[:500]}", file=sys.stderr)
             print(f"   今の FAIL の行の形（期待の lines に書く形）: {json.dumps(fail_shapes(r.stderr), ensure_ascii=False)}", file=sys.stderr)
     for test in sorted((ROOT / "tests").glob("test_*.py")):
-        unit = subprocess.run([PY, str(test)], cwd=ROOT, env=env, capture_output=True, text=True)
+        unit, hung = run_child([PY, str(test)], env, limit)
         bad += unit.returncode != 0
+        broken += hung
         rows.append((test.stem, test_command(test), unit.returncode, 0, "—", "—", "OK" if unit.returncode == 0 else "NG"))
         if unit.returncode:
             print(f"NG {test.stem}: {unit.stderr.strip()[:500]}", file=sys.stderr)

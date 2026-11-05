@@ -216,7 +216,7 @@ PYTHONPATH=src .venv/bin/python -m omochae.foldsim --scenario examples/fan_tab.j
 |---|---|
 | 0 | 通る |
 | 3 | 落ちる（どの検査が・どこで、を `FAIL <床> [<場所>] <理由>` で出す） |
-| 4 | 検査できない（道具や字が無い・想定外の故障） |
+| 4 | 検査できない（道具や字が無い・外の命令が時間内に返らない・想定外の故障） |
 
 1 と 2 は使わない。検査の結果と道具の故障を読み分けるため。床の一覧は [tests/frozen/criteria.md](tests/frozen/criteria.md)。
 

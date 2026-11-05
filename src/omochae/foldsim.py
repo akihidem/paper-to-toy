@@ -14,11 +14,11 @@ import pathlib
 import re
 import shutil
 import sys
-import tempfile
 
 from .__main__ import Parser, load_source, scenario_from_args
 from .compose import TEMPLATES, compose
 from .model import ToolMissing, check_name
+from .tools import work_dir
 
 COLORS = {"outline": "#000000", "mountain": "#ff0000", "valley": "#0000ff"}
 
@@ -94,7 +94,7 @@ def export(template_id, params, source, out_dir, name=None, parts=None, title=No
             f.unlink()
         return [], failures
     out.mkdir(parents=True, exist_ok=True)
-    work = pathlib.Path(tempfile.mkdtemp(prefix=".foldsim-", dir=out))
+    work = work_dir(out, ".foldsim-")
     try:
         made = []
         # 検査を通った配置の部品を使う（型紙に刷る物と同じ部品）。部品の座標は部品の左上が原点なので、頁の上の置き場は関わらない。

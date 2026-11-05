@@ -1,7 +1,6 @@
 """配置を SVG・PDF・PNG にする。判断を持たず、compose の結果をそのまま描くだけにしてある。"""
 import io
 import pathlib
-import subprocess
 
 import cairocffi
 import drawsvg as dw
@@ -9,8 +8,8 @@ from cairosvg.surface import PDFSurface
 from PIL import Image
 from shapely.geometry import LineString, Polygon
 
-from .model import ToolMissing
 from .textfit import FAMILY
+from .tools import run_tool
 
 STROKE = {"stroke": "black", "fill": "none"}
 VALLEY, MOUNTAIN = "2,1", "3,1,0.6,1"
@@ -126,7 +125,4 @@ def write_all(layout, out_stem):
 
 
 def to_png(pdf, stem):
-    try:
-        subprocess.run(["pdftoppm", "-png", "-r", "110", "-singlefile", str(pdf), str(stem)], check=True, capture_output=True)
-    except (OSError, subprocess.CalledProcessError) as e:
-        raise ToolMissing(f"pdftoppm で画像にできない: {e}")
+    run_tool(["pdftoppm", "-png", "-r", "110", "-singlefile", str(pdf), str(stem)], "pdftoppm で画像にできない")

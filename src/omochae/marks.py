@@ -3,9 +3,9 @@
 なぜ PDF から読み直すか: 「描く命令を出した」ではなく「刷られた紙に載っている」ことを保証するため。
 字が画像化された・隠れた・別の字に落ちた場合も、ここで落ちる。
 """
-import subprocess
 
-from .model import Failure, ToolMissing
+from .model import Failure
+from .tools import run_tool
 
 HOLDER = "国立国会図書館デジタルコレクション"
 HYPOTHESIS = "仮説: 復元ではなく、試すための 1 つの翻案です。答えではありません"
@@ -22,20 +22,14 @@ def mark_lines(source, omit=None):
 
 def check_image_count(pdf_path, expected=0):
     """PDF に貼られた画像の数を見る。原図を貼らず描き直す決まりを、できた紙で確かめる。"""
-    try:
-        out = subprocess.run(["pdfimages", "-list", str(pdf_path)], capture_output=True, text=True, check=True).stdout
-    except (OSError, subprocess.CalledProcessError) as e:
-        raise ToolMissing(f"pdfimages で読めない: {e}")
+    out = run_tool(["pdfimages", "-list", str(pdf_path)], "pdfimages で読めない", text=True).stdout
     # 透明度の smask は別の行に出るので、image の行だけを数える。
     found = sum(1 for line in out.splitlines()[2:] if line.split()[2] == "image")
     return [] if found == expected else [Failure("F5.image_count", "PDF", f"貼られた画像の数 {found} が見込み {expected} と違う")]
 
 
 def check_pdf(pdf_path, source):
-    try:
-        out = subprocess.run(["pdftotext", str(pdf_path), "-"], capture_output=True, text=True, check=True).stdout
-    except (OSError, subprocess.CalledProcessError) as e:
-        raise ToolMissing(f"pdftotext で読めない: {e}")
+    out = run_tool(["pdftotext", str(pdf_path), "-"], "pdftotext で読めない", text=True).stdout
     # 印が折り返されても読めるよう、空白と改行を全部取ってから探す。
     flat = "".join(out.split())
     # 短い語だけを探すと、本文が欠けても化けても別の所に同じ語が残れば通ってしまう。刷った文をそのまま探す。

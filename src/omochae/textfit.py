@@ -3,21 +3,18 @@
 なぜ測るか: SVG の text は幅を持たないので、測らないと右にはみ出しても重なっても検査を通ってしまう。
 """
 import functools
-import subprocess
 
 from fontTools.ttLib import TTCollection, TTFont
 
 from .model import ToolMissing
+from .tools import run_tool
 
 FAMILY = "Noto Serif CJK JP"
 
 
 @functools.lru_cache(maxsize=1)
 def _font():
-    try:
-        path = subprocess.run(["fc-match", FAMILY, "file"], capture_output=True, text=True, check=True).stdout
-    except (OSError, subprocess.CalledProcessError) as e:
-        raise ToolMissing(f"fc-match が使えない: {e}")
+    path = run_tool(["fc-match", FAMILY, "file"], "fc-match が使えない", text=True).stdout
     path = path.strip().removeprefix(":file=")
     if "NotoSerifCJK" not in path:
         raise ToolMissing(f"字 {FAMILY} が無い（fc-match の答え: {path}）")
