@@ -15,6 +15,7 @@ import math
 
 from shapely.geometry import LineString, Polygon, box
 
+from ..paper_words import BOARD as CARD_BOARD, paper_name  # 紙の書き方は 4 つの名前だけ（本人の指示 2026-11-05）
 from ..model import Failure, Part
 from ..pivot_model import paper_mass
 
@@ -538,10 +539,10 @@ def place(by_key, page, top, gap):
 
 
 def bom(p):
-    paper = f"紙（厚さ {p['paper_thickness']}mm 前後・{p['paper_gsm']}g/m² の見込み）"
+    paper = paper_name(gsm=p['paper_gsm'])
     why = "家庭のプリンタで刷って作るため"
     n = p["wheel_layers"] - 1
-    core = f"空き箱の厚紙（厚さ {p['card_thickness']}mm 前後の見込み）。刷った車輪を型にして切る"
+    core = f"{CARD_BOARD}。刷った車輪を型にして切る"
     if p["ride"] == "rat":
         rows = [
             {"number": 1, "key": "body", "name": "胴（鼠）", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（絵の鼠は白く塗った物で、素材は読めない）", "reason": why},
@@ -594,7 +595,7 @@ def materials(p):
         out.append(by["handle"]["material"])
     out.append(f"{by['axle']['material']} {by['axle']['qty']} 本")
     if "core" in by:
-        out.append(f"空き箱の厚紙（車輪の芯 {by['core']['qty']} 枚分）")
+        out.append(f"{CARD_BOARD}（車輪の芯 {by['core']['qty']} 枚分）")
     return out
 
 

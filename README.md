@@ -343,6 +343,7 @@ PYTHONPATH=src .venv/bin/python -m omochae.engine_loop compare                  
 - `src/omochae/templates/` 雛形
 - `src/omochae/foldsim.py` Origami Simulator への書き出し
 - `src/omochae/sheets.py` 玩具 1 つに型紙 1 枚の表（どの形が型紙のたたき台で、どの形が別の読みか）
+- `src/omochae/paper_words.py` 用意する物と部品表の紙の書き方。4 つ（コピー用紙くらいの厚さの紙・画用紙くらいの厚さの紙・画用紙より厚い紙・空き箱の厚紙）だけで、g/m²・mm の厚さ・「見込み」は書かない（本人の指示 2026-11-05「ルールで徹底して」）。決まりに合わない書き方は `tests/test_paper_words.py` が落とす。必須 2 種の雛形は刷った絵を変えないため今の字のまま
 - `src/omochae/engine_loop.py` エンジンごとの改善の輪（束の入口・直しの案・人の採否・次の版・版ごとの数の並び）
 - `data/sources/` 出典の記録（国立国会図書館の書誌の値）
 - `data/engine/` エンジンの版の台帳（`omochae.engine_loop`。数と行き先だけで、作った人の文は入れない）

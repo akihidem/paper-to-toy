@@ -1133,6 +1133,7 @@
   "test_launcher",
   "test_lever_link",
   "test_neg_exact_fails",
+  "test_paper_words",
   "test_path_confine",
   "test_pdf_repeatable",
   "test_pivot_model",

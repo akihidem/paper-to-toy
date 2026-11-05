@@ -31,6 +31,7 @@ import math
 from shapely import affinity
 from shapely.geometry import LineString, Point, Polygon, box
 
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（本人の指示 2026-11-05）
 from ..model import Failure, Part
 
 ID = "pull_nod"
@@ -695,7 +696,7 @@ def place(by_key, page, top, gap):
 
 
 def bom(p):
-    paper = f"紙（厚さ 0.15mm 前後・{p['paper_gsm']}g/m² の見込み）"
+    paper = paper_name(gsm=p['paper_gsm'])
     why = "家庭のプリンタで刷って作るため"
     if p["kind"] == "bow":
         rows = [

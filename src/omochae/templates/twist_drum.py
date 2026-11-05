@@ -19,6 +19,7 @@ import math
 
 from shapely.geometry import Polygon
 
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（本人の指示 2026-11-05）
 from ..model import Failure, Part
 
 ID = "twist_drum"
@@ -373,7 +374,7 @@ def place(by_key, page, top, gap):
 def bom(p):
     if p["face"] == "kanko":
         return bom_kanko(p)
-    paper = f"紙（厚さ {p['paper_thickness']}mm 前後）"
+    paper = paper_name(thickness=p['paper_thickness'])
     why = "家庭のプリンタで刷って作るため"
     cord = p["cord_length"] + 15  # 結び目 2 つ分の余り
     rows = [
@@ -718,7 +719,7 @@ def _place_kanko(by_key, page, y, gap):
 
 
 def bom_kanko(p):
-    paper = f"紙（厚さ {p['paper_thickness']}mm 前後）"
+    paper = paper_name(thickness=p['paper_thickness'])
     why = "家庭のプリンタで刷って作るため"
     peg = peg_cut(p)
     rod = rod_length(p)

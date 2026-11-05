@@ -61,6 +61,7 @@ import math
 from shapely.geometry import LineString, Polygon, box
 from shapely.ops import unary_union
 
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（本人の指示 2026-11-05）
 from ..model import Failure, Part
 
 ID = "float"
@@ -586,7 +587,7 @@ def place(by_key, page, top, gap):
 
 
 def bom(p):
-    paper = f"紙（厚さ 0.15mm 前後・{p['paper_gsm']}g/m² の見込み）"
+    paper = paper_name(gsm=p['paper_gsm'])
     why = "家庭のプリンタで刷って作るため"
     rows = [
         {"number": 1, "key": "tray", "name": "舟", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（図では葉が直に浮く。木か葉の浮きと推定）", "reason": "紙で浮きを作るため、箱にして水をはじく"},
