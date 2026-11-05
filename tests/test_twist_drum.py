@@ -437,7 +437,7 @@ by = {c["checks"]: c["expect"] for c in t.report_checks(K)}
 assert nums(by["pull_turns"], r"(\d+\.\d)〜") == [round(t.pull_turns(K), 1)] and nums(by["pull_turns"], r"〜(\d+\.\d) 回") == [round(t.pull_turns(K, favorable=True), 1)]
 assert t.report_checks({**K, "base_length": 88})[0]["expect"] != by["pull_turns"]
 #     諫鼓の当たる所: 玉は軸から 穴の距離＋糸 ＝ 17mm の円を回り、面は軸から 20 − 4 ＝ 16mm。横のずれは √(17² − 16²) ≒ 5.7mm（手で数えた値）
-assert nums(by["kanko_window"], r"約 (\d+)mm") == [6] and abs(math.sqrt(17 ** 2 - 16 ** 2) - 5.745) < 1e-3
+assert nums(by["kanko_window"], r"約 (\d+)mm") == [6]
 #     旗の余白は、問いに出した 3 つ（天井・東の壁・軸）を全部言う。既定で、天井まで 18.85 − 17.15 ＝ 1.7mm、東の壁まで 18 − 10.15 − 7.15 ＝ 0.7mm
 assert nums(by["flag_tip_z"], r"天井まで (\d+\.\d)mm") == [1.7] and nums(by["flag_tip_z"], r"東の壁まで (\d+\.\d)mm") == [0.7] and "軸に巻いた糸まで 1mm" in by["flag_tip_z"]
 assert nums(by["rod_north_out"], r"引き切っても (\d+\.\d)mm") == [3.5]
@@ -466,4 +466,78 @@ def step_lines(p):
 for p in (P, {**P, "face": "tori"}, {**P, "cord_length": 23.5, "handle_length": 95.5}, {**P, "face": "tori", "cord_length": 23.5, "handle_length": 95.5}):
     assert step_lines(p) <= t.STEP_LINES_MAX, (step_lines(p), p)
 assert step_lines(K) <= t.STEP_LINES_KANKO and t.STEP_LINES_MAX == 16
+# 41. 手順ごとの直しの行き先（step_targets）。作った人の報告の困り事は手順の番号で来るので、番号から当たる寸法・見込みの値・検査の所を引ける。
+#     文と行き先は 1 つの並びから出る（番号がずれない）。名は実際にある物だけ（float の雛形と同じ形: params・consts・floors）
+import random
+random.seed(7)
+# 検査の所の名（check_physics の Failure の where）。でんでん太鼓の「糊代の歯」は、今の範囲では落ちる寸法が無いが、検査は持っている
+WHERES = {"hand": {"糸", "柄の穴", "糊代の歯", "柄"}, "kanko": {"花車", "糸", "柱の穴", "柱", "軸", "棒の穴", "糊代の歯", "棒", "留め具"}}
+seen = {"hand": set(), "kanko": set()}
+single = {"hand": {}, "kanko": {}}  # その所だけで落ちる寸法の組（下の「行き先の寸法を動かすと落ち方が変わるか」で使う）
+for _ in range(3000):  # 検査が実際に出す所の名を、範囲の端の組から集める。知らない名が出たら、表（WHERES と手順の行き先）を直す
+    face = random.choice(t.FACES)
+    q = {**t.DEFAULTS, "face": face, **{k: random.choice((lo_, hi_, t.DEFAULTS[k])) for k, (lo_, hi_) in t.RANGES.items()}}
+    ws = [f.where for f in t.check_physics(q)]
+    seen["kanko" if face == "kanko" else "hand"] |= set(ws)
+    if len(ws) == 1:
+        single["kanko" if face == "kanko" else "hand"].setdefault(ws[0], []).append(q)
+assert seen["hand"] <= WHERES["hand"] and seen["kanko"] == WHERES["kanko"], seen
+for p in (P, {**P, "face": "tori"}, K):
+    st_p, tg = t.steps(p), t.step_targets(p)
+    kind = "kanko" if p["face"] == "kanko" else "hand"
+    assert sorted(tg) == list(range(1, len(st_p) + 1)), p["face"]
+    for i, target in tg.items():
+        assert set(target) == {"params", "consts", "floors"}, target
+        assert all(k in t.RANGES for k in target["params"]) and all(hasattr(t, c) for c in target["consts"]) and set(target["floors"]) <= WHERES[kind], (i, target)
+    #   検査が出す所の名は、どれかの手順から引ける（所の名を足した・変えた時にここで気づく）
+    assert WHERES[kind] == {w for target in tg.values() for w in target["floors"]}, WHERES[kind] ^ {w for target in tg.values() for w in target["floors"]}
+    assert not any(tg[1][k] for k in tg[1])  # 物差しを確かめる手順は、組み方の文だけ
+th, tk = t.step_targets(P), t.step_targets(K)
+bead_i = next(i for i, s_ in enumerate(t.steps(P), 1) if "糸に玉を付ける" in s_)
+wind_i = next(i for i, s_ in enumerate(t.steps(K), 1) if "巻き取る" in s_)
+tab_i = next(i for i, s_ in enumerate(t.steps(K), 1) if "16 棒の留め具の北の縁" in s_)
+assert "cord_length" in th[bead_i]["params"] and "糸" in th[bead_i]["floors"] and "WIND_D" in tk[wind_i]["consts"] and "留め具" in tk[tab_i]["floors"]
+#     寸法を変えても、同じ番号は同じ行き先（番号は形だけで決まる）
+assert t.step_targets({**P, "cord_length": 25, "radius": 24}) == th and len(t.steps({**P, "face": "tori"})) == len(t.steps(P)) + 1
+#     行き先の所の名（floors）は、その手順の寸法のどれかを変えると実際に落ち方が変わる物だけ（引いても直せない行き先を並べない）。
+#     所ごとに、既定と、その所だけで落ちる寸法の組から、1 つの寸法を範囲の端・真ん中へ動かして、落ち方が変わる寸法を集める
+_movers = {}
+
+
+def movers(kind, where):
+    if (kind, where) not in _movers:
+        out = set()
+        for base in [K if kind == "kanko" else P] + single[kind].get(where, [])[:8]:
+            was = where in {f.where for f in t.check_physics(base)}
+            for k, (lo_, hi_) in t.RANGES.items():
+                if any((where in {f.where for f in t.check_physics({**base, k: v})}) != was for v in (lo_, hi_, (lo_ + hi_) / 2)):
+                    out.add(k)
+        _movers[(kind, where)] = out
+    return _movers[(kind, where)]
+
+
+for p in (P, {**P, "face": "tori"}, K):
+    kind = "kanko" if p["face"] == "kanko" else "hand"
+    for i, target in t.step_targets(p).items():
+        for w in target["floors"]:
+            mv = movers(kind, w)
+            assert not mv or set(target["params"]) & mv, (p["face"], i, w, target["params"], sorted(mv))
+#     鳥の面は、胴の上へ出す長さが房の帯（STREAMER_TOP）から決まる。菊の面の TOP_OUT を行き先にしない
+tt = t.step_targets({**P, "face": "tori"})
+up_i = next(i for i, s_ in enumerate(t.steps({**P, "face": "tori"}), 1) if "上へ" in s_)
+assert "STREAMER_TOP" in tt[up_i]["consts"] and not any("TOP_OUT" in tg_["consts"] for tg_ in tt.values()) and "TOP_OUT" in th[up_i]["consts"]
+#     旗が天井や壁に当たる困り事（留め具）を持つ手順は、台の高さと幅を行き先に持つ。面の縁と帯が合わない困り事は紙の厚みに当たる
+for i, target in tk.items():
+    assert "留め具" not in target["floors"] or {"base_height", "base_width"} <= set(target["params"]), (i, target)
+face_i = next(i for i, s_ in enumerate(t.steps(P), 1) if "表の面" in s_ and "貼る" in s_)
+assert "paper_thickness" in th[face_i]["params"]
+#     引く手順は、どこまで引くか（旗が南の壁に当たるまで）を言う
+pull_i = next(i for i, s_ in enumerate(t.steps(K), 1) if "すばやく引く" in s_)
+assert "旗が南の壁に当たるまで" in t.steps(K)[pull_i - 1] and nums(t.steps(K)[pull_i - 1], r"当たるまで（(\d+(?:\.\d+)?)mm）") == [t.pull_travel(K)]
+#     サイトの手順の紙の見取り図の言葉を持つ（持たないと、御来迎の筒の言葉が鼓の図に刷られる）
+assert "糸" in t.DIAGRAM_CAPTION and "筒" not in t.DIAGRAM_CAPTION
+# 42. 鳥の面には、幣の房が玉や面の邪魔になるかの問いがある（止まっている時は面の前に垂れる。未確認の見込みとして聞く）
+rt = t.report_checks({**P, "face": "tori"})
+assert [c["checks"] for c in rt][-1] == "STREAMER_LEN" and "確かめていない" in rt[-1]["expect"] and len(rt) == len(t.report_checks(P)) + 1
+assert len(t.report_checks({**P, "face": "tori", "cord_length": 5})) == len(rt)
 print("ok")
