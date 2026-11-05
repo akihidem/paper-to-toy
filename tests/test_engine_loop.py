@@ -112,6 +112,7 @@ for p in auto:
     md = (ISSUES / f"{p['id']}.md").read_text(encoding="utf-8")
     assert all(h in md for h in ("## 目的", "## なぜか（根拠）", "## どうしたらいいか", "## ゴールの要件")), p["id"]
     assert "まだ採っていない案" in md.split("## 目的")[0] and "立てるのは人" in md.split("## 目的")[0] and PHONE not in md
+    assert "`PYTHONPATH=src .venv/bin/python -m omochae.engine_loop release`" in md, "下書きの命令は README と同じ字（python の名前が無い機械でも打てる）"
 assert f"新しい案 {len(auto)} 件" in r.stdout and "Issue の下書き" in r.stdout and all(p["id"] in r.stdout for p in auto)
 # この道具は、外へ何も送らない（Issue を立てるのは人）。網や外の命令を使う呼び出しを持たない
 code = (ROOT / "src/omochae/engine_loop.py").read_text(encoding="utf-8")
