@@ -38,7 +38,9 @@ SCHEMA = "omochae.making-bundle/1"
 TZ = datetime.timezone(datetime.timedelta(hours=9))
 
 # 束の欄。足す時は、誰の記録かを辿れる物でない事を確かめてから足す（tests/test_engine_loop.py が鍵の一致を見る）。
-TOP_KEYS = {"schema", "exported_at", "from", "dropped_pii", "groups"}
+# current_sets（#68）: 雛形の id ごとの、今の刷った組の名。無くてもよい。この repo の雛形は組の名を持たない（刷るのはサイトの側）ので、
+# サイトが束に書く。前の組の紙の記録から起きた案を、人が見分けるために使う。
+TOP_KEYS = {"schema", "exported_at", "from", "dropped_pii", "current_sets", "groups"}
 GROUP_KEYS = {"template", "sheet_set", "reports", "results", "moved_word", "not_moved_word", "stuck_steps", "quit_steps", "craft_steps",
               "minutes", "measures", "record_ids", "texts"}
 TEXT_KEYS = {"kind", "step", "text", "count"}
@@ -145,6 +147,10 @@ def check_bundle(b):
         bad("from", "出し元の名は英数字と . - _ で 80 字まで")
     if "dropped_pii" in b and not _count(b["dropped_pii"]):
         bad("dropped_pii", "落とした文の数は 0 以上の整数")
+    cur = b.get("current_sets", {})
+    if not (isinstance(cur, dict) and len(cur) <= MAX_GROUPS
+            and all(isinstance(k, str) and NAME.fullmatch(k) and isinstance(v, str) and NAME.fullmatch(v) for k, v in cur.items())):
+        bad("current_sets", "今の刷った組は、雛形の id と組の名の組")
     groups = b.get("groups")
     if not isinstance(groups, list) or len(groups) > MAX_GROUPS:
         bad("groups", f"群は list で {MAX_GROUPS} まで")
@@ -279,12 +285,17 @@ def bundles():
 
 
 def groups(bs):
-    """束の群を、雛形と刷った組ごとに合わせる（出し元が違う束の、同じ雛形・同じ組を足す）。"""
+    """束の群を、雛形と刷った組ごとに合わせる（出し元が違う束の、同じ雛形・同じ組を足す）。
+    今の刷った組は、新しい束の値で読む（組は進むので、前の束の「今」は古い）。"""
     out = {}
+    now = {}
+    for b in sorted(bs, key=lambda b: b["exported_at"]):
+        now.update(b.get("current_sets", {}))
     for b in bs:
         for g in b["groups"]:
             key = (g["template"], g.get("sheet_set", ""))
-            m = out.setdefault(key, {"template": key[0], "sheet_set": key[1], "reports": 0, "results": {}, "moved_word": "", "not_moved_word": "",
+            m = out.setdefault(key, {"template": key[0], "sheet_set": key[1], "current_set": now.get(key[0], ""),
+                                     "reports": 0, "results": {}, "moved_word": "", "not_moved_word": "",
                                      "stuck_steps": {}, "quit_steps": {}, "craft_steps": {}, "minutes": None, "measures": {}, "record_ids": [], "texts": []})
             m["reports"] += g.get("reports", 0)
             for k, v in g.get("results", {}).items():
@@ -315,6 +326,16 @@ def _join(a, b):
     return [min(a[0], b[0]), max(a[1], b[1]), a[2] + b[2]]
 
 
+def _set_note(ss, cur):
+    """記録の紙の組と、今の組の並び（#68）。違う時だけ文を返す。前の組の記録から起きた案は、もう直っている事がある。
+    機械は「もう直った」と決めず、案も捨てない（直っていない事もある）。並べて、人が先に見る所を言うだけ。"""
+    if not cur or ss == cur:
+        return ""
+    if not ss:
+        return f"今の組は {cur}。この記録は、どの組の紙の物か分からない。"
+    return f"今の組は {cur}。この記録は前の組の紙の物（もう直っているかを、先に見る）。"
+
+
 def drafts(gs):
     """群から直しの案（下書き）を起こす。Returns 案の list（まだ置かない）。key は同じ案を 2 度起こさないための鍵。
     案は行き先・題・数・当たった文だけを持つ。新しい寸法の値は持たない。"""
@@ -323,6 +344,9 @@ def drafts(gs):
     for (tid, ss), g in sorted(gs.items()):
         where = f"{tid}（刷った組 {ss or '不明'}）"
         here = tid in TEMPLATES
+        cur = g.get("current_set", "")
+        note = _set_note(ss, cur)
+        first = len(out)
         # 雛形: 同じ手順で止まった人が重なった所。その段で話された工夫も付ける（止まった所を、別の人がどう越えたかが並ぶ）。
         stuck_here = set()
         for step, s in sorted(g["stuck_steps"].items()):
@@ -367,6 +391,8 @@ def drafts(gs):
                         "why": f"{where}は検査を通って刷られた紙で、「{g['not_moved_word']}」の札が {not_moved} 件（報告 {g['reports']} 件）。",
                         "evidence": [t for t in g["texts"] if t["kind"] in ("stuck", "impression", "explain", "think")][:MOTION_TEXTS],
                         "record_ids": g["record_ids"], "in_engine": here})
+        for d in out[first:]:
+            d.update(current_set=cur, why=d["why"] + note)
         for t in g["texts"]:
             for kind, (_, words) in SHARED.items():
                 if words.search(t["text"]):
@@ -375,7 +401,8 @@ def drafts(gs):
     for kind, by_tpl in sorted(shared.items()):
         if len(by_tpl) >= SHARED_TEMPLATES:
             texts = [t for tid in sorted(by_tpl) for t in by_tpl[tid]]
-            out.append({"key": f"shared:{kind}:{'+'.join(sorted(by_tpl))}", "target": {"kind": "part", "name": SHARED[kind][0]}, "template": None, "sheet_set": None, "step": None,
+            out.append({"key": f"shared:{kind}:{'+'.join(sorted(by_tpl))}", "target": {"kind": "part", "name": SHARED[kind][0]}, "template": None, "sheet_set": None,
+                        "current_set": None, "step": None,  # 雛形をまたぐ案なので、組は当たった文ごとに持つ
                         "title": f"共有の所: {SHARED[kind][0]}を見直す",
                         "numbers": {"templates": len(by_tpl), "texts": sum(t["count"] for t in texts)},
                         "why": f"同じ種類の困り事が {len(by_tpl)} つの雛形（{'・'.join(sorted(by_tpl))}）で出た。雛形ごとでなく共有の所に当たるかを見る。",
@@ -515,7 +542,8 @@ def compare(gs, led):
             m = g["minutes"]
             mins = (f"{m[0]:g}" if m[0] == m[1] else f"{m[0]:g}〜{m[1]:g}") + f"（{m[2]} 件）" if m else "—"
             said = "・".join(f"{ja} {n}" for ja, n in ((ja, sum(t["count"] for t in g["texts"] if t["kind"] == k)) for k, ja in TALK_JA.items()) if n) or "—"
-            lines.append(f"| {ss or '不明'} | {ver} | {g['reports']} 件 | {res} | {stuck} | {quit_} | {mins} | {said} |")
+            mark = "（今の組）" if ss and ss == g.get("current_set") else ""
+            lines.append(f"| {ss or '不明'}{mark} | {ver} | {g['reports']} 件 | {res} | {stuck} | {quit_} | {mins} | {said} |")
         lines.append("")
     lines += ["## 版と、採った案", ""]
     for v in led["versions"]:
