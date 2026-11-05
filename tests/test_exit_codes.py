@@ -22,6 +22,8 @@ def floors(scenarios):
     shutil.copy(ROOT / "tests/run_floors.py", root / "tests/run_floors.py")
     for name, text in scenarios.items():
         (root / "tests/frozen/scenarios" / name).write_text(text, encoding="utf-8")
+    # 照合の表は今の場面から書く。見たいのは表と合った後の読み込みと回す所（表の見張りは test_frozen_manifest が見る）。
+    subprocess.run([PY, str(root / "tests/run_floors.py"), "--write-manifest"], capture_output=True, check=True)
     return root, subprocess.run([PY, str(root / "tests/run_floors.py")], capture_output=True, text=True)
 
 
