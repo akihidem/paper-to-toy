@@ -4,6 +4,7 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+import time
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -214,5 +215,37 @@ assert "local/" in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines(
 for wrong in ((), ("nope",), ("check",), ("summarize",), ("check", "a", "b"), ("summarize", "a", "--nope")):
     r = run(*wrong)
     assert r.returncode == 4, (wrong, r.returncode, r.stderr)
+
+# 上限の中の文でも、連絡先の式が止まらない（#31）。上限で断るだけでは、「LINE + 空白」の様な文で式が 3 乗の時間をかけ、1 欄 1 秒を越えた。
+# 秒数は機械に依るので、数回の中で一番速い時間を見て、混んだ機械の揺れで落ちないようにする
+def _fastest(f, *a):
+    best = None
+    for _ in range(5):
+        t0 = time.perf_counter()
+        f(*a)
+        best = min(best, time.perf_counter() - t0) if best is not None else time.perf_counter() - t0
+    return best
+_n = fb.MAX_TEXT
+SLOW_SHAPES = ["LINE" + " " * (_n - 4), "line" + " " * (_n - 4), "ライン" + " " * (_n - 3), "LINE" + "\u3000" * (_n - 4),
+               "line id" + " " * (_n - 7), "LINE の" + " " * (_n - 6), "a" * _n, "a-" * (_n // 2), "at " * (_n // 3),
+               " " * (_n - 1) + "。", "(" + " " * (_n - 1), "1" * _n, "あ" * _n]
+for text in SLOW_SHAPES:
+    assert _fastest(fb.has_pii, text) < 0.1, text[:8]
+    # 上限を越えて直に呼ばれても（束の入口の外の使い方）、2 乗や 3 乗に戻っていない事を、長い文で見る
+    assert _fastest(fb.has_pii, (text * 34)[:20000]) < 1, text[:8]
+for text in SLOW_SHAPES:
+    wide = {**OK, "motion_notes": text, "finish_notes": text, "problems": [{"kind": "fit", "note": text[:fb.MAX_NOTE]}] * 3}
+    assert _fastest(fb.check, wide) < 0.1, text[:8]
+# 式の形を直しても、見方は変えない。空白の入れ方と語の組み合わせの全部で、当たる物は当たり、工作の語は当たらない
+for sp in ("", " ", "   ", "\u3000"):
+    for text in (f"LINE{sp}の{sp}ID{sp}は{sp}taro", f"LINE{sp}ID{sp}={sp}taro", f"LINE{sp}:{sp}taro", f"Line{sp}の{sp}id{sp}:{sp}taro_1",
+                 f"ライン{sp}の{sp}id{sp}は{sp}taro", f"ライン{sp}id{sp}={sp}taro", f"line{sp}id{sp}:", f"line{sp}:", f"line{sp}id{sp}taro"):
+        assert fb.has_pii(text), text
+for text in ("taro.com", "my-toy.jp", "at the corner dot com", "at x dot jp", "a@b", "taro (at) example", "090.1234.5678"):
+    assert fb.has_pii(text), text
+# 続けて書いた印も、前の印が読んだ空白に関わらず全部そろえる
+assert fb._norm("A1[ at ]  (at) b") == "A1@@b" and fb._norm("a @  @ b") == "a@@b" and fb._norm("1.2.3 4.5.6") == "1-2-3 4-5-6"
+for text in ("折りライン2.5mm", "fold line bent", "LINE is", "line them up", "look at the red dot", "dot com at", ".com", "1.5 と 2.5"):
+    assert not fb.has_pii(text), text
 
 print("ok")

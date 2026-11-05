@@ -74,9 +74,11 @@ PROBLEM_KEYS = {"kind", "step", "note"}
 REPORTED_AT = re.compile(r"\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?([+-]\d{2}:\d{2}|Z)?)?")
 REPORTED_AT_MAX_DEPTH = 8  # 報告の入れ子の深さの上限。深い入れ子で再帰が止まらないように
 KANJI_DIGITS = str.maketrans("〇一二三四五六七八九零壱弐参", "01234567890123")  # 大字（零壱弐参）も
-CONTACT = re.compile(r"(?i)@|アット|メアド|メール|電話|携帯|https?://|www\.|[a-z0-9-]+\.(com|net|org|jp|io|me|co|app|dev)\b"
+# 式は、同じ所を読み直さない形にする（#31）。\s* を続けたり（\s*(…)?\s*）、語の並びを点より先に読んだり（[a-z0-9-]+\.）すると、
+# 上限の中の文でも 2 乗や 3 乗の時間をかけた（「LINE + 空白 596 字」で 1 欄 1 秒を越えた）。下の形は、前の形と同じ文に当たる
+CONTACT = re.compile(r"(?i)@|アット|メアド|メール|電話|携帯|https?://|www\.|(?<=[a-z0-9-])\.(com|net|org|jp|io|me|co|app|dev)\b"
                      # at と dot は、dot の後にドメインの終わりが続く時だけ（「look at the red dot」の様な普通の文で落とした）
-                     r"|\bat\b.*?\bdot\b\s*(com|net|org|jp|io|me|co|app|dev)\b|(?<![a-z])(tel|e-?mail|mail)(?![a-z])"
+                     r"|\bat\b(?:(?!\bat\b).)*?\bdot\b\s*(com|net|org|jp|io|me|co|app|dev)\b|(?<![a-z])(tel|e-?mail|mail)(?![a-z])"
                      # ID は「部品IDが」「出典IDを」の工作の語と重なるので、は・:・=・is か空白の後に英数字が続く時だけ連絡先と見る
                      # （空白を消した文では「ID は taro」が「IDはtaro」になり、空白を残した文（_norm）では「ID taro」で当たる。
                      #  区切り無しの「ideas」を当てないため、区切りは必ず要る）
@@ -84,15 +86,15 @@ CONTACT = re.compile(r"(?i)@|アット|メアド|メール|電話|携帯|https?:
                      r"|facebook|フェイスブック|discord|ディスコード|スレッズ|gmail|yahoo"
                      # LINE は工作の語（折りライン・fold line）と重なるので、ID が続く時だけ連絡先と見る
                      # （「折りライン2.5mm」「fold line bent」で落としていたので、ライン は英字で始まる名が続く時、英語の line は ID か : が続く時だけ）
-                     r"|(?<![a-z])line\s*(id)?\s*[:：]|(?<![a-z])line\s*id\s*[a-z0-9_.]{3,}|ライン\s*(?:の?\s*id)?\s*(?:は|[:：=])?\s*[a-z_][a-z0-9_.]{3,}")
+                     r"|(?<![a-z])line\s*(?:id\s*)?[:：]|(?<![a-z])line\s*id\s*[a-z0-9_.]{3,}|ライン\s*(?:(?:の\s*)?id\s*)?(?:(?:は|[:：=])\s*)?[a-z_][a-z0-9_.]{3,}")
 # 大文字の LINE の後に名が続く形（LINE yamada）。大文字と小文字を分けて見るのは、工作の英語（line them up）と分けるため。
 # 空白を残した文だけで見る。空白を消した文で見ると、後ろの語までつながって名に見え、「LINE is bent」「LINE A1 is a part mark」で落とした。
 # そのため、語の中に空白や見えない文字を挟む「L I N E yamada」は式では止めない（受け入れの前に人が全文を読む。README の限り）
-LINE_CAPS = re.compile(r"(?<![A-Za-z])LINE\s*(?:の?\s*ID)?\s*(?:は|[:：=])?\s*[A-Za-z_][A-Za-z0-9_.]{3,}")
+LINE_CAPS = re.compile(r"(?<![A-Za-z])LINE\s*(?:(?:の\s*)?ID\s*)?(?:(?:は|[:：=])\s*)?[A-Za-z_][A-Za-z0-9_.]{3,}")
 # 大文字小文字に関わらず、数字か _ を含む 4 字以上の名が続く形（Line taro_123・LiNe taro_123・Line _taro）。
 # 数字や _ の入った名は工作の英語に出ない。4 字より短い物（Line A1 の様な部品の印）は当てない。
 # これは空白を残した文だけで見る。空白を消すと、前の語とつながって見逃し（use Line _taro）、離れた _ と語がつながって当たった（line _ red mark）
-LINE_NAMED = re.compile(r"(?i:(?<![a-z])line\s*(?:の?\s*id)?\s*(?:は|[:：=])?\s*(?=[a-z_][a-z0-9_.]{3,})(?=[a-z0-9.]*[0-9_])[a-z0-9_.]+)")
+LINE_NAMED = re.compile(r"(?i:(?<![a-z])line\s*(?:(?:の\s*)?id\s*)?(?:(?:は|[:：=])\s*)?(?=[a-z_][a-z0-9_.]{3,})(?=[a-z0-9.]*[0-9_])[a-z0-9_.]+)")
 
 
 def _norm(text):
@@ -100,10 +102,10 @@ def _norm(text):
     t = unicodedata.normalize("NFKC", str(text)).translate(KANJI_DIGITS)
     t = "".join("-" if unicodedata.category(ch) == "Pd" or ch in "ー−~〜" else ch for ch in t)
     t = "".join(ch for ch in t if unicodedata.category(ch) != "Cf")
-    t = re.sub(r"\s*[(\[]\s*at\s*[)\]]\s*", "@", t, flags=re.I)
-    t = re.sub(r"\s*@\s*", "@", t)
+    t = re.sub(r"(?:(?<!\s)\s+)?[(\[]\s*at\s*[)\]]\s*", "@", t, flags=re.I)
+    t = re.sub(r"(?:(?<!\s)\s+)?@\s*", "@", t)
     # 点が 2 つ以上続く数の並び（090.1234.5678）は小数でなく区切り。小数と取り違えて番号を見逃した
-    t = re.sub(r"\d+(?:\.\d+){2,}", lambda m: m.group().replace(".", "-"), t)
+    t = re.sub(r"(?<!\d)\d+(?:\.\d+){2,}", lambda m: m.group().replace(".", "-"), t)
     return re.sub(r"(?<=\w)\s*\.\s*(?=[^\W\d_])", ".", t)
 
 
