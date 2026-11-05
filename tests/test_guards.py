@@ -56,12 +56,25 @@ with tempfile.TemporaryDirectory() as d:
 # 1b. 仮の置き場は毎回別の名前。点のある --out でも揃い、たまたま同じ名前の別の出力（x-partial）を壊さない
 with tempfile.TemporaryDirectory() as d:
     assert gen(scenario(d, "ok", {"push_part": "tab"}), pathlib.Path(d) / "x.v1").returncode == 0
-    assert {"x.svg", "x.pdf", "x.png"} <= {p.name for p in pathlib.Path(d).iterdir()}
+    assert {"x.v1.svg", "x.v1.pdf", "x.v1.png"} <= {p.name for p in pathlib.Path(d).iterdir()}
     assert gen(scenario(d, "ok", {"push_part": "tab"}), pathlib.Path(d) / "y-partial").returncode == 0
     keep = {p.name: p.read_bytes() for p in pathlib.Path(d).glob("y-partial.*")}
     assert gen(scenario(d, "stick", {"push_part": "stick", "pusher_height": 84}), pathlib.Path(d) / "y").returncode == 0
     assert {p.name: p.read_bytes() for p in pathlib.Path(d).glob("y-partial.*")} == keep
     assert not [p for p in pathlib.Path(d).iterdir() if p.name.startswith(".omochae-")], "仮の置き場が残った"
+
+# 1c. 名前の点の後ろを切らない（#28）。切ると、別の版の名前で落ちた時に、前の版の紙を消す
+with tempfile.TemporaryDirectory() as d:
+    r = gen(scenario(d, "ok", {"push_part": "tab"}), pathlib.Path(d) / "tiger_v1.5")
+    assert r.returncode == 0 and r.stdout.strip().endswith("tiger_v1.5.pdf"), r.stdout
+    made = {"tiger_v1.5.svg", "tiger_v1.5.pdf", "tiger_v1.5.png"}
+    assert made <= {p.name for p in pathlib.Path(d).iterdir()}
+    r = gen(scenario(d, "bad", {"push_part": "tab", "fold_height": 50}), pathlib.Path(d) / "tiger_v1.9")
+    assert r.returncode == 3 and "F5.fan_height" in r.stderr, r.stderr
+    assert made <= {p.name for p in pathlib.Path(d).iterdir()}, "別の名前で落ちて、前の紙が消えた"
+    # 同じ名前で落ちた時は消す（1 の決まりは、点のある名前でも同じ）
+    r = gen(scenario(d, "bad", {"push_part": "tab", "fold_height": 50}), pathlib.Path(d) / "tiger_v1.5")
+    assert r.returncode == 3 and not made & {p.name for p in pathlib.Path(d).iterdir()}, r.stderr
 
 # 2. 線の絵が糊代を横切ったら落とす（面積でなく長さで見る）
 sys.path.insert(0, str(ROOT / "src"))
@@ -114,6 +127,21 @@ with tempfile.TemporaryDirectory() as d:
     assert check_pdf(pdf, source) == []
     other = {**source, "holding": source["holding"] + "（別の文）", "modification_note": "改変: 別の注記"}
     assert sorted(f.where for f in check_pdf(pdf, other)) == ["所蔵の文", "改変"]
+
+# 4b. 刷った後の検査に落ちた紙も、名前の点の後ろを切らずに退ける（#28）
+import contextlib
+import io
+import omochae.__main__ as entry
+from omochae.model import Failure
+
+with tempfile.TemporaryDirectory() as d, contextlib.redirect_stderr(io.StringIO()):
+    out = pathlib.Path(d) / "m.v2"
+    keep_check, entry.check_pdf = entry.check_pdf, lambda pdf, src: [Failure("F7.mark", "所蔵の文", "試験で落とす")]
+    try:
+        assert entry.generate("slider_fan", {"push_part": "tab"}, SRC_ID, out) == 3
+    finally:
+        entry.check_pdf = keep_check
+    assert [p.name for p in pathlib.Path(d).iterdir()] == ["m.v2.rejected.pdf"]
 
 # 5. 開く糸の長さは、筒の穴（口から THREAD_DEPTH 下）から測る
 from omochae.fan_model import shortest_free_thread

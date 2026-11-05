@@ -22,8 +22,13 @@ class Parser(argparse.ArgumentParser):
         sys.exit(4)
 
 
+def _named(stem, ext):
+    """出力の名前の後ろに拡張子を足す。with_suffix は最後の点から後ろを置き換えるので、tiger_v1.5 が tiger_v1 の紙を指してしまう（#28）。"""
+    return stem.with_name(stem.name + ext)
+
+
 def _drop(stem):
-    for old in (stem.with_suffix(x) for x in (".svg", ".pdf", ".png")):
+    for old in (_named(stem, x) for x in (".svg", ".pdf", ".png")):
         old.unlink(missing_ok=True)
 
 
@@ -77,7 +82,7 @@ def generate(template, params, source_id, out, page="A4", version=1, title=None,
         pdf = write_all(layout, tmp)
         failures = check_pdf(pdf, source) + check_image_count(pdf)
         if failures:
-            rejected = stem.with_suffix(".rejected.pdf")
+            rejected = _named(stem, ".rejected.pdf")
             pdf.replace(rejected)  # 印の無い紙を正しい名前で残さない。
             _drop(stem)  # 前の回の紙も正しい名前で残さない（今回の物と取り違えるため）。
             for f in failures:
@@ -86,10 +91,10 @@ def generate(template, params, source_id, out, page="A4", version=1, title=None,
             return 3
         to_png(pdf, tmp)
         for x in (".svg", ".pdf", ".png"):
-            tmp.with_suffix(x).replace(stem.with_suffix(x))
+            tmp.with_suffix(x).replace(_named(stem, x))
     finally:
         shutil.rmtree(work, ignore_errors=True)
-    print(stem.with_suffix(".pdf"))
+    print(_named(stem, ".pdf"))
     return 0
 
 
