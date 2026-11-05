@@ -54,6 +54,7 @@
   {
    "template": "den_den",
    "sheet_set": "den_den-v1",
+   "paper": "sample-toy.H-A",
    "reports": 1,
    "results": {"鳴った": 1},
    "moved_word": "鳴った",
