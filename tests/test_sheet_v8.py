@@ -60,4 +60,12 @@ assert any("色の境" in s for s in steps(tab))
 assert "1 外筒を色の境で山折りし、糊代で貼って角筒にする" in steps(tab), steps(tab)
 # 内筒は隠れる部品で破線を谷折りで刷るので、手順 2 は本人の決定（2026-11-06）の文。「同じように」だと山折りと読めて、刷った破線と食い違った
 assert "2 内筒は破線で谷折りし、糊代で貼って角筒にする" in steps(tab) and not any("同じように角筒にする" in s for s in steps(tab)), steps(tab)
+# 用意する物の道具（本人の確認 2026-11-06）: 穴があるのに竹串の行が無い形（内筒を下から押す・柄）は、穴をあける竹串を書く。
+# つまみの形は竹串の行がもう有る。穴の無い形（内筒を下から押す・口の台）には書かない
+for form, want in (("tab", "のり、はさみ、定規"), ("tube", "のり、はさみ、定規、竹串（穴あけ）"), ("stick", "のり、はさみ、定規、竹串（穴あけ）")):
+    assert materials({**DEFAULTS, "push_part": form})[1] == want, (form, materials({**DEFAULTS, "push_part": form}))
+assert materials({**DEFAULTS, "push_part": "tube", "hub": "rim"})[1] == "のり、はさみ、定規"
+# 柄の形の手順 2 も、手順 2 と同じ型の文（本人の確認 2026-11-06）。「同じように」だと、山折りの外筒と同じと読めた
+stick_steps = steps({**DEFAULTS, "push_part": "stick"})
+assert "2 土台は破線で谷折りし、糊代で貼って角筒にし、割り箸の先を下から差し込んで貼る" in stick_steps, stick_steps
 print("ok v9")

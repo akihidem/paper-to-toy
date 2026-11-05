@@ -373,7 +373,12 @@ RESULTS = ("動いた", "動かない", "わからない")
 def materials(p):
     """型紙の「用意する物」。素材は部品表だけから刷り、2 か所に手で書かない。"""
     rows = bom(p)
-    lines = [f"{rows[0]['material']}を 1 枚（全部品を同じ紙に刷る）", "のり、はさみ、定規"]
+    # 穴があるのに竹串の行が無い形（内筒を下から押す形・柄の形）は、穴をあける竹串を道具に書く（手順に「穴は竹串の先であける」。
+    # 本人の確認 2026-11-06）。つまみの形は竹串の行がもう有る
+    tools = "のり、はさみ、定規"
+    if any(q.holes for q in parts(p)) and not any("竹串" in r["material"] for r in rows):
+        tools += "、竹串（穴あけ）"
+    lines = [f"{rows[0]['material']}を 1 枚（全部品を同じ紙に刷る）", tools]
     lines += [f"{r['material']} {r['qty']} 本" for r in rows if r["number"] == 6]
     lines += [r["material"] for r in rows if r["number"] == 7]
     return lines
@@ -434,7 +439,8 @@ def _steps(p):
     if p["push_part"] == "tab":
         out.append(op("thread", None))
     if p["push_part"] == "stick":
-        out.append(("2 土台も同じように角筒にし、割り箸の先を下から差し込んで貼る", None))
+        # 外筒を山折りに直した後は「同じように」が山折りと読めて、破線を谷折りで刷る土台と食い違うので、手順 2 と同じ型の文にした（本人の確認 2026-11-06）
+        out.append(("2 土台は破線で谷折りし、糊代で貼って角筒にし、割り箸の先を下から差し込んで貼る", None))
     out.append(("3 台で 2 の上に蓋をする", None))
     out.append(("4 扇を色の境で、端から谷折り・山折りを交互にして蛇腹に畳む", None))
     if p["hub"] == "axle":

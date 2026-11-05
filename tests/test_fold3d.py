@@ -254,7 +254,8 @@ assert slider_fan.step_ops({**p, "hub": "rim"}) == {"fold_outer": 3, "fold_inner
 assert slider_fan.step_ops({**slider_fan.DEFAULTS, "push_part": "tube", "pusher_height": 84}) == {}
 # 本人の決定の手順 2 の文が、データから一字も違わずにできる（外筒と折り方が違うので「は」）
 assert made["fold_inner"] == "2 内筒は破線で谷折りし、糊代で貼って角筒にする", made
-assert made["push"] == f"竹串の端を溝に沿って上へ {p['push_amount']:g}mm 押し上げると、4 扇が 1 外筒の口から出て、蛇腹が開く", made
+# 手順 13 は本人の答え（2026-11-06「上に押し上げる」だけでいい・長さは言わない）の文そのもの
+assert made["push"] == "竹串の端を溝に沿って上に押し上げると、4 扇が 1 外筒の口から出て、蛇腹が開く", made
 # 文はデータに従う: 外筒を谷折りに戻すと文も谷折りと言う。内筒を外筒と同じ折り方（色の境・山折り）にすると「も」になる
 back = copy.deepcopy(pc)
 back["tube"].valley, back["tube"].mountain = back["tube"].mountain, []
@@ -262,9 +263,9 @@ assert dict(ops3d.ops(list(back.values()), p))["fold_outer"] == "1 外筒を色�
 same = copy.deepcopy(pc)
 same["pusher"].hide_folds, (same["pusher"].mountain, same["pusher"].valley) = True, (same["pusher"].valley, [])
 assert dict(ops3d.ops(list(same.values()), p))["fold_inner"] == "2 内筒も色の境で山折りし、糊代で貼って角筒にする"
-# 押し上げる量は寸法から（3D.skewer が竹串の行程として確かめる長さ）
+# 押し上げる量は文に入れない（長さは 3D.skewer が竹串の行程として見て、所見に出す）。量を変えても文は同じ
 longer, _ = built({**TAB, "push_amount": 80, "tube_height": 110})
-assert dict(ops3d.ops(list(longer.values()), {**p, "push_amount": 80}))["push"].startswith("竹串の端を溝に沿って上へ 80mm 押し上げると")
+assert dict(ops3d.ops(list(longer.values()), {**p, "push_amount": 80}))["push"] == made["push"]
 # 口の台の形（hub rim）も、最後の動きが最後に来る（前の 10 本の後ろ）。ほかの押し方の形は、まだ 3D で組めないので文のまま
 # 口の台の形の扇は、まだ 3D に置いていない（扇の端を台に貼る別の作り）。黙って通さず、最後の手順の番号で言う
 rim_parts, rim_p = built({**TAB, "hub": "rim", "fold_count": 16})  # 口の台は口の高さで開くので、帯を短く（180° まで）
