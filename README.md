@@ -52,7 +52,7 @@ A papercraft template engine: generates printable PDF patterns from dimensions a
 | `stand_figure` | 動く仕組みが図に無い玩具 35 種（名はどれも推定）: 犬張子（16 左）・張子の馬（17 左）・張子の木菟（27 左）・紙雛（12 左）・羽子板（23 左）・凧 2 枚（24 左）・土人形の兎・亀・鳩（13 左）・舌出し面（8 右）・棒付きの首人形（17 右）・覆面の人形（11 左）・蓑人形（10 左）・座り人形（26 左）・括り猿（30 左）・伏見人形（27 右）・宮と鳥居（9 右）・千木箱（11 右）・ままごとの徳利（15 左）・擂鉢（21 左）・丸い徳利（26 右）・風炉と釜（30 右）・俵（22 右）・破魔弓（15 右）・毛の山猫（18 右）・蛇の竿（20 左）・幟（31 右）・魚の体の人形（12 右）・餅花（21 右）・鳥の竿（5 左・28 左）・木太刀（5 右）・不明 2 つ（13 右・19 右） | 刷った姿の表と裏を背中合わせに貼り、背の脚（`easel`）か、溝を切った箱の台（`base`）で立てる。立て方と脚・台の寸法は書かなければ姿ごとの勧め | `figure`: `inu`・`uma`・`mimizuku`・`kamibina`・`hagoita`・`tako_ji`・`tako_oni`・`tsuchi_usagi`・`tsuchi_kame`・`tsuchi_hato`・`shitadashi`・`kubi`・`fukumen`・`mino`・`suwari`・`kukurizaru`・`fushimi`・`miya`・`chigibako`・`tokkuri`・`suribachi`・`binkake`・`chagama`・`tawara`・`hamayumi`・`yamaneko`・`hebi`・`nobori`・`sakana`・`mochibana`・`torisao`・`torisao_hoso`・`kidachi`・`fumei_tama`・`fumei_tsutsu`（`stand`: `easel`・`base` は書かなければ姿の勧め） |
 <!-- 族の行 -->
 
-玩具 1 つに型紙は 1 枚（本人の決定 2026-11-05「型紙は説を羅列せず、おもちゃ一個につき一個にする」）。同じ玩具で動き方の読みだけが違う形（`slider_fan` の `tube`・`stick`、`pivot_counterweight` の `neck`、`slide_box` の `sleeve`、`popup_jar` の `hex`、`float` の `cups`）は型紙にせず、試行錯誤のヒントとして残す。どれが型紙かは `omochae.sheets` の表にあり、`omochae.ways --json` の `sheet`・`reading_of` に出る。型紙の 1 枚も答えではなく、たたき台。
+玩具 1 つに型紙は 1 枚（本人の決定 2026-11-05「型紙は説を羅列せず、おもちゃ一個につき一個にする」）。同じ玩具で動き方の読みだけが違う形（`slider_fan` の `tube`・`stick`、`pivot_counterweight` の `hang`、`slide_box` の `sleeve`、`popup_jar` の `hex`、`float` の `cups`）は型紙にせず、試行錯誤のヒントとして残す。どれが型紙かは `omochae.sheets` の表にあり、`omochae.ways --json` の `sheet`・`reading_of` に出る。型紙の 1 枚も答えではなく、たたき台。
 
 寸法を直に渡す入口（`--template` と `--params`）では、刷る形の寸法を既定の値に頼らず必ず書く（どの形を刷ったかを、呼んだ側の JSON に残すため）。
 

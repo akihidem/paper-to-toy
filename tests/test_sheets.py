@@ -35,8 +35,10 @@ for key, forms in groups.items():
         assert len(got) == 1, (key, forms)
 assert set(DIFFERENT_TOYS) <= set(groups)  # 名指しした組が、雛形の変更で消えていない
 
-# 3. 必須 2 種の紙は、型紙の 1 枚（必須の紙を別の読みに回さない）
-for name in ("pos_tab", "pos_tiger_hang"):
+# 3. 本人の決定のたたき台（御来迎・首振り虎は元の repo の H-A）。必須 2 種の紙は、そのたたき台で刷る場面
+assert sheets.is_sheet("slider_fan", "tab") and sheets.is_sheet("pivot_counterweight", "neck")
+assert not sheets.is_sheet("pivot_counterweight", "hang")
+for name in ("pos_tab", "pos_tiger_neck"):
     sc = json.loads((ROOT / "tests/frozen/scenarios" / f"{name}.json").read_text(encoding="utf-8"))
     tpl = TEMPLATES[sc["template"]]
     form = sc["params"].get(tpl.FORM, tpl.DEFAULTS[tpl.FORM])
