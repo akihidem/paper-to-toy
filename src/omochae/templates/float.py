@@ -42,16 +42,18 @@
   重りの有無で変わらない（作った人の報告は手順の番号で来るので、同じ形の報告を番号で数えられるように）。
 - 粘土の厚みは、四隅の四角を合わせて底の内に切った実の面積から出す（狭い舟で四角が重なると 4 × 辺² より狭い）。
   粘土は G を下げるが、重さで V が増えて BM ＝ I/V も下がるので、狭い舟では GM が上がらない事がある。
-- 息で傾く角（風受けつき・blow_heel）: 口から 10〜20cm の息を速さ BREATH_V の風と見て、壁より上に出た風受けの面（幅 2ρ × 壁より上の高さ）に
-  動圧 ½·ρ空気·v² × 抗力係数が掛かると見る。口の側 CD_CUP_OPEN・丸い側 CD_CUP_BACK。2 つの力の和に、その面の真ん中の高さと
-  喫水の半分（水が押し返す高さ）の差を掛けた物が傾ける力、m·g·GM が戻す力で、小さな傾きの式 θ ＝ M ÷ (m·g·GM)。
-  風受けの口は幅の向きを向くので、息は幅の向きに当たり、舟は幅の向きに傾く。GM とふちが水に着く角は、幅の向きの値で見る
-  （hydro の GM と heel は狭い向きの値。幅が長さより長い舟では別の向きになる）。舟が回って息が長さの向きに当たる時は、風受けの
-  見える幅が半分（ρ）になり力が 6 割ほどに減るので、範囲の中の舟（幅 ÷ 長さが 1.6 まで）では幅の向きの方が先にふちに届く。
-  θ に余裕 BLOW_SAFETY を掛けた角がふちの角に届く寸法は落とす（息でふちから水が入る）。乾舷・ふちの角・GM の検査が落ちた舟と、
-  息を受けない風受けには重ねない。2 つの力の差が舟を回す力になるが、回る速さは式にしない。
-  人形は紙の面が息と平行（幅の向きに立つ）なので、人形が受ける息は入れない。
-  既定の舟（幅 60）は BM が幅の 3 乗で大きく、息では 0.3° しか傾かない。落ちるのは、狭い舟に高い風受けを立てた時（負の場面 float_neg_blow）。
+- 息で倒れないか（風受けつき・blow_arm と righting_max）: 口から 10〜20cm の息を速さ BREATH_V の風と見て、壁より上に出た風受けの面
+  （幅 2ρ × 壁より上の高さ）に動圧 ½·ρ空気·v² × 抗力係数が掛かると見る。口の側 CD_CUP_OPEN・丸い側 CD_CUP_BACK。2 つの力の和に、
+  その面の真ん中の高さと喫水の半分（水が押し返す高さ）の差を掛けた物が傾ける力で、それを舟の重さで割った長さを「傾ける腕」と呼ぶ。
+  風受けの口は幅の向きを向くので、息は幅の向きに当たり、舟は幅の向きに傾く。
+  戻す側は、小さな傾きの式（GM·sinθ）を使わない。紙の舟は軽く、喫水が浅い（既定で 1.3mm）ので、2° ほど傾くと底の高い側の角が水から出て、
+  そこから先は戻す腕が幅の半分より手前で頭打ちになる。箱の断面（幅 W・喫水 d）で、押しのける水の断面積 W·d を保って傾けた時の
+  戻す腕 GZ(θ) を出し（righting_arm）、ふちが水に着く角までの最大（righting_max）と比べる。
+  傾ける腕に余裕 BLOW_SAFETY を掛けた長さが、戻す腕の最大に届く寸法は落とす（つり合う傾きが無く、倒れるかふちから水が入る）。
+  乾舷・ふちの角・GM の検査が落ちた舟と、息を受けない風受けには重ねない。2 つの力の差が舟を回す力になるが、回る速さは式にしない。
+  入れていない物: 舟の壁が受ける息（息は風受けを狙う細い流れと見る）、人形が受ける息（紙の面が息と平行。舟が回って息が長さの向きに
+  当たる間は、人形が面で息を受ける）、傾いた後の力の変わり方。
+  落ちるのは、狭い舟に高い風受けを立てた時（負の場面 float_neg_blow）。
   見込みの値（BREATH_V・抗力係数・余裕）は 1 か所に置く。作った人の報告「息で水が入った・回らない」（Issue #21）が集まった時に直す所。
 """
 import math
@@ -93,7 +95,7 @@ SOURCE = "NDL-1187053-R0000028-R-float"
 SOURCES = {v: SOURCE for v in VANES}
 WATER = 1000.0  # 水 1g が押しのける体積（mm³）
 FREEBOARD_MIN = 5  # 乾舷の下限（mm）。見込み
-MIN_HEEL = 12  # ふちが水に着くまでに傾ける角の下限（°）。波と、置く時の傾きの余裕の見込み。息で傾く角は blow_heel で別に見る
+MIN_HEEL = 12  # ふちが水に着くまでに傾ける角の下限（°）。波と、置く時の傾きの余裕の見込み。息で倒れないかは blow_arm と righting_max で別に見る
 GM_MIN = 3  # 戻る力の余裕（mm）。紙の歪み・人形の貼り位置のずれを見込む
 CLAY_DENSITY = 1.7  # 油粘土の密度（g/cm³）の見込み。実物を量ったら置き換える
 CLAY_T_MAX = 8  # 粘土の厚みの上限（mm）。これより厚く小さな四角に積むと、押し付けても崩れて片寄ると見込む
@@ -113,11 +115,11 @@ STIR_TURNS = 5  # 風受けの無い形で、渦を作るために水をかき�
 # 前の版は、風受けつきの既定で 20 行あり、紙の印字域の下へ 5.2mm はみ出していた。16 行で 2.8mm 余り、今の 15 行で 7.2mm 余る
 # （2026-11-05 にサイトの手順の紙の組み立てに float を載せて測った。題と遊び方の文は仮の 1 行ずつ）。
 STEP_LINES_MAX, STEP_COL_W, STEP_SIZE = 16, 144.0, 3.6
-# 息で傾く角の見込みの値（風受けつき）。どれも実物で量っていない。作った人の報告（Issue #21）で「息で水が入った・回らない」が集まったら、ここを直す。
+# 息で倒れないかの検査の、見込みの値（風受けつき）。どれも実物で量っていない。作った人の報告（Issue #21）で「息で水が入った・回らない」が集まったら、ここを直す。
 # BREATH_V: 口から 10〜20cm の所の息の速さ（m/s）。
 # CD_CUP_OPEN・CD_CUP_BACK: 風受けの口の側と丸い側の抗力係数。長い半円筒の値（口の側 2.3・丸い側 1.2）に、壁より上に出る面が
 #   高さと幅の同じほどの短い面である分の割引（正方形の板 1.17 ÷ 長い板 1.98 ≈ 0.6）を掛けた。
-# BLOW_SAFETY: 息で傾く角に掛ける余裕。力は速さの 2 乗に比例するので、2 は息が見込みの 1.4 倍強い時に当たる。
+# BLOW_SAFETY: 息が舟を傾ける腕に掛ける余裕。力は速さの 2 乗に比例するので、2 は息が見込みの 1.4 倍強い時に当たる。
 BREATH_V, CD_CUP_OPEN, CD_CUP_BACK, BLOW_SAFETY = 4.0, 1.4, 0.7, 2.0
 AIR_DENSITY, GRAVITY = 1.2, 9.81  # 空気の密度（kg/m³）と重力の加速度（m/s²）。物理の定数で、見込みの値ではない
 # 貼る所の印の色と太さ。破線は谷折り、黒の実線は切る線と読まれるので、印は茶の細い実線にする。
@@ -449,27 +451,56 @@ def blow_forces(p):
     return q * area * CD_CUP_OPEN, q * area * CD_CUP_BACK
 
 
-def blow_heel(p, hy=None):
-    """(息で傾く角, 幅の向きでふちが水に着く角) の組（°）。息は風受けの口の向き（幅の向き）に当たるので、戻す力は幅の向きの
-    BM（長さ × 幅³ ÷ 12 ÷ V）から出し、ふちの角も幅で出す。腕は、壁より上の風受けの面の真ん中の高さと喫水の半分の差。
-    小さな傾きの式 θ ＝ M ÷ (m·g·GM)。風受けの無い形は 0。幅の向きの GM が 0 以下なら 90（戻らない。check_physics は GM の検査が
-    落ちた舟にこの角を使わない）。hy は hydro(p) の結果を持っている時に渡す（人形の外形を作り直すのを省くだけ。値は同じ）。"""
-    hy = hy or hydro(p)
-    L, W = p["tray_length"], p["tray_width"]
-    rim = math.degrees(math.atan2(2 * hy["f"], W)) if hy["f"] > 0 else 0.0
+def blow_arm(p, hy=None):
+    """息が舟を傾ける腕（mm）＝ 傾ける力のモーメント ÷ 舟の重さ。風受け 2 つの力の和 ×（壁より上の風受けの面の真ん中の高さ − 喫水の半分）
+    ÷ (m·g)。風受けの無い形は 0。hy は hydro(p) の結果を持っている時に渡す（人形の外形を作り直すのを省くだけ。値は同じ）。"""
     fo, fb = blow_forces(p)
     if fo + fb == 0:
-        return 0.0, rim
-    gm = hy["KB"] + L * W ** 3 / 12 / hy["V"] - hy["KG"]  # 幅の向きに傾く時の GM（mm）
-    if gm <= 0:
-        return 90.0, rim
-    arm = ((p["wall_height"] + p["cup_height"]) / 2 - hy["d"] / 2) / 1000  # m
-    restore = hy["m"] / 1000 * GRAVITY * gm / 1000  # N·m / rad
-    return min(90.0, math.degrees((fo + fb) * arm / restore)), rim
+        return 0.0
+    hy = hy or hydro(p)
+    lever = (p["wall_height"] + p["cup_height"]) / 2 - hy["d"] / 2  # mm
+    return (fo + fb) * lever / (hy["m"] / 1000 * GRAVITY)  # N·mm ÷ N
+
+
+def rim_angle(p, hy):
+    """幅の向きに傾けて、低い側のふちが水に着く角（°）。底の高い側の角が水から出た後は、舟が浮き上がりながら傾くので、
+    喫水の浅い舟では atan(2·乾舷 ÷ 幅)（舟が浮き上がらないと見た控えめな値。ふちの角の検査はこちらを使う）より大きい。"""
+    W, h, d = p["tray_width"], p["wall_height"], hy["d"]
+    if d >= h:
+        return 0.0
+    if h - d <= d:  # 深く沈んだ舟は、底の角が出る前にふちが着く
+        return math.degrees(math.atan(2 * (h - d) / W))
+    return math.degrees(math.atan(h * h / (2 * W * d)))  # 低い側の壁の濡れた高さ √(2·W·d·tanθ) が壁の高さになる角
+
+
+def righting_arm(p, hy, deg):
+    """幅の向きに deg° 傾けた時に、舟を戻す腕 GZ（mm）。箱の断面（幅 W・喫水 d）で、押しのける水の断面積 W·d を保って傾ける。
+    底の高い側の角が水から出るまで（tanθ ≦ 2d/W）は、壁の立った箱の式 sinθ·(GM + BM·tan²θ/2)。出た後は、低い側の角に残る三角形の
+    浮心から出す: GZ ＝ (W/2 − b/3)·cosθ − (KG − s/3)·sinθ。b ＝ √(2·W·d ÷ tanθ) は底の濡れた幅、s ＝ b·tanθ は低い側の壁の濡れた高さ。"""
+    W, d, KG = p["tray_width"], hy["d"], hy["KG"]
+    th = math.radians(deg)
+    tan = math.tan(th)
+    if tan <= 2 * d / W:
+        BM = W * W / (12 * d)
+        return math.sin(th) * (d / 2 + BM - KG + BM * tan * tan / 2)
+    b = math.sqrt(2 * W * d / tan)
+    return (W / 2 - b / 3) * math.cos(th) - (KG - b * tan / 3) * math.sin(th)
+
+
+def righting_max(p, hy):
+    """(戻す腕の最大 mm, その時の傾き °)。0.25° 刻みで、ふちが水に着く角（rim_angle）まで探す。ふちが着いた先は水が入るので見ない。"""
+    top = min(rim_angle(p, hy), 89.0)
+    best, at, deg = 0.0, 0.0, 0.25
+    while deg <= top:
+        gz = righting_arm(p, hy, deg)
+        if gz > best:
+            best, at = gz, deg
+        deg += 0.25
+    return best, at
 
 
 def check_physics(p):
-    """F5.float: 浮く（乾舷）・少し傾いても水が入らない・戻る（GM）・部品が舟の底に収まる・糊代が壁に収まる、を見る。"""
+    """F5.float: 浮く（乾舷）・少し傾いても水が入らない・戻る（GM）・息で倒れない（風受けつき）・部品が舟の底に収まる・糊代が壁に収まる、を見る。"""
     out = []
     L, W, h = p["tray_length"], p["tray_width"], p["wall_height"]
     hy = hydro(p)
@@ -478,10 +509,11 @@ def check_physics(p):
     elif hy["heel"] < MIN_HEEL:
         out.append(Failure("F5.float", "舟の壁", f"{hy['heel']:.0f}° 傾くとふちが水に着く（{MIN_HEEL}° 以上。壁を高くするか重りを減らす）"))
     elif hy["GM"] >= GM_MIN and p["vane"] == "cups" and p["cup_height"] >= h + CUP_ABOVE:
-        # 息で傾く角。乾舷・ふちの角・GM の検査が落ちた舟と、息を受けない風受けには重ねない（同じ舟に、別の直し方を 2 つ言わない）
-        blow, rim = blow_heel(p, hy)
-        if blow * BLOW_SAFETY >= rim:
-            out.append(Failure("F5.float", "風受け", f"息（{BREATH_V:g}m/s の見込み）で {blow:.0f}° 傾く見込みで、余裕の {BLOW_SAFETY:g} 倍が、幅の向きでふちが水に着く角 {rim:.0f}° に届く（風受けを低くするか、舟の幅を広くする）"))
+        # 息で倒れないか。乾舷・ふちの角・GM の検査が落ちた舟と、息を受けない風受けには重ねない（同じ舟に、別の直し方を 2 つ言わない）
+        arm = blow_arm(p, hy)
+        gz, at = righting_max(p, hy)
+        if arm * BLOW_SAFETY >= gz:
+            out.append(Failure("F5.float", "風受け", f"息（{BREATH_V:g}m/s の見込み）が舟を傾ける腕 {arm:.1f}mm の {BLOW_SAFETY:g} 倍が、幅の向きに舟が戻す腕の最大 {gz:.1f}mm（{at:.0f}° 傾いた時）に届き、倒れるかふちから水が入る（風受けを低くするか、舟の幅を広くする）"))
     if hy["GM"] < GM_MIN:
         out.append(Failure("F5.float", "重心", f"GM が {hy['GM']:.1f}mm で、傾いて戻らない（{GM_MIN}mm 以上。KB {hy['KB']:.1f} + BM {hy['BM']:.1f} − KG {hy['KG']:.1f}）"))
     if p["glue"] > h - 2:
@@ -586,7 +618,7 @@ def _steps(p):
     cups = p["vane"] == "cups"
     out = [("水を使う時は大人と一緒に・紙は濡れると弱る", to()), ("水は床に敷いた新聞紙の上で使い、こぼした水はすぐ拭く", to()),
            ("刷った物差しに定規を当て、10cm か確かめる", to()),
-           ("部品を実線で切る。舟の角の糊代の脇も切り込む", to(("glue", "figure_height"), ("FRINGE_PITCH", "FRINGE_GAP"))),
+           ("部品を実線で切る。舟の角の糊代の脇も切り込む", to(("glue", "figure_height"), ("FRINGE_PITCH", "FRINGE_GAP") if cups else ())),
            # 「短い壁」とは言わない。幅が長さより長い舟では、糊代の無い壁の方が長い
            ("1 舟を谷折りで箱にする。角の糊代は斜線に糊を塗り、となりの壁の外側に貼る", to(("glue", "wall_height"), (), ("舟の糊代",))),
            (f"舟の外側の底と壁を透明テープですき間なく覆い、ふちは内へ {TAPE_FOLD}mm 折り返す", to(("tape_gsm",), ("TAPE_FOLD",), ("舟の壁",))),
@@ -595,14 +627,14 @@ def _steps(p):
             to(("figure_height", "leaf_radius", "tray_width"), ("TAB", "WALL_GAP"), ("人形",)))]
     if cups:
         out.append(("4・5 風受けの歯の間の切り込みを山折りの線まで切る。刷った面を内にして半円に丸め、歯を外へ山折りし、斜線を底に当てて風受けの印に沿わせて貼る",
-                    to(("cup_width", "cup_height"), ("CUP_TAB", "CUP_INSET", "FRINGE_PITCH", "FRINGE_GAP"), ("風受け",))))
+                    to(("cup_width", "cup_height", "tray_length", "leaf_radius"), ("CUP_TAB", "CUP_INSET", "FRINGE_PITCH", "FRINGE_GAP"), ("風受け",))))
     clay = to(("ballast_g", "clay_side"), ("CLAY_DENSITY", "CLAY_T_MAX", "CLAY_INSET"), ("重り", "粘土の印"))
     if p["ballast_g"] > 0:
         out.append((f"油粘土 {p['ballast_g']:g}g を 4 等分し、底の四隅の印に平たく押し付ける（片寄ると傾く）", clay))
     else:
         out.append(("この寸法は重りを使わない（油粘土は載せない）", clay))
     out.append(("水に浮かべ、傾きと沈み方を見る（内側はテープが無く、水が入ると色がにじむ）",
-                to(("paper_gsm", "tape_gsm", "wall_height", "tray_width", "ballast_g"), ("FREEBOARD_MIN", "MIN_HEEL", "GM_MIN"), ("舟の壁", "重心"))))
+                to(("paper_gsm", "tape_gsm", "wall_height", "tray_length", "tray_width", "ballast_g", "figure_height"), ("FREEBOARD_MIN", "MIN_HEEL", "GM_MIN"), ("舟の壁", "重心"))))
     if cups:
         out.append(("横から風受けに息を吹き、回るか見る",
                     to(("cup_width", "cup_height", "wall_height", "tray_width"), ("BREATH_V", "CD_CUP_OPEN", "CD_CUP_BACK", "BLOW_SAFETY", "CUP_ABOVE"), ("風受け",))))
@@ -633,8 +665,8 @@ def measures(p):
     サイトの手順の紙は測る欄（角度・回数・物差し）を外していて、既定の舟の喫水 1.3mm は定規で読めない。欄を 2 行にすると紙からはみ出す。
     書いた言葉は、作った人の報告の動きの感想（motion_notes）にそのまま写せる。"""
     if p["vane"] == "cups":
-        return {"predict": "水に浮かべて横から息を吹くと、舟と人形はどうなると思いますか（言葉か絵で）", "rows": [[("沈み方と傾き・水が入ったか・息での回り方", 40)]]}
-    return {"predict": "水に浮かべて水をかき回すと、舟と人形はどうなると思いますか（言葉か絵で）", "rows": [[("沈み方と傾き・水が入ったか・渦での回り方", 40)]]}
+        return {"predict": "水に浮かべて横から息を吹くと、舟と人形はどうなると思いますか（言葉か絵で）", "rows": [[("沈み方と傾き・水が入ったか・息での回り方", 110)]]}
+    return {"predict": "水に浮かべて水をかき回すと、舟と人形はどうなると思いますか（言葉か絵で）", "rows": [[("沈み方と傾き・水が入ったか・渦での回り方", 110)]]}
 
 
 def diagram(x, y, w, h, p):
