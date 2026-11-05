@@ -68,7 +68,8 @@ for fig, f in t.FIGURES.items():
         assert abs(g["H"] - f["height"]) < 1e-6 and abs(g["body"].bounds[3] - g["H"]) < 1e-6, fig
         assert check_bom(t.bom(p), t.parts(p)) == [], (fig, stand)
         assert all(re.fullmatch(r"[a-z]+", q.key) for q in t.parts(p)), fig
-    p = {**P, **scen[fig]["params"]}
+    # 場面の寸法は、compose と同じく DEFAULTS に重ねて、その姿の勧めで埋める（P は犬張子の勧めで埋まっているので、重ねない）
+    p = t.filled({**t.DEFAULTS, **scen[fig]["params"]})
     assert p["stand"] == f["stand"] and t.check_physics(p) == [], (fig, t.check_physics(p))
     _, layout, fails = compose("stand_figure", scen[fig]["params"], json.loads((ROOT / "data/sources" / f"{f['source']}.json").read_text(encoding="utf-8")))
     assert fails == [], (fig, [x.line() for x in fails])
@@ -77,7 +78,7 @@ for fig, f in t.FIGURES.items():
 front, back = t.parts(P)[:2]
 W = t.geometry(P)["W"]
 assert Polygon(back.outline).symmetric_difference(Polygon([(W - x, y) for x, y in front.outline])).area < 1e-6
-assert [q.key for q in t.parts({**P, "back": 0})] == ["front", "tab", "gauge"]
+assert [q.key for q in t.parts({**P, "back": 0})] == ["front", "tab"] and [q.key for q in t.parts(P)] == ["front", "back", "tab"]
 
 # 脚の三角: 付け根（姿の上、下の縁から s・後ろへ LEAN_DEG 傾く）と脚の先（床の上、奥行き c）の距離は脚の長さ、付け根の角は開きの角
 e = t.easel(P)
@@ -88,22 +89,101 @@ assert abs(math.dist(hinge, foot) - P["tab_length"]) < 1e-9
 v1, v2 = (-hinge[0], -hinge[1]), (foot[0] - hinge[0], foot[1] - hinge[1])
 ang = math.degrees(math.acos((v1[0] * v2[0] + v1[1] * v2[1]) / (math.hypot(*v1) * math.hypot(*v2))))
 assert abs(ang - P["tab_angle"]) < 1e-9
-# 重心の奥行きは重心の高さ × sin(LEAN_DEG)
 g = t.geometry(P)
-assert abs(e["com"] - g["zc"] * math.sin(lean)) < 1e-9
-# 後ろへ倒れる境: c − 重心の奥行き = 余白。境の少し上の脚は通り、少し下は「後ろへ倒れる」で落ちる
 m = t.margin(g)
-L0 = (e["com"] + m) * math.sin(math.radians(90 - t.LEAN_DEG)) / math.sin(math.radians(P["tab_angle"]))
-assert t.check_physics({**P, "tab_length": L0 + 0.5}) == []
-fs = t.check_physics({**P, "tab_length": L0 - 0.5})
-assert [(f.floor, f.where) for f in fs] == [("F5.stand", "脚")] and "後ろへ倒れる" in fs[0].message, fs
 # 余白は背が高いほど広い（同じ傾きで重心が大きく動く）
 assert t.margin(t.geometry({**P, "scale": 1.4})) > m
 # 開きの角が狭いと足の形が浅い（脚が同じ長さでも倒れる）
 assert t.easel({**P, "tab_angle": 15})["c"] < e["c"]
-# 糊代が姿の背に収まらない（犬の背より上まで届く長い脚）
+
+# 脚は 1 本の帯を三角に閉じた物。刷る帯は上から、閉じる糊代・つなぎ・脚・背に貼る面。折り線 3 本は山折りで、谷折りは無い
+# （凡例の谷折りは刷った面がへこむ。色の面を外にして折り、糊代の斜線が貼る相手を向くのは山折り）
+tab = next(q for q in t.parts(P) if q.key == "tab")
+k = min(t.CLOSE_GLUE, P["tab_glue"])
+ys = sorted(a[1] for a, _ in tab.mountain)
+assert tab.valley == [] and len(ys) == 3
+assert abs(ys[0] - k) < 1e-9 and abs((ys[1] - ys[0]) - e["r"]) < 1e-9 and abs((ys[2] - ys[1]) - P["tab_length"]) < 1e-9
+assert abs((tab.height - ys[2]) - P["tab_glue"]) < 1e-9
+spans = sorted((min(y for _, y in gl), max(y for _, y in gl)) for gl in tab.glue)
+assert len(spans) == 2 and max(abs(a - b) for a, b in zip(spans[0] + spans[1], (0, k, ys[2], tab.height))) < 1e-9, spans
+# 閉じる糊代は貼る面より短い（組み方の文が「短い糊代」「長い糊代の面」で見分けさせる）。貼る面の下限もそれより長い
+assert k < P["tab_glue"] and t.RANGES["tab_glue"][0] > t.CLOSE_GLUE
+
+
+# 机に着く姿勢を、式（余弦定理の重ね）でなく、三角を姿の背に貼ったまま姿を傾けていく二分で別に解く（式を式で確かめないため）。
+# 付け根は姿に沿って s、貼る面の下の端は s − w。脚の先は「付け根から L・下の端から r」の 2 つの円の交わりのうち、後ろの側
+def settle(s, w, L, r):
+    along = (L * L - r * r + w * w) / (2 * w)  # 付け根から、貼る面に沿って下へ
+    off = math.sqrt(L * L - along * along)  # 貼る面から後ろへ
+    def tip(a):
+        return ((s - along) * math.sin(a) + off * math.cos(a), (s - along) * math.cos(a) - off * math.sin(a))
+    lo, hi = -math.pi / 2 + 1e-6, math.pi / 2 - 1e-6
+    for _ in range(80):  # 傾けるほど脚の先は下がる。机（高さ 0）に着く傾きを探す
+        a = (lo + hi) / 2
+        lo, hi = (a, hi) if tip(a)[1] > 0 else (lo, a)
+    return math.degrees(lo), tip(lo)[0]
+
+
+# 寸法どおりの形（ずれ 0）は、寸法の開きの角・奥行き・傾きに戻る
+x0 = t.easel_at(P)
+assert max(abs(x0["angle"] - P["tab_angle"]), abs(x0["c"] - e["c"]), abs(x0["lean"] - t.LEAN_DEG)) < 1e-9, x0
+# 手のずれの端の組み合わせ（折り目 3 本と閉じる位置が ±FOLD_TOL、貼る高さが ±GLUE_TOL）は 32 個で、先頭は寸法どおり。
+# どの組み合わせでも、式の傾きと奥行きは、別に解いた姿勢と合う
+assert len(t._SLIPS) == 33 and t._SLIPS[0] == ((0.0, 0.0, 0.0, 0.0), 0.0)
+for (e1, e2, e3, e4), up in t._SLIPS:
+    x = t.easel_at(P, (e1, e2, e3, e4), up)
+    want = settle(e["s"] + up, P["tab_glue"] - e3 + e4, P["tab_length"] + e3 - e2, e["r"] + e2 - e1)
+    assert abs(x["lean"] - want[0]) < 1e-6 and abs(x["c"] - want[1]) < 1e-6, ((e1, e2, e3, e4), up, x, want)
+# 効き方の向き: 低く貼る・脚が長く折れると姿が立ち、高く貼る・つなぎが長く折れると姿が寝る
+assert t.easel_at(P, up=-t.GLUE_TOL)["lean"] < x0["lean"] < t.easel_at(P, up=t.GLUE_TOL)["lean"]
+assert t.easel_at(P, (0, -t.FOLD_TOL, t.FOLD_TOL, 0))["lean"] < x0["lean"]  # 脚だけ 2·FOLD_TOL 長い（つなぎと貼る面が FOLD_TOL ずつ短い）
+assert t.easel_at(P, (-t.FOLD_TOL, t.FOLD_TOL, t.FOLD_TOL, 0))["lean"] > x0["lean"]  # つなぎだけ 2·FOLD_TOL 長い（貼る面が FOLD_TOL 短い）
+# 3 辺で三角が閉じない長さは None（つなぎの上の折り目を大きくずらして、つなぎを 貼る面 + 脚 より長くする）
+assert t.easel_at(P, (-(P["tab_glue"] + P["tab_length"]), 0, 0, 0)) is None
+# 重心の奥行きは、姿（表と裏の 2 枚）と脚の帯（1 枚）を面積で重み付けした物。別に解いた姿勢（settle）から、付け根・貼る面の下の端・
+# 脚の先の点を置き、帯の 4 つの面の真ん中の奥行きを点の座標から出して比べる。寸法どおりの形だけでなく、ずれた 32 の形でも合う
+low = (e["h"] * math.sin(lean), e["h"] * math.cos(lean))
+assert abs(math.dist(foot, low) - e["r"]) < 1e-9
+def com_by_points(q, s_, w_, L_, r_):
+    a, c_ = settle(s_, w_, L_, r_)
+    a = math.radians(a)
+    B, D, C = (s_ * math.sin(a), s_ * math.cos(a)), ((s_ - w_) * math.sin(a), (s_ - w_) * math.cos(a)), (c_, 0.0)
+    kk = min(t.CLOSE_GLUE, q["tab_glue"])
+    faces = [(w_, (B[0] + D[0]) / 2), (L_, (B[0] + C[0]) / 2), (r_, (C[0] + D[0]) / 2), (kk, D[0] + kk / 2 * math.sin(a))]
+    gq = t.geometry(q)
+    fig_w, strip_w = gq["body"].area * t.layers(q), q["tab_width"] * sum(n for n, _ in faces)
+    return (fig_w * gq["zc"] * math.sin(a) + q["tab_width"] * sum(n * x for n, x in faces)) / (fig_w + strip_w)
+for (e1, e2, e3, e4), up in t._SLIPS:
+    want = com_by_points(P, e["s"] + up, P["tab_glue"] - e3 + e4, P["tab_length"] + e3 - e2, e["r"] + e2 - e1)
+    assert abs(t.easel_at(P, (e1, e2, e3, e4), up)["com"] - want) < 1e-6, ((e1, e2, e3, e4), up)
+# 帯は姿の後ろにあるので、重心は姿だけの時より後ろ。表だけ（back 0）だと姿が軽く、もっと後ろへ寄る
+assert g["zc"] * math.sin(lean) < x0["com"] < t.easel_at({**P, "back": 0})["com"]
+
+# 寸法そのものが悪い時は、ずれの話をせずに落とす（開きが狭く、寸法どおりでも後ろへ倒れる）
+fs = t.check_physics({**P, "tab_angle": 15})
+assert [(f.floor, f.where) for f in fs] == [("F5.stand", "脚")] and "後ろへ倒れる" in fs[0].message and "ずれた時" not in fs[0].message, fs
+# 寸法どおりなら立つが、手のずれで倒れる脚は落とす。木菟に短めの脚（36mm）は、ずれた時に後ろへ倒れる
+M = t.filled({**t.DEFAULTS, "figure": "mimizuku"})
+short = {**M, "tab_length": 36, "tab_glue": 33}
+x = t.easel_at(short)
+assert x["com"] >= t.margin(t.geometry(M)) and x["c"] - x["com"] >= t.margin(t.geometry(M)), x
+fs = t.check_physics(short)
+assert [(f.floor, f.where) for f in fs] == [("F5.stand", "脚")] and "後ろへ倒れる" in fs[0].message and "ずれた時" in fs[0].message, fs
+# 貼る面が短いと、同じずれで姿の傾きが大きく変わり、前へ倒れる側に入る（12mm は落ち、16mm は通る）
+lean_span = lambda q: max(x["lean"] for x in (t.easel_at(q, f, u) for f, u in t._SLIPS)) - min(x["lean"] for x in (t.easel_at(q, f, u) for f, u in t._SLIPS))
+assert lean_span({**M, "tab_glue": 12}) > lean_span({**M, "tab_glue": 16}) > lean_span(M)
+fs = t.check_physics({**M, "tab_glue": 12})
+assert [(f.floor, f.where) for f in fs] == [("F5.stand", "脚")] and "前へ倒れる" in fs[0].message and "ずれた時" in fs[0].message, fs
+assert t.check_physics({**M, "tab_glue": 16}) == [] and t.check_physics(M) == []
+# 前の既定の寸法（脚 40mm・開き 30°・貼る面 13mm）は、今の傾き 20° では足の奥行きが浅く、ずれた時に後ろへ倒れる側で落ちる
+fs = t.check_physics({**P, "tab_length": 40, "tab_glue": 13, "tab_angle": 30})
+assert [(f.floor, f.where) for f in fs] == [("F5.stand", "脚")] and "後ろへ倒れる" in fs[0].message and "ずれた時" in fs[0].message, fs
+# 貼る面が姿の背に収まらない: 犬の背より上まで届く長い脚、腹の下（脚の間の空き）へ出る長い貼る面。
+# 貼る高さのずれ ±GLUE_TOL を含めて見るので、ちょうど収まる長さより GLUE_TOL 短い長さまでしか通らない
 fs = t.check_physics({**P, "tab_length": 70})
 assert any("背に収まらない" in f.message for f in fs), fs
+assert any("背に収まらない" in f.message for f in t.check_physics({**P, "tab_glue": 23}))
+assert t.check_physics({**P, "tab_glue": 21}) == []
 # 下の縁が細い物は、脚では横へ倒れる（羽子板の柄）
 fs = t.check_physics({**P, "figure": "hagoita", "tab_length": 90, "tab_glue": 10})
 assert any("横へ倒れる" in f.message for f in fs), fs
@@ -133,7 +213,10 @@ assert t.wobble_deg({**B, "slot_width": narrow}) is None and t.wobble_deg({**B, 
 from shapely.geometry import LineString
 net = t.base_net(B)
 assert len(net.cuts) == 2 and Polygon(net.outline).is_valid
-assert all(Polygon(net.outline).buffer(1e-6).contains(LineString([a, b])) for a, b in net.valley)
+# 箱の折り線は全部山折り（色の面が外。糊代の斜線が壁の内を向く）。組み方も山折りと言う
+assert net.valley == [] and len(net.mountain) == 12
+assert all(Polygon(net.outline).buffer(1e-6).contains(LineString([a, b])) for a, b in net.mountain)
+assert any("部品 3 台の箱を一点鎖線で山折り" in s and "色の面が外" in s for s in t.steps(B)) and not any("谷折り" in s for s in t.steps(B) + t.steps(P))
 Hb, D, g0 = B["base_height"], B["base_depth"], B["base_glue"]
 Y2, Y3 = g0 + D, g0 + D + Hb
 (tx, ty, tw_, th_), (bx, by, bw, bh_) = sorted(net.cuts, key=lambda c: c[1])
@@ -221,12 +304,30 @@ assert t.SOURCES == {k: f["source"] for k, f in t.FIGURES.items()}
 _, _, fs = compose("stand_figure", {"figure": "uma", "stand": "easel"}, json.loads((ROOT / "data/sources" / f"{t.SOURCE}.json").read_text(encoding="utf-8")))
 assert [f.floor for f in fs] == ["F1.source"], fs
 
-# 倒れないかは脚の開き（足の形の奥行き c）で決まるので、開きの物差し（部品 4）を刷る。印の間は c、組み方の文も c を言う
-gauge = next(q for q in t.parts(P) if q.key == "gauge")
-ticks = sorted(a["pts"][0][1] for a in gauge.art if a["kind"] == "line")
-assert abs((ticks[-1] - ticks[0]) - e["c"]) < 1e-9, ticks
-assert any(f"{e['c']:.0f}mm" in s for s in t.steps(P)) and any("4" in s and "物差し" in s for s in t.steps(P))
-assert "gauge" not in {q.key for q in t.parts(B)}
+# 脚の開きは三角の辺で決まるので、開きの物差し（前の部品 4）は刷らない。組み方の文は脚の先の来る所（c）を言い、手で広げさせない
+assert all(q.number <= 3 for q in t.parts(P)) and [r["key"] for r in t.bom(P)] == ["front", "back", "tab"]
+assert any(f"約 {e['c']:.0f}mm 後ろ" in s and "手で広げない" in s for s in t.steps(P))
+# 裏の姿の四角い印は、貼る面の置き場（上の辺が付け根 s、下の辺が h）。裏は左右を返してあるので、横の真ん中は W − 重心の x
+# （返し忘れると、犬張子では数 mm ずれる）
+mark = next(q for q in t.parts(P) if q.key == "back").art[-1]
+HP, WP, cxP = t.geometry(P)["H"], t.geometry(P)["W"], t.geometry(P)["cx"]
+assert mark["kind"] == "line" and abs(min(y for _, y in mark["pts"]) - (HP - e["s"])) < 1e-6 and abs(max(y for _, y in mark["pts"]) - (HP - e["h"])) < 1e-6
+mx = [x for x, _ in mark["pts"]]
+assert abs((min(mx) + max(mx)) / 2 - (WP - cxP)) < 1e-6 and abs(max(mx) - min(mx) - P["tab_width"]) < 1e-6 and abs(WP - 2 * cxP) > 1
+# 裏の印が無い時（back 0）は、貼る高さを 0.1mm まで数で言う（1mm に丸めると、小さい姿では丸めの分で傾きが変わる）
+assert any(f"下の縁から {e['h']:.1f}〜{e['s']:.1f}mm の高さ" in s for s in t.steps({**P, "back": 0}))
+# 貼る面を先に背に貼り、後で三角を閉じる（閉じる糊代の折り目を、貼った面の下の端にそろえる）
+st = t.steps(P)
+i_glue = next(i for i, x in enumerate(st) if "長い糊代の面" in x and "四角い印" in x)
+i_close = next(i for i, x in enumerate(st) if "三角を閉じる" in x and "折り目を端にそろえて" in x)
+assert i_glue < i_close
+# 手順の番号は「手順 n:」、部品の番号は「部品 n」。表と裏は粗く切って貼ってから、実線で 2 枚いっしょに切る（縁と舌がそろう）
+for q in (P, B, {**P, "back": 0}):
+    st = t.steps(q)
+    assert all(x.startswith(f"手順 {i + 1}: ") for i, x in enumerate(st)), st
+    assert not any(re.search(r"(?<!部品 )(?<![\d.〜])\b[1-4] (表|裏|脚|台)", x) for x in st), st
+assert any("粗く切り取る" in s for s in t.steps(P)) and any("2 枚いっしょに切る" in s and "舌がそろう" in s for s in t.steps(B))
+assert not any("粗く" in s for s in t.steps({**P, "back": 0}))
 
 # 姿だけを変えた入口（--params {"figure": X}）でも、その姿に勧める立て方と寸法が既定になって通る。書いた寸法は勝つ
 for fig, f in t.FIGURES.items():
@@ -237,6 +338,16 @@ for fig, f in t.FIGURES.items():
 assert t.filled({**P, "figure": "hagoita", "slot_length": 30})["slot_length"] == 30
 assert t.filled({**P, "figure": "hagoita", "stand": "easel"})["stand"] == "easel"
 assert t.spec()["figures"]["hagoita"]["stand"] == "base" and t.spec()["figures"]["hagoita"]["slot_length"] == t.FIGURES["hagoita"]["suggest"]["slot_length"]
+
+# 横から見た組み上がりの絵は、どの姿でも渡した枠（x 10〜50・y 20〜70）の内に収まる
+for fig in t.FIGURES:
+    sh = t.diagram(10, 20, 40, 50, {**t.DEFAULTS, "figure": fig})
+    xs = [v for q in sh for kk, v in q.items() if kk in ("x1", "x2", "x")] + [q["x"] + q["w"] for q in sh if q["kind"] == "rect"]
+    ys = [v for q in sh for kk, v in q.items() if kk in ("y1", "y2", "y")] + [q["y"] + q["h"] for q in sh if q["kind"] == "rect"]
+    tiny = 1e-9  # 丸めの分
+    assert min(xs) + tiny >= 10 and max(xs) - tiny <= 50 and min(ys) + tiny >= 20 and max(ys) - tiny <= 70, (fig, min(xs), max(xs), min(ys), max(ys))
+# 脚の絵は 3 本の線（姿・脚・つなぎ）と机の線
+assert sum(1 for q in t.diagram(10, 20, 40, 50, P) if q["kind"] == "line") == 4
 
 # 姿の形の覚えは上限つき（高さは連続の値なので、上限が無いと場面を回すほど増える）
 assert t._shape.cache_info().maxsize is not None
