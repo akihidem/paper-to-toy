@@ -267,4 +267,34 @@ CHECKS8 = {
 }
 for name, check in CHECKS8.items():
     assert check(), name
+# 大人がカッターで切る物は、用意する物の行と組み方の文で同じ（#41）。両方の文から取り出して比べるので、片方だけ変えると落ちる
+from omochae.compose import compose
+from omochae.__main__ import load_source
+
+
+def adult_cuts(lines):
+    """文の並びから「大人がカッターで切る物」の組を取り出す。部品の番号（1 台の…の 1）は外す。カッターの文が 1 つでない時は None。"""
+    found = [re.search(r"([^。（]*)はカッターで大人が切る", s) for s in lines if "カッター" in s]
+    if len(found) != 1 or not found[0]:
+        return None
+    return {re.sub(r"^\d+ ", "", x.strip()) for x in found[0].group(1).split("、")}
+
+
+for pp, want in ((P, {"台の細い溝と切れ込み", "玉の物差しの穴"}), (B, {"玉の物差しの穴"})):
+    assert adult_cuts(t.materials(pp)) == adult_cuts(t.steps(pp)) == want, (t.materials(pp), t.steps(pp))
+    # 文の組は部品と合う。台の溝と切れ込みだけが切り抜きで、玉の物差しの穴は 2 つ（腕と弓の穴は竹串なので入らない）
+    assert {q.key for q in t.parts(pp) if q.cuts} == ({"stock"} if pp is P else set())
+    assert len(next(q for q in t.parts(pp) if q.key == "gauge").holes) == 2
+    # 片方だけ変えると食い違いが見える（比べ方が両方を読んでいる事を見る）
+    assert adult_cuts([s.replace("玉の物差しの穴は", "穴は") for s in t.materials(pp)]) != adult_cuts(t.steps(pp))
+    assert adult_cuts(t.materials(pp)) != adult_cuts([s.replace("玉の物差しの穴は", "穴は") for s in t.steps(pp)])
+    # カッターの注記を別の行にすると、弩の紙が印字域の下の端に届く。行の数と、のりの行にある事を保つ
+    assert any(m.startswith("のり、はさみ、定規（") and "カッター" in m for m in t.materials(pp)), t.materials(pp)
+assert len(t.materials(P)) == 6 and len(t.materials(B)) == 7, (len(t.materials(P)), len(t.materials(B)))
+# 境の寸法: 通っていた寸法は通り、その上は同じ床で落ちる（文を長くして 1 行増えると、下の 3 つが落ちる）
+src = load_source(t.SOURCES["crossbow"])
+floors = lambda **over: [f.floor for f in compose("launcher", {"form": "crossbow", **over}, src)[2]]
+for over in ({"stock_w": 21}, {"arm_w": 10}, {"ball_paper": 62}):
+    assert floors(**over) == [], (over, floors(**over))
+assert "F5.print_area" in floors(stock_w=21.05) and "F5.print_area" in floors(arm_w=10.05), "印字域の検査を緩めていない"
 print("ok")
