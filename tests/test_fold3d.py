@@ -15,7 +15,7 @@ import subprocess
 import sys
 import tempfile
 
-from omochae import fold3d
+from omochae import fold3d, ops3d
 from omochae.__main__ import load_source
 from omochae.compose import compose
 from omochae.templates import slider_fan
@@ -38,7 +38,9 @@ def built(params):
 pc, p = built(TAB)
 notes, fails = fold3d.check(list(pc.values()), p)
 assert not fails, [f.line() for f in fails]
-assert [n.split()[:2] for n in notes] == [["閉じる", "1"], ["外向き", "1"], ["閉じる", "2"], ["並ぶ", "竹串:"]], notes
+# 所見の頭には、確かめた操作が組み方の手順の何番かを添える（組んだ過程と手順書を番号で結ぶ。手順の文は同じ操作から作る）
+heads = ["閉じる 1 外筒（手順 3）: ", "外向き 1 外筒（手順 3）: ", "閉じる 2 内筒（手順 5）: ", "並ぶ 竹串（手順 6・12・13）: "]
+assert len(notes) == 4 and all(n.startswith(h) for n, h in zip(notes, heads)), notes
 # 外筒は色の面を外にする山折り（見える面）。内筒は破線を刷る谷折りのまま（隠れる部品）
 assert "山折り 4 本" in notes[0] and "谷折り 4 本" in notes[2] and all("糊代は1 面目に" in notes[i] for i in (0, 2)), notes
 
@@ -193,13 +195,45 @@ assert not fails_m and "山折り 4 本" in notes_m[2], (notes_m, [f.line() for 
 print("ok 3")
 
 
+# 5. 手順の文を 3D の操作から作る（段 B。本人の決定 2026-11-06）。つまみの形の、3D で組める部品の手順だけを、型紙のデータから作る
+st = slider_fan.steps(p)
+made = dict(ops3d.ops(list(pc.values()), p))
+# 手順の番号はずらさない（作った人の報告が鍵にしている）。1〜12 は前の組み方と同じ並びで、最後の動き（押し上げて蛇腹が開く）を 13 に足した
+BEFORE = ["刷った物差しに定規を当て、10cm か確かめる", "まず 1 外筒だけを実線で切る。溝は下の端からはさみで切り込む（くり抜かない）",
+          "1 外筒を色の境で山折りし、糊代で貼って角筒にする", "残りの部品を実線で切る。穴は竹串の先であける",
+          "2 内筒は破線で谷折りし、糊代で貼って角筒にする", "竹串を 2 内筒の 2 つの穴に通す", "3 台で 2 の上に蓋をする",
+          "4 扇を色の境で、端から谷折り・山折りを交互にして蛇腹に畳む", "糸を 5 像の穴と 4 扇の中心側の穴の列に通し、ゆるく結ぶ",
+          "4 扇の真ん中の足を、糊代の境の破線で折り、足の糊代を 3 台の印に貼る", "5 像の足を 3 台に貼る", "内筒を 1 外筒に入れ、竹串の端を溝から出す"]
+assert st[:12] == BEFORE and len(st) == 13, st
+assert [st[i - 1] for i in (3, 5, 6, 12, 13)] == [made[k] for k in ("fold_outer", "fold_inner", "thread", "insert", "push")], st
+# 本人の決定の手順 2 の文が、データから一字も違わずにできる（外筒と折り方が違うので「は」）
+assert made["fold_inner"] == "2 内筒は破線で谷折りし、糊代で貼って角筒にする", made
+assert made["push"] == f"竹串の端を溝に沿って上へ {p['push_amount']:g}mm 押し上げると、4 扇が 1 外筒の口から出て、蛇腹が開く", made
+# 文はデータに従う: 外筒を谷折りに戻すと文も谷折りと言う。内筒を外筒と同じ折り方（色の境・山折り）にすると「も」になる
+back = copy.deepcopy(pc)
+back["tube"].valley, back["tube"].mountain = back["tube"].mountain, []
+assert dict(ops3d.ops(list(back.values()), p))["fold_outer"] == "1 外筒を色の境で谷折りし、糊代で貼って角筒にする"
+same = copy.deepcopy(pc)
+same["pusher"].hide_folds, (same["pusher"].mountain, same["pusher"].valley) = True, (same["pusher"].valley, [])
+assert dict(ops3d.ops(list(same.values()), p))["fold_inner"] == "2 内筒も色の境で山折りし、糊代で貼って角筒にする"
+# 押し上げる量は寸法から（3D.skewer が竹串の行程として確かめる長さ）
+longer, _ = built({**TAB, "push_amount": 80, "tube_height": 110})
+assert dict(ops3d.ops(list(longer.values()), {**p, "push_amount": 80}))["push"].startswith("竹串の端を溝に沿って上へ 80mm 押し上げると")
+# 口の台の形（hub rim）も、最後の動きが最後に来る（前の 10 本の後ろ）。ほかの押し方の形は、まだ 3D で組めないので文のまま
+rim = slider_fan.steps({**p, "hub": "rim"})
+assert len(rim) == 11 and rim[-1] == made["push"] and rim[-2] == made["insert"], rim
+for form in ("tube", "stick"):
+    other = slider_fan.steps({**slider_fan.DEFAULTS, "push_part": form, "pusher_height": 84})
+    assert len(other) == 11 and not any("押し上げると" in s for s in other), (form, other)
+print("ok 5")
+
 # 4. 入口（python -m omochae.fold3d）の終了の番号: 0 確かめて通った / 3 落ちた / 4 確かめられない
 def cli3d(*args, env=ENV):
     return subprocess.run([sys.executable, "-m", "omochae.fold3d", *args], cwd=ROOT, env=env, capture_output=True, text=True)
 
 
 r = cli3d("--scenario", str(ROOT / "examples/fan_tab.json"))
-assert r.returncode == 0 and "並ぶ 竹串:" in r.stdout and not r.stderr, (r.returncode, r.stdout, r.stderr)
+assert r.returncode == 0 and "並ぶ 竹串（手順 6・12・13）: " in r.stdout and not r.stderr, (r.returncode, r.stdout, r.stderr)
 r = cli3d("--scenario", str(ROOT / "tests/frozen/scenarios/neg_overlap.json"))
 assert r.returncode == 3 and "F5.overlap" in r.stderr, r.stderr
 with tempfile.TemporaryDirectory() as d:

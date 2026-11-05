@@ -34,6 +34,7 @@ from dataclasses import dataclass
 from .__main__ import Parser, load_source, scenario_from_args
 from .compose import TEMPLATES, compose
 from .model import Failure, ToolMissing
+from .ops3d import ops as assembly_ops
 
 # ここだけが使う shapely の部分も、読めなければ 4 にする。読み込みは main の囲いより前に走るので、
 # 囲わないとトレースバックの 1 になる（__main__ の囲いと同じ考え。レビューの指摘）。
@@ -430,12 +431,31 @@ def _skewer(outer_part, outer, inner_part, inner, p):
             f"押し上げ切った時 {c_push:.2f}mm{stop}）"), None
 
 
+def _step_numbers(parts, p):
+    """3D の操作の種類ごとの、手順の番号（雛形の組み方の何番目か）。手順の文は同じ操作から作る（omochae.ops3d）ので、文で引ける。
+
+    崩した部品（負の対照）から作った文は、雛形の手順に無いので番号が付かない（所見に番号を出さないだけで、確かめは変わらない）。
+    """
+    st = TEMPLATES["slider_fan"].steps(p)
+    return {kind: st.index(text) + 1 for kind, text in assembly_ops(parts, p) if text in st}
+
+
+def _tag(note, nums, *kinds):
+    """所見の文の頭に、確かめた操作の手順の番号を添える（組んだ過程と手順書を、番号で結ぶため）。"""
+    ns = [str(nums[k]) for k in kinds if k in nums]
+    if not ns:
+        return note
+    head, rest = note.split(": ", 1)
+    return f"{head}（手順 {'・'.join(ns)}）: {rest}"
+
+
 def check(parts, p):
     """刷る部品（compose の配置の部品）と寸法から、外筒と内筒を折って組み、確かめる。Returns (所見の文の並び, 失敗の並び)。"""
     by = {q.key: q for q in parts}
     if OUTER not in by or INNER not in by:
         raise ToolMissing("外筒と内筒が無い（最小の 1 本は、御来迎 つまみの形だけを組む）")
     notes, failures, faced, folded = [], [], [], {}
+    nums = _step_numbers(parts, p)
     for q in (by[OUTER], by[INNER]):
         try:
             folded[q.key] = fold(q)
@@ -446,18 +466,19 @@ def check(parts, p):
         if fail:
             failures.append(fail)
             continue
-        notes.append(note)
+        kind = "fold_outer" if q.key == OUTER else "fold_inner"
+        notes.append(_tag(note, nums, kind))
         if q.hide_folds:
             # 見える面の部品（色の境で折る）だけ、色の面の向きを見る。隠れる部品（破線を刷る内筒）の向きは組み立てに効かない
             note, fail = _face(q, folded[q.key])
-            (faced if fail else notes).append(fail or note)
+            (faced if fail else notes).append(fail or _tag(note, nums, kind))
     if failures:
         # 筒が閉じなければ、竹串の線の形が決まらない。続けて見ると、1 つの崩れに別の行が続いて狙いが読めなくなる（compose と同じ考え）
         # 外筒の 3D.face は外筒が閉じた後に見た物なので、ほかの部品が閉じなくても捨てない（レビューの指摘）
         return notes, failures + faced
     # 色の面の向きは竹串の形に効かない（鏡に映した筒でも穴と溝は並ぶ）ので、3D.face で落ちても竹串は見る
     note, fail = _skewer(by[OUTER], folded[OUTER], by[INNER], folded[INNER], p)
-    return (notes + [note], faced) if note else (notes, faced + [fail])
+    return (notes + [_tag(note, nums, "thread", "insert", "push")], faced) if note else (notes, faced + [fail])
 
 
 def run(template_id, params, source, title=None, inject=None):

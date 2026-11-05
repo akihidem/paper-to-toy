@@ -8,6 +8,7 @@ from shapely.geometry import LineString, Polygon
 
 from ..fan_model import clearance_limit_deg, opening_bound_deg, shortest_free_thread
 from ..model import Failure, Part
+from ..ops3d import ops as assembly_ops
 
 ID = "slider_fan"
 # 寸法の共通の出発点。手元の複写の図の比と紙面の制約から出した。
@@ -406,7 +407,13 @@ def place(by_key, page, top, gap):
 
 
 def steps(p):
-    """組み方。部品番号は型紙と同じ。押し方と中心の置き方で変わる所だけを分ける。"""
+    """組み方。部品番号は型紙と同じ。押し方と中心の置き方で変わる所だけを分ける。
+
+    つまみの形は、3D で組める部品（外筒・内筒・竹串）の手順を、3D の操作から作る（本人の決定 2026-11-06。omochae.ops3d）。
+    文は型紙のデータから作るので、折り方のデータを直すと文も変わる。ほかの手順と、ほかの形の手順は文のまま。
+    """
+    # 3D の操作から作った文。つまみの形だけ（3D で組めるのは、まだこの形だけ）
+    made = dict(assembly_ops(parts(p), p)) if p["push_part"] == "tab" else {}
     # まず筒を 1 つ作る（v8）。紙で組んで試した時、手が止まりやすいのは平面から立体への最初の一歩だったので、
     # 最初に形が 1 つできる順にする。
     out = ["刷った物差しに定規を当て、10cm か確かめる"]
@@ -414,13 +421,13 @@ def steps(p):
         out.append("まず 1 外筒だけを実線で切る。溝は下の端からはさみで切り込む（くり抜かない）")
     else:
         out.append("まず 1 外筒だけを実線で切る")
-    out.append("1 外筒を色の境で山折りし、糊代で貼って角筒にする")
+    out.append(made.get("fold_outer", "1 外筒を色の境で山折りし、糊代で貼って角筒にする"))
     out.append("残りの部品を実線で切る。穴は竹串の先であける")
     if p["push_part"] in ("tab", "tube"):
         # 外筒を山折りに直した時、「同じように」だと、破線を谷折りで刷る内筒と食い違うので、本人の決定（2026-11-06）の文にした
-        out.append("2 内筒は破線で谷折りし、糊代で貼って角筒にする")
+        out.append(made.get("fold_inner", "2 内筒は破線で谷折りし、糊代で貼って角筒にする"))
     if p["push_part"] == "tab":
-        out.append("竹串を 2 内筒の 2 つの穴に通す")
+        out.append(made["thread"])
     if p["push_part"] == "stick":
         out.append("2 土台も同じように角筒にし、割り箸の先を下から差し込んで貼る")
     out.append("3 台で 2 の上に蓋をする")
@@ -432,7 +439,10 @@ def steps(p):
     else:
         out.append("4 扇の端を 3 台に貼り、5 像の足も台に貼る")
     if p["push_part"] == "tab":
-        out.append("内筒を 1 外筒に入れ、竹串の端を溝から出す")
+        out.append(made["insert"])
+        # 組み立ての最後の動き（本人の追加 2026-11-06「上にスライドさせて蛇腹が開く所まで」）。今の手順の後ろに足すので、
+        # 前の手順の番号はずれない（作った人の報告は手順の番号を鍵にしている）
+        out.append(made["push"])
     else:
         out.append("押す部品を 1 外筒に下から入れる")
     return out
