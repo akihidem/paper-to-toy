@@ -71,7 +71,7 @@ def tampered(key, fn):
 
 
 def lines_of(q):
-    """部品の折り線の並び。外筒は山折り（色の面を外にする）、内筒は谷折りなので、線のある方を返す（手伝いが並びを取り違えないように）。"""
+    """部品の折り線の並び。外筒は山折り（色の面を外にする）、内筒は谷折りなので、線のある方を返す（補助の関数が並びを取り違えないように）。"""
     assert bool(q.valley) != bool(q.mountain), (q.key, len(q.valley), len(q.mountain))
     return q.valley or q.mountain
 
