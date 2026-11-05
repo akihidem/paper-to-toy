@@ -83,7 +83,8 @@ CONTACT = re.compile(r"(?i)@|アット|メアド|メール|電話|携帯|https?:
                      # （「折りライン2.5mm」「fold line bent」で落としていたので、ライン は英字で始まる名が続く時、英語の line は ID か : が続く時だけ）
                      r"|(?<![a-z])line\s*(id)?\s*[:：]|(?<![a-z])line\s*id\s*[a-z0-9_.]{3,}|ライン\s*(?:の?\s*id)?\s*(?:は|[:：=])?\s*[a-z_][a-z0-9_.]{3,}")
 # 大文字の LINE の後に名が続く形（LINE yamada）。大文字と小文字を分けて見るのは、工作の英語（line them up）と分けるため。
-# 空白を消した文と残した文の両方で見る（文字の間に空白や見えない文字を挟む「L I N E yamada」をすり抜けさせない）
+# 空白を残した文だけで見る。空白を消した文で見ると、後ろの語までつながって名に見え、「LINE is bent」「LINE A1 is a part mark」で落とした。
+# そのため、語の中に空白や見えない文字を挟む「L I N E yamada」は式では止めない（受け入れの前に人が全文を読む。README の限り）
 LINE_CAPS = re.compile(r"(?<![A-Za-z])LINE\s*(?:の?\s*ID)?\s*(?:は|[:：=])?\s*[A-Za-z_][A-Za-z0-9_.]{3,}")
 # 大文字小文字に関わらず、数字か _ を含む 4 字以上の名が続く形（Line taro_123・LiNe taro_123・Line _taro）。
 # 数字や _ の入った名は工作の英語に出ない。4 字より短い物（Line A1 の様な部品の印）は当てない。
@@ -113,7 +114,7 @@ def has_pii(text):
     # 見えない文字・結合文字・異体字セレクター・空白を消してから語を探す（語の中に挟むと、すり抜けた）
     raw = "".join(ch for ch in unicodedata.normalize("NFKC", str(text))
                   if unicodedata.category(ch) not in ("Cf", "Mn", "Me") and not ch.isspace())
-    if CONTACT.search(raw) or LINE_CAPS.search(raw):
+    if CONTACT.search(raw):
         return True
     t = _norm(text)
     idx = [i for i, ch in enumerate(t) if ch.isdigit()]
