@@ -1,5 +1,5 @@
 {
- "criteria.md": "887c0b0f5b7e5ecc62916dbbeb815900079fe0442b1a0d42aeba9baab4b8dd2b",
+ "criteria.md": "8c1642a65e09be9446eb1951580f08e4f73436a5fe7428591726f4ca8f3b1fab",
  "scenarios": {
   "balance_neg.json": {
    "floors": [
@@ -729,6 +729,216 @@
    "rc": 0,
    "sha256": "51c80b6321eb13920e258867f923a6aea5c15afe4f66d9b57b1849fedd3d4b71"
   },
+  "stand_figure_neg.json": {
+   "floors": [
+    "F5.stand"
+   ],
+   "rc": 3,
+   "sha256": "0c9631b7372bdb332379ab9d68fcd3aa1e238aa970e7963f9118c909e6c62d7c"
+  },
+  "stand_figure_neg2.json": {
+   "floors": [
+    "F5.stand"
+   ],
+   "rc": 3,
+   "sha256": "94119389182649e6d0697ce185a7f6c7b53fba0016eca5b2581fe1bf673bd01f"
+  },
+  "stand_figure_neg3.json": {
+   "floors": [
+    "F5.stand"
+   ],
+   "rc": 3,
+   "sha256": "67a723d37429ee4ad9c4b0fd68ed6035d9359f2c89a54fd4e0f627f5659364c3"
+  },
+  "stand_figure_neg4.json": {
+   "floors": [
+    "F5.stand"
+   ],
+   "rc": 3,
+   "sha256": "e806ea521b97870b598c5539deb164e885401f0d0f997354dae486c4b0898824"
+  },
+  "stand_figure_neg_source.json": {
+   "floors": [
+    "F1.source"
+   ],
+   "rc": 3,
+   "sha256": "8bb4f62310e4145faa63d858cb9f54f9b416ed156bad5ef4af640c5c66d3e1ea"
+  },
+  "stand_figure_pos.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "02541a59ff45b54d97b9309a7a0af30e5dee2681ea7e8e6fd2dd74e5e549e6cc"
+  },
+  "stand_figure_pos_binkake.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "ebbf39074a455f71479a6728e4b3e66b297f7c456a4645b75c4c311a7bd737cb"
+  },
+  "stand_figure_pos_chagama.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "bc07684cfaaa6140199403411769a3b1833e2fc8019201e35c6e854fb7b66274"
+  },
+  "stand_figure_pos_chigibako.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "a1b8f3a2666402133012eaeaaa7a5191177e8a56f320c9e5b6ba719e32fe14b2"
+  },
+  "stand_figure_pos_fukumen.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "70b5b83fec72e05907a5d5b69c6a38682c7d22a5413ce02dfbcd9ca718a0ed61"
+  },
+  "stand_figure_pos_fumei_tama.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "fb978b8ef6c30304059a9620d2ddcfa64d3aaf896a7214762cdee9cbb0c86e58"
+  },
+  "stand_figure_pos_fumei_tsutsu.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "880919d2f1627f68474d107ec9458f2a4f1e9adf7a101273b52063df8a7a6209"
+  },
+  "stand_figure_pos_fushimi.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "63b3f2a8e2c4857f75e766c8c3270ef46ae308cdcead24bbcc889f84feea26f8"
+  },
+  "stand_figure_pos_hagoita.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "6b3fc0bce77d17a7d8d06553312d819d88a1084d7373614efbc14ccebbf819fb"
+  },
+  "stand_figure_pos_hamayumi.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "54c6bb191da5f406303ad518830582249799c290e5e56465be8448174f6edc18"
+  },
+  "stand_figure_pos_hebi.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "2ca1b28abf5bb83cca1e7221f7b956d9c0ebe22e98dc461410ff53d832e4082d"
+  },
+  "stand_figure_pos_kamibina.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "337493a9a6d733b0e65f53394795c27741d375ab20fe05fd7f0146f455594a27"
+  },
+  "stand_figure_pos_kidachi.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "9ecee7c680368d7060d0b635abf0dda32e45f33d37e3db158b86634a73a502cd"
+  },
+  "stand_figure_pos_kubi.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "448c06b82b214438f7a730f74d636b2ba944b9c20bcba35efba358e4339fdfee"
+  },
+  "stand_figure_pos_kukurizaru.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "7ecba0fb976b9c1a0c465f20d061cfe13768c791a82d583c9a50762b08c7e106"
+  },
+  "stand_figure_pos_mimizuku.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "ef74a44925b0087171ce4766b0ee0d94dc0cec82a4f0a30b3aa258ac0f4800e6"
+  },
+  "stand_figure_pos_mino.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "b48d7b0d9d2a3a8bb8d2f8ecc63aaaa27d4a11fbdf4726c994eee93533ce1608"
+  },
+  "stand_figure_pos_miya.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "81bc1d3a26c42aa413416d124bb21c5667fe63bb3d35de5d4fdbde7657b2d9bd"
+  },
+  "stand_figure_pos_mochibana.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "69c47e903146f0b287e9130e3b3a80edcaeb2c4703160cfb402d3e3688cf223d"
+  },
+  "stand_figure_pos_nobori.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "bf9bf80026f9c11f84fa858cbcbe9b95b0d3ae48fc68dbd937e5ccb4ea8614dc"
+  },
+  "stand_figure_pos_sakana.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "ebe17da8615606fdf4e777d071bca3153af01e9280076a5577975b1ad6202001"
+  },
+  "stand_figure_pos_shitadashi.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "2bde5f551d4ea05eb174d44b81836df25ae636aad2709d77b315c3059453610a"
+  },
+  "stand_figure_pos_suribachi.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "1f05c587b46db4fbdebcc7b1f23bf891294789d9f34e3e6f4eb00d85abac2871"
+  },
+  "stand_figure_pos_suwari.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "ea55d48a04457f7e0b3557dd5cc6894f447aa830a243066f2542a931500ecd3c"
+  },
+  "stand_figure_pos_tako_ji.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "76b6d37200d09d032f353a3714f3daceb29de21eff0b689aec6224cf8de74249"
+  },
+  "stand_figure_pos_tako_oni.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "7a9bd08a04b944ef0e253e66e36da7b0e40f448054530c3d3a554259058848ac"
+  },
+  "stand_figure_pos_tawara.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "466566e34c44a46453088c7746fe4ac5424ab3687634b7ab59f773aa4184bad4"
+  },
+  "stand_figure_pos_tokkuri.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "3fb096ae3c241a1666964c183cd098e921f42839fdf5a9537b797eaf0f24b422"
+  },
+  "stand_figure_pos_torisao.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "fc5c28b655cfed184e8871bd4a232b94da0bf9306df2a23e8badb0c870f1dfb4"
+  },
+  "stand_figure_pos_torisao_hoso.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "1ed7a45f17f172586236b804630928125287f5d98359dfcecff8e5ad4adf2a6f"
+  },
+  "stand_figure_pos_tsuchi_hato.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "74f36dea2301a40e694661c33c9337eb726f372a8e1d75dd88df6f8f4a90e98d"
+  },
+  "stand_figure_pos_tsuchi_kame.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "b44b70251e74873eb22d6f48015686a5edb1ef20c238c753314900b69d54c5f7"
+  },
+  "stand_figure_pos_tsuchi_usagi.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "ecb007e3aa77477de4fc5f528c4ff9cb5c08d09d9e5d06885f70d7ddb578ee1f"
+  },
+  "stand_figure_pos_uma.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "9ab626134a828a5a7e7285834e039ac8a433ae7288a9d7e36d5a757af6eadec1"
+  },
+  "stand_figure_pos_yamaneko.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "2f3d7b19672145bf3a5d5514f64154c8a29d0fc93a4a4b22d85160e5bcf506f4"
+  },
   "twist_drum_neg.json": {
    "floors": [
     "F5.drum"
@@ -910,6 +1120,7 @@
  },
  "tests": [
   "test_balance",
+  "test_engine_loop",
   "test_exit_codes",
   "test_fan_model",
   "test_float",
@@ -929,9 +1140,11 @@
   "test_sheet_v8",
   "test_slide_box",
   "test_spinner",
+  "test_stand_figure",
   "test_template_contract",
   "test_tool_timeouts",
   "test_twist_drum",
+  "test_ways",
   "test_wheel_cart",
   "test_whistle"
  ]
