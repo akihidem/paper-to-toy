@@ -45,10 +45,11 @@ heads = ["閉じる 1 外筒（手順 3）: ", "外向き 1 外筒（手順 3）
 assert len(notes) == 7 and all(n.startswith(h) for n, h in zip(notes, heads)), notes
 assert "69mm 上がり" in notes[5], notes[5]
 # 13 の後半（扇が口から出て開く）。台と扇は折らずに置いた形で見る事と、見ない事（蛇腹の折り・開く仕組み）も言う
-assert all(w in notes[6] for w in ("口より 2.0mm 下（隠れる）", "要が口より 21.0mm 上", "1 面目に平行に 284° 開き", "縁までの余り 1.8mm",
+assert all(w in notes[6] for w in ("口より 2.0mm 下（隠れる）", "要が口より 21.0mm 上", "1 面目に平行に開き（開く糸の穴のある 2・4 面目に垂直な向き）", "上限（284°", "縁までの余り 1.8mm",
                                    "折らずに置いた形", "開く仕組み")), notes[6]
 # 手順の番号を添えるのに扇などの部品は要らない。外筒と内筒だけを渡しても確かめられる
-assert not fold3d.check([pc["tube"], pc["pusher"]], p)[1]
+only = fold3d.check([pc["tube"], pc["pusher"]], p)
+assert not only[1] and only[0][-1].startswith("開く 扇（手順 13）: 扇の部品を渡していないので、扇は見ない"), only
 # 外筒は色の面を外にする山折り（見える面）。内筒は破線を刷る谷折りのまま（隠れる部品）
 assert "山折り 4 本" in notes[0] and "谷折り 4 本" in notes[2] and all("糊代は1 面目に" in notes[i] for i in (0, 2)), notes
 
@@ -192,6 +193,10 @@ NEG = [
     ("pusher", lambda q: q.holes.__setitem__(1, q.holes[0]), "3D.skewer", "竹串", "同じ所"),  # 2 つの穴が同じ所 → 0 で割らずに落とす
     # 扇（手順 13 の後半）。扇の部品の描いた形だけを崩す
     ("fan", fan_x(lambda x, h: x + 10 if x == h else x), "3D.fan", "4 扇", "隠れない"),       # 板を 10mm 高く描く → 静かな時に口から出る
+    ("fan", fan_x(lambda x, h: x + 2.0 if x == h else x), "3D.fan", "4 扇", "同じ高さ"),       # ちょうど 2mm 高く → 口と同じ高さも隠れていない
+    ("fan", lambda q: q.holes.clear(), "3D.fan", "4 扇", "要の穴か足"),                       # 軸の形なのに要の穴が無い → 口の台と取り違えない
+    ("fan", lambda q: setattr(q, "valley", [(a, b) for a, b in q.valley if not (abs(a[0] - b[0]) < 1e-9 and a[0] < 0)]),
+     "3D.fan", "4 扇", "要の穴か足"),                                                       # 足の糊代の境の折り線が無い
     ("fan", fan_leg(-10.0), "3D.fan", "4 扇", "隠れない"),                                  # 足を 10mm 長く描く → 扇ごと上がって口から出る
     ("fan", fan_leg(12.0), "3D.fan", "4 扇", "口の縁に当たる"),                             # 足を 12mm 短く描く → 要が低く、開くと縁に当たる
     ("fan", lambda q: setattr(q, "outline", [(x, y + 4 * p["fold_width"] if y == max(v for _, v in q.outline) else y) for x, y in q.outline]),

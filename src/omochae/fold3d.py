@@ -56,8 +56,9 @@ EPS = 1e-6
 GLUE_COVER = 0.95
 FOLD_DEG = 90  # 角筒は 4 面なので、折り線ごとに 90°
 OUTER, INNER, FAN = "tube", "pusher", "fan"
-# 扇が開く面（外筒の何面目に平行か）。型紙のデータの向き: 雛形の注「扇は 1 面目に平行に開く」と、外筒の 2・4 面目の開く糸の穴。
-# 本人に確かめている（違う答えなら、ここを替える）。角筒では、横の面までの距離はどちらの面でも同じ
+# 扇が開く面は、外筒の開く糸の穴のある 2 つの面（向かい合う面）に垂直な向き（扇の両端をその 2 つの面へ糸でつなぐので）を、
+# 型紙のデータから読む。今の型紙では 2・4 面目に穴があり、1 面目に平行（雛形の注「扇は 1 面目に平行に開く」と同じ）。
+# 穴が無い時だけ、この面に平行と置き、その事を所見で言う。この向きは本人が実物どおりと確かめた（2026-11-06）
 FAN_PLANE_PANEL = 1
 
 
@@ -501,32 +502,47 @@ def _fan(st):
     """押し上げて扇が開く所（手順 13 の後半）。台と扇は折らずに置いた形で見る。Returns [(所見の文, 失敗)]。
 
     台の上の面は内筒の上の端の高さ、扇は足の折り線が台の上の面に乗る高さに置く。畳んだ扇は箱（上の端の高さだけを見る）、
-    開いた扇は要のまわりの扇形（半径は要の穴から先の縁まで、開く角は帯の長さ÷板の高さ。雛形の F5.fan_clearance と同じ見込み）。
+    開いた扇は要のまわりの扇形（半径は要の穴から先の縁まで、開く角は見込みの上限の帯の長さ÷板の高さ。雛形の F5.fan_clearance と同じ見込みで、
+    実際は折り目で紙が立つので小さい。上限まで開いても当たらないかを、安全側で見る）。
     見る事: 静かな時に扇の上の端が口より下（隠れる）・押し上げ切ると要が口より上・開いた扇形が横の面の口の縁に当たらない。
     見ない事: 蛇腹の折り・開く仕組み（糸・紙のばね）・畳んだ扇の厚さが断面に収まるか（台の奥の縁に寄るので、式の床と食い違いうる）。
     """
     by, p = st["by"], st["p"]
     if FAN not in by:
-        return []
+        # 外筒と内筒だけを渡した呼び方。黙って通さず、扇は見ていないと言う
+        return [("開く 扇: 扇の部品を渡していないので、扇は見ない", None)]
+    where = by[FAN].label
+    if p.get("hub") != "axle":
+        # 口の台の形（hub rim）は、扇の端を台に貼る別の作り。まだ置いていないと言う（黙って通さない）
+        return [(f"開く {where}: 口の台の形の扇は、まだ置いていない（要と足が無い作り）", None)]
     shape = _fan_shape(by[FAN])
     if shape is None:
-        # 口の台の形（hub rim）は、扇の端を台に貼る別の作り。まだ置いていないと言う（黙って通さない）
-        return [("開く 4 扇: 口の台の形の扇は、まだ置いていない（要と足が無い作り）", None)]
+        # 軸の形なのに要の穴か足の折り線が無いのは、描いた扇の崩れ。口の台の形と取り違えて通さない（レビューの指摘）
+        return [(None, Failure("3D.fan", where, "軸の形の扇に、要の穴か足の糊代の境の折り線が無く、台に置けない"))]
     h, strip, hole_x, leg_x = shape
     outer_part, outer = by[OUTER], st["folded"][OUTER]
     up, c, bot, top = tube_axis(outer)
     H, s = top - bot, p["push_amount"]
-    where = by[FAN].label
-    # 静かな時は内筒の上の端（＝台の上の面）が口より押し上げる量だけ下。畳んだ扇の上の端は、台の上の面から h − 足の折り線の x
+    # 静かな時は内筒の上の端（＝台の上の面）が口より押し上げる量だけ下。畳んだ扇の上の端は、台の上の面から h − 足の折り線の x。
+    # 口と同じ高さは隠れていない（凍結の行の「口より下」。型紙の検査に通る寸法では 2mm 以上の余りがある）
     hidden = s - (h - leg_x)
-    if hidden < -EPS:
-        return [(None, Failure("3D.fan", where, f"静かな時に、畳んだ扇の上の端が口より {-hidden:.1f}mm 上に出る（隠れない）"))]
+    if hidden <= EPS:
+        said = f"口より {-hidden:.1f}mm 上に出る" if hidden < -EPS else "口と同じ高さに来る"
+        return [(None, Failure("3D.fan", where, f"静かな時に、畳んだ扇の上の端が{said}（隠れない）"))]
     d = hole_x - leg_x  # 押し上げ切った時の、要の口からの高さ（台の上の面が口の高さに来る）
     if d <= EPS:
         return [(None, Failure("3D.fan", where, f"押し上げ切っても、要が口より上に出ない（口から {d:.1f}mm）"))]
     R, theta = h - hole_x, min(360.0, math.degrees(strip / h))
     sides = sorted((f for f in outer if f not in _glue_faces(outer_part, outer)), key=lambda f: f.poly.bounds[0])
-    fan_n = sides[FAN_PLANE_PANEL - 1].normal
+    # 開く面: 開く糸の穴のある面が向かい合う 2 面なら、その 2 面に垂直（＝ほかの 2 面に平行）。無ければ FAN_PLANE_PANEL に平行と置く
+    holed = [f for f in sides if any(f.poly.contains(Point(x, y)) for x, y, _ in outer_part.holes)]
+    if len(holed) == 2 and _dot(holed[0].normal, holed[1].normal) < -1 + EPS:
+        fan_n = _cross(up, holed[0].normal)
+        plane = next(i for i, f in enumerate(sides, 1) if abs(abs(_dot(f.normal, fan_n)) - 1) < EPS)
+        how = f"{plane} 面目に平行に開き（開く糸の穴のある {'・'.join(str(sides.index(f) + 1) for f in holed)} 面目に垂直な向き）"
+    else:
+        fan_n, plane = sides[FAN_PLANE_PANEL - 1].normal, FAN_PLANE_PANEL
+        how = f"{plane} 面目に平行に開き（開く糸の穴が無いので、この向きと置いた）"
     mouth = _add(c, _mul(up, top))
     margins = []
     for f in sides:
@@ -547,10 +563,11 @@ def _fan(st):
         margins.append(f.poly.distance(LineString(seg)) if low < 0 else low)
     margin = min(margins, default=None)
     if margin is not None and margin <= EPS:
-        return [(None, Failure("3D.fan", where, f"開いた扇（{theta:.0f}°）が、横の面の口の縁に当たる"))]
+        return [(None, Failure("3D.fan", where, f"開く角の見込みの上限（{theta:.0f}°）まで開くと、扇が横の面の口の縁に当たる"))]
     edge = "横の面の口の縁に当たらない" + (f"（縁までの余り {margin:.1f}mm）" if margin is not None else "（横の面まで届かない）")
     return [(f"開く {where}: 静かな時、畳んだ扇の上の端は口より {hidden:.1f}mm 下（隠れる）。押し上げ切ると、要が口より {d:.1f}mm 上に出て、"
-             f"扇は {FAN_PLANE_PANEL} 面目に平行に {theta:.0f}° 開き、{edge}。台と扇は折らずに置いた形で見る（畳んだ扇は箱、開いた扇は要の"
+             f"扇は {how}、開く角の見込みの上限（{theta:.0f}°。帯の長さ÷板の高さで、実際は折り目で紙が立つので小さい）まで開いても、"
+             f"{edge}。台と扇は折らずに置いた形で見る（畳んだ扇は箱、開いた扇は要の"
              "まわりの扇形）。蛇腹の折りと、開く仕組み（糸・紙のばね）は見ない", None)]
 
 
