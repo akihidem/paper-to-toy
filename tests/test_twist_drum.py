@@ -76,7 +76,7 @@ assert any(f.where == "花車" for f in t.check_physics({**K, "wheel_r": 16, "fa
 assert any(f.where == "軸" for f in t.check_physics({**K, "base_length": 60}))
 assert any(f.where == "棒の穴" for f in t.check_physics({**K, "base_height": 10}))
 # 諫鼓の部品と部品表（紙でない物も）が合う
-assert {q.key for q in t.parts(K)} == {"front", "back", "band", "post", "base", "wheel", "rodtab", "gauge"}
+assert {q.key for q in t.parts(K)} == {"front", "back", "band", "post", "base", "wheel", "rodtab", "gauge", "bearing"}
 assert {r["key"] for r in t.bom(K)} >= {"peg", "rod", "pull", "cord", "bead"}
 from omochae.floors import check_bom
 assert check_bom(t.bom(K), t.parts(K)) == []
@@ -131,12 +131,14 @@ assert abs(tab.width - (t.rod_perimeter(K) + 2 * t.TAB_FLAG)) < 1e-9 and len(tab
 assert t.pull_turns(K) >= 1 and any(f.where == "棒" for f in t.check_physics({**K, "base_length": 70}))
 # ---- 3 回目のレビューの指摘（2026-11-04）を押さえる行 ----
 # 8. 諫鼓で、糸が玉の半径より短いと玉が花車に重なる（窓の式だけでは通っていた寸法）
-bad = {**K, "k_radius": 24, "face_gap": 10, "wheel_r": 8, "bead_d": 14, "k_cord": 3}
+#    （台は 80mm にする。既定の 90mm のままだと、軸が北へ寄った分だけ引ける長さと棒が伸び、棒が竹串に収まらない床も一緒に落ちる）
+bad = {**K, "k_radius": 24, "face_gap": 10, "wheel_r": 8, "bead_d": 14, "k_cord": 3, "base_length": 80}
 assert [f.where for f in t.check_physics(bad)] == ["糸"], [f.line() for f in t.check_physics(bad)]
 # 9. 引き切っても棒の北の端が北の壁の穴に HOLE_MARGIN 残る。回る数はこの引ける長さで数える
 #    （北に出す長さが引ける長さ＋余白か、は式そのものなので見ない。代わりに、棒が竹串の長さに収まるかを見る）
 assert t.rod_length(K) <= t.SKEWER_USABLE
-assert abs(t.pull_turns(K) - t.pull_travel(K) / (math.pi * K["stick_d"])) < 1e-9
+#    回る数は、棒の動いた長さをそのまま軸の周りで割った数より少ない（解けるのは旗の穴が軸から遠ざかった分。式は 31 で見る）
+assert 0 < t.pull_turns(K) < t.pull_travel(K) / (math.pi * K["stick_d"])
 assert nums(" ".join(t.steps(K)), r"北の壁から (\d+(?:\.\d+)?)mm 出す") == [round(t.rod_north_out(K))]
 # 10. 柄の太さの分、絡む長さは短い（柄の表まで √2·R − 柄の半径）
 assert any(f.where == "糸" for f in t.check_physics({**P, "cord_length": math.sqrt(2) * P["radius"] - P["bead_d"] / 2 - P["stick_d"] / 2 + 0.5}))
@@ -196,7 +198,7 @@ m = " ".join(t.materials(K))
 assert "カッター" in m and "テープ" in m
 assert nums(" ".join(t.steps(K)), r"竹串 2 本を (\d+(?:\.\d+)?)mm に切り") == [t.rod_length(K)]
 # ---- 最終差分の独立レビュー（2026-11-05）の指摘を押さえる行 ----
-# 20. 留め具は刷った面を内にして（真ん中の糊の印を棒に当てて）巻く。谷折りは刷った面がへこむ側なので、立てた 2 枚の旗は刷った面どうしが向き合い、端の糊の印が相手に当たる。
+# 20. 留め具は刷った面を内にして（真ん中の糊の印を棒に当てて）巻く。両端を棒の真上で立てると、2 枚の旗は刷った面どうしが向き合い、端の糊の印が相手に当たる（折りの種類は 33）。
 #     旗の穴は糊の印の中にあるので、巻く糸を 2 枚の穴に通して結んでから貼り合わせる（貼ってからでは穴が糊でふさがる）
 sk = t.steps(K)
 wrap = next(i for i, s in enumerate(sk) if "16 棒の留め具の北の縁" in s)
@@ -249,4 +251,139 @@ for sd in t.RANGES["stick_d"]:
                 cw, ch = t.rod_cut(c)
                 old = bh - t.rod_cut_top(c) < t.HOLE_MARGIN or bw / 2 + t.rod_off(c) + cw / 2 > bw - t.HOLE_MARGIN
                 assert not old or any(f.where == "留め具" for f in t.check_physics(c)), c
+# ---- 8 回目（2026-11-05・動きと組み上がりの読み直し）を押さえる行 ----
+# 29. でんでん太鼓の糸は、帯を丸める前に帯の裏で結んで留める（面を貼った後は胴の中に手が入らず、1 つの小さい穴に外から糸を留められない）。
+#     玉は後で付け、付ける所で糸の長さを決める
+for p in (P, {**P, "face": "tori"}):
+    sp = t.steps(p)
+    knot = next(i for i, s in enumerate(sp) if "裏で 2 回重ねて結び" in s)
+    roll = next(i for i, s in enumerate(sp) if "帯を丸め" in s and "糊代" in s)
+    faces = next(i for i, s in enumerate(sp) if "表の面" in s and "貼る" in s)
+    bead = next(i for i, s in enumerate(sp) if "糸に玉を付ける" in s)
+    assert knot < roll < faces < bead, (knot, roll, faces, bead)
+    assert nums(sp[bead], r"玉の中心まで (\d+(?:\.\d+)?)mm") == [p["cord_length"]]
+    assert not any("穴に結ぶ" in s for s in sp)
+#     切る糸は、結ぶ分と直す分の余りを足した長さ（部品表と用意する物が同じ数）
+assert f"{P['cord_length'] + t.CORD_SPARE:g}mm に切る" in next(r for r in t.bom(P) if r["key"] == "cord")["material"] and t.CORD_SPARE >= 30
+# 30. 刷る直しの幅（tune_range）は両端とも検査を通り、窓の外へ丸まらない。既定の糸はその内にあり、組み方の最後にその数を刷る
+for p, key in ((P, "cord_length"), ({**P, "face": "tori"}, "cord_length"), (K, "k_cord")):
+    lo, hi = t.tune_range(p)
+    assert lo < hi and t.check_physics({**p, key: lo}) == [] and t.check_physics({**p, key: hi}) == [], (lo, hi)
+    assert lo <= p[key] <= hi and f"{lo:g}〜{hi:g}mm の間" in t.steps(p)[-1]
+    assert t.check_physics({**p, key: lo - 0.5}) != [] and t.check_physics({**p, key: hi + 0.5}) != [], "幅を窓より広く刷っている"
+#     窓が無い寸法（検査で落ちる）でも組み方の文は作れ、数は刷らない
+for p in ({**K, "peg_height": 20}, {**P, "radius": 15, "depth": 30, "bead_d": 14}):
+    assert t.tune_range(p) is None and t.check_physics(p) != [] and "mm の間" not in t.steps(p)[-1]
+# 31. 諫鼓の軸の回る数は、旗の穴が軸から遠ざかった分で数える（棒の動いた長さではない。真横から引き始めるので、始めは糸がほとんど引かれない）。
+#     雛形の式とは別の道すじで数える: 糸が軸（原点・半径 r）に接して点 p へ張る形を、接点の座標から出す。y は北を正（棒は東、引く向きは南）
+
+
+def tangent_unwind(r, p0, p1, north):
+    """north=True は接点が軸の北の側（糸は軸の上を時計回りに来て、接点で離れて東の棒へ向かう）。Returns 軸から解ける糸の長さ。"""
+    def touch(p):
+        d, th = math.hypot(*p), math.atan2(p[1], p[0])
+        ang = th + math.acos(r / d) if north else th - math.acos(r / d)
+        q = (r * math.cos(ang), r * math.sin(ang))
+        assert abs(q[0] * (p[0] - q[0]) + q[1] * (p[1] - q[1])) < 1e-9, "接点で、半径と糸が直角でない"
+        assert (q[1] > 0) == north or abs(q[1]) < r * 0.3
+        return ang, math.hypot(p[0] - q[0], p[1] - q[1])
+    (a0, f0), (a1, f1) = touch(p0), touch(p1)
+    cw = a0 - a1  # 接点が時計回りに動いた角度。北を回る糸は、接点が時計回りに動くと軸に巻き付く分が増え、その分も軸から解ける
+    return (f1 - f0) + r * (cw if north else -cw)
+
+
+r, off, T = K["stick_d"] / 2, t.rod_off(K), t.pull_travel(K)
+re_ = r + t.WIND_D / 2
+#     多い側の見込み: 北を回る・旗は立ったまま・糸の太さ無し。少ない側の見込み: 南を回る・引き切る頃に旗が軸の側へ倒れる・糸の太さの半分
+many = tangent_unwind(r, (off, 0), (off, -T), north=True)
+few = tangent_unwind(re_, (off, 0), (off - t.TAB_FLAG / 2, -T), north=False)
+assert abs(t.pull_unwind(K, favorable=True) - many) < 1e-9 and abs(t.pull_unwind(K) - few) < 1e-9, (many, few)
+assert abs(t.pull_turns(K, favorable=True) - many / (2 * math.pi * r)) < 1e-9 and abs(t.pull_turns(K) - few / (2 * math.pi * re_)) < 1e-9
+#     同じ形なら、北を回る巻き方の方が多く解ける（差は 軸に沿う分の 2 倍）。どちらも棒の動いた長さより短い
+assert tangent_unwind(r, (off, 0), (off, -T), north=False) < many < T and few < T
+lo_t, hi_t = t.pull_turns(K), t.pull_turns(K, favorable=True)
+#     既定の台は、少ない側の見込みでも 1.3 回を越える。前の既定（台 80mm）は前の式で 1.75 回と刷っていたが、少ない側では 1 回に届かず落ちる
+assert 1.3 <= lo_t < hi_t and t.pull_turns({**K, "base_length": 80}) < 1 < T / (2 * math.pi * r)
+assert any(f.where == "棒" and "1 回も回らない" in f.message for f in t.check_physics({**K, "base_length": 80}))
+assert t.pull_unwind({**K, "base_length": 60}) == 0.0  # 引けない寸法（軸が南の壁に近すぎる）は 0
+# 32. 巻く糸は軸に結んで糊で留める（巻くだけでは滑って回らない）。結ぶ高さは旗の穴と同じ（軸の下の端は軸受けを通すので空ける）。
+#     巻いておく回数は、多い側で解ける回数より 1 回以上多い。結ぶ所の長さ・部品表の糸・組み方の数が同じ式から出る
+sk = t.steps(K)
+flag = next(i for i, s in enumerate(sk) if "穴に通して結ぶ" in s)
+knot = next(i for i, s in enumerate(sk) if "軸（竹串 13）に結ぶ" in s)
+wind = next(i for i, s in enumerate(sk) if "巻き取る" in s)
+assert flag < knot < wind and "糊を付けて留め" in sk[knot]
+assert nums(sk[knot], r"机から約 (\d+)mm") == [round(t.flag_hole_z(K))] and t.flag_hole_z(K) == t.HOLE_MARGIN + 2 * K["stick_d"] + K["paper_thickness"] + t.TAB_FLAG / 2
+#     巻く向きは、台の中の糸を見ずに確かめられる言い方（上から見た花車の回る向き）で書く。押し込む所は棒の印で決める
+assert "時計と反対回り" in sk[wind] and "鼓を奥・棒を右" in sk[wind] and "印まで押し込" in sk[wind]
+mark = next(i for i, s in enumerate(sk) if "えんぴつで印" in s)
+assert mark < wind and "北の壁から" in sk[mark] and any("えんぴつ" in m for m in t.materials(K))
+assert t.wind_wraps(K) == math.ceil(many / (2 * math.pi * r)) + 1
+assert nums(sk[knot], r"旗の穴から (\d+(?:\.\d+)?)mm") == [t.pull_cord(K)] and nums(sk[wind], r"約 (\d+) 回") == [t.wind_wraps(K)]
+#     結ぶ所までの糸は、押し込んだ時に張る分 ＋ 巻いておく回数分（糸の太さを入れた 1 周）。多い側で解けても 1 周以上残る
+assert abs(t.pull_cord(K) - (math.sqrt(off * off - re_ * re_) + t.wind_wraps(K) * 2 * math.pi * re_)) <= 0.5
+assert t.pull_cord(K) - math.sqrt(off * off - re_ * re_) - many >= 2 * math.pi * r
+pull_mm = nums(next(q for q in t.bom(K) if q["key"] == "pull")["material"], r"（(\d+(?:\.\d+)?)mm）")[0]
+assert t.pull_cord(K) + 2 * t.CORD_SPARE <= pull_mm < t.pull_cord(K) + 2 * t.CORD_SPARE + 10
+assert "巻き直す" in sk[-2] and "印まで押し込み" in sk[-2]
+# 33. 折り線の種類は凡例どおり（谷折りは刷った面から見て折り目がへこむ・山折りは出る）。
+#     絵を外にして向こうへ折る所（胴の歯・柱の筒・台の壁と角の糊代・軸受けの糊代）と、刷った面を棒に当てて巻く留め具の旗は山折り。
+#     刷った面の側へ起こす所（柱の足）だけが谷折り。前は全部が谷折りの線だった
+for p in (P, K):
+    b = {q.key: q for q in t.parts(p)}["band"]
+    tab_, D_ = p["tab"], t.drum_rd(p)[1]
+    assert sorted(l[0][1] for l in b.mountain) == [tab_, tab_ + D_] and b.valley == []
+kp = {q.key: q for q in t.parts(K)}
+H, W, L = K["base_height"], K["base_width"], K["base_length"]
+assert len(kp["base"].mountain) == 8 and kp["base"].valley == []
+assert {((H, H), (H + W, H)), ((H, H + L), (H + W, H + L)), ((H, H), (H, H + L)), ((H + W, H), (H + W, H + L))} <= set(kp["base"].mountain)
+PL = K["post_height"] + t.POST_INSERT
+assert [l[0][0] for l in kp["post"].mountain] == [K["post_side"] * i for i in range(1, 5)] and kp["post"].valley == [((0, PL), (4 * K["post_side"], PL))]
+assert [l[0][0] for l in kp["rodtab"].mountain] == [t.TAB_FLAG, kp["rodtab"].width - t.TAB_FLAG] and kp["rodtab"].valley == []
+assert kp["bearing"].mountain == [((t.BEARING_LIFT, 0), (t.BEARING_LIFT, kp["bearing"].height))] and kp["bearing"].valley == []
+assert any("一点鎖線で内へ山折り" in s for s in t.steps(P)) and not any("谷折り" in s for s in t.steps(P))
+assert any("11 台を一点鎖線で山折り" in s for s in sk) and any("一点鎖線で山折りして棒の真上に立て" in s for s in sk)
+#     糊の印（斜線）は、刷った面に糊を付ける所にだけ刷る。柱の足は裏を台に貼るので印を刷らず、組み方に「裏に糊」と書く
+assert len(kp["post"].glue) == 1 and any("足の裏（刷っていない側）に糊" in s for s in sk)
+# 34. 軸受け: 穴は台の上の面の穴の真下（西の壁の内の面から台の幅の半分）で同じ太さ。腕の先は、範囲のどの端でも棒の穴の手前で止まる。
+#     糊代は一番低い壁より低い。軸に糸を結んだ後、巻き取る前に付ける（先に付けると、台の下から軸に手が届かない）
+be = kp["bearing"]
+(hx, hy, hr), = be.holes
+arm, to_hole = t.bearing_arm(K)
+assert abs((hx - t.BEARING_LIFT) - (K["base_width"] / 2 - K["paper_thickness"])) < 1e-9 and hr == kp["base"].holes[0][2]
+assert abs(hy - be.height / 2) < 1e-9 and min(hy, be.height - hy) - hr >= t.HOLE_MARGIN - 1e-9 and abs(be.width - (t.BEARING_LIFT + arm)) < 1e-9
+for sd in t.RANGES["stick_d"]:
+    for pt in t.RANGES["paper_thickness"]:
+        c = {**K, "stick_d": sd, "paper_thickness": pt}
+        a, th = t.bearing_arm(c)
+        assert a - th < t.rod_off(c) - t.rod_cut(c)[0] / 2, c  # 腕の先（軸から）＜ 棒の穴の西の縁（軸から）
+        #   高さ: 軸の側へ倒れた旗（棒の上の面の高さ）は腕の上の面から 2mm 以上、巻いた糸（旗の穴の高さ）は 3mm 以上、上にある
+        assert t.HOLE_MARGIN + 2 * sd - (t.BEARING_LIFT + pt) >= 2 and t.flag_hole_z(c) - (t.BEARING_LIFT + pt) >= 3, c
+assert t.BEARING_LIFT < t.RANGES["base_height"][0] and t.flag_hole_z(K) < t.ceiling_z(K)
+#     穴をあける手順に、軸受けの穴も入っている
+assert any("18 軸受けの穴" in s and "大人" in s for s in sk)
+#     花車の高さの紙は、貼れたら外す（立てたままだと玉の通り道に残る）
+assert any("17 は外す" in s for s in sk)
+fit = next(i for i, s in enumerate(sk) if "18 軸受けの糊代" in s)
+assert knot < fit < wind and "西の壁" in sk[fit] and "山折り" in sk[fit]
+assert check_bom(t.bom(K), t.parts(K)) == []
+# 35. 方角（北・南・東・西）は紙に刷っていないので、最初に使う文で、台の上の印と穴から決めて言う
+first = next(i for i, s in enumerate(sk) if re.search("[北南東西]", s))
+assert all(w in sk[first] for w in ("北", "南", "東", "呼ぶ")), sk[first]
+# 36. 報告の行き先の表: どの形でも種類が全部あり、書いた名前（寸法・式・部品の関数）が今の code に在る。形に合わない名前を混ぜない
+for p in (P, {**P, "face": "tori"}, K):
+    ft = t.feedback_targets(p)
+    assert tuple(ft) == t.FEEDBACK_KINDS and "other" in ft and len(ft) == 9
+    for kind, text in ft.items():
+        for name in re.findall(r"[A-Za-z_][A-Za-z0-9_]+", text):
+            assert hasattr(t, name) or name in t.RANGES, (kind, name)
+assert "k_cord" not in " ".join(t.feedback_targets(P).values()) and "cord_length" not in " ".join(t.feedback_targets(K).values())
+# 37. 凍結した負の場面（F5.drum）は、どれも理由が 1 つだけで落ちる（2 つ落ちる場面は、狙った検査を消しても緑のままになる）
+import json
+import pathlib
+for f in sorted(pathlib.Path(__file__).parent.glob("frozen/scenarios/twist_drum_neg*.json")):
+    sc = json.loads(f.read_text(encoding="utf-8"))
+    if sc["expect"]["floors"] == ["F5.drum"]:
+        fs = t.check_physics({**t.DEFAULTS, **sc["params"]})
+        assert len(fs) == 1, (f.name, [x.line() for x in fs])
 print("ok")

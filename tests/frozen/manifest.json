@@ -979,7 +979,7 @@
     "F5.drum"
    ],
    "rc": 3,
-   "sha256": "d27df5682090f6883899161b9a3f1b7c9adbaacde0092167cee0204cedd4f7be"
+   "sha256": "cb956e1bc4fe84c95ac2808a24d7678b3c66c43602015dd544d85d2126a96991"
   },
   "twist_drum_neg_kanko4.json": {
    "floors": [
@@ -987,6 +987,13 @@
    ],
    "rc": 3,
    "sha256": "dbf73b947715c3501052858fffec62746ed4dced726253047a94d49c69322f66"
+  },
+  "twist_drum_neg_kanko5.json": {
+   "floors": [
+    "F5.drum"
+   ],
+   "rc": 3,
+   "sha256": "7eaa6576f3c0f6c5eff27ccfdcdcc175b5bac38cc2fee96c14f5648569edac38"
   },
   "twist_drum_neg_source.json": {
    "floors": [
