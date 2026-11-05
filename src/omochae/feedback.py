@@ -57,18 +57,13 @@ ALLOWED = {"template", "form", "params", "source_id", "built", "moved", "finish"
 PROBLEM_KEYS = {"kind", "step", "note"}
 # 出典の ID と時刻は決まった形だけを通す。自由な文を入れられる欄を、感想の 2 つと困り事の note に絞るため。
 # 個人の情報の形の見方。式だけで全部の書き方は止められないので、これは補助で、受け入れの前に人が全文を読む（omochae.intake）。
-# 見方の芯:
-# - 番号は、区切りの文字の種類を決め打たず、2〜5 桁の数の固まりが 3 つ（国番号なら 4 つ）並ぶ所の桁の数で見る。
-#   区切りの種類で決めると、/・_ ～ の などの区切りですり抜けた。
-# - 小数（0.5 など）の数は固まりに数えない。寸法の小数の並びを電話と取り違えたため。
-# - 範囲（200-1000円）は、後ろに単位が続けば郵便番号と見ない。
+# 見方は _has_pii の docstring（数字の多い所と、連絡先の語と印）。
 REPORTED_AT = re.compile(r"\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?([+-]\d{2}:\d{2}|Z)?)?")
 REPORTED_AT_MAX_DEPTH = 8  # 報告の入れ子の深さの上限。深い入れ子で再帰が止まらないように
 KANJI_DIGITS = str.maketrans("〇一二三四五六七八九", "0123456789")
-UNITS = ("mm", "cm", "m", "g", "kg", "円", "%", "rpm", "px", "度", "°", "枚", "本", "回", "gsm", "秒", "分", "個", "倍", "段")
-EMAIL = re.compile(r"[\w.+-]+@[\w-]+(\.[^\W\d_][\w-]*)+")
-CONTACT = re.compile(r"(?i)\bline\s*(id)?\s*:|https?://|www\.|(?<![\w@])@[a-z_][a-z0-9_.]{2,}|\b(id|tel|mail)\s*:")
-TOKEN = re.compile(r"\d+(\.\d+)?")
+CONTACT = re.compile(r"(?i)@|アット|メアド|メール|電話|携帯|https?://|www\.|[a-z0-9-]+\.(com|net|org|jp|io|me|co|app|dev)\b"
+                     r"|\bat\b.*\bdot\b|(?<![a-z])(tel|mail|line|id)(?![a-z])|twitter|ツイッター|インスタ|instagram|tiktok|youtube"
+                     r"|facebook|フェイスブック|ライン")
 
 
 def _norm(text):
@@ -83,50 +78,17 @@ def _norm(text):
     return re.sub(r"(?<=\w)\s*\.\s*(?=[^\W\d_])", ".", t)
 
 
-def _groups(t):
-    """整数の数の固まり（小数は除く）を、(始まり, 終わり, 桁の文字) で返す。"""
-    return [(m.start(), m.end(), m.group()) for m in TOKEN.finditer(t) if not m.group(1)
-            and not (m.start() > 0 and t[m.start() - 1] == "." and m.start() > 1 and t[m.start() - 2].isdigit())]
-
-
-def _phone(gs, t):
-    for i, (s0, e0, d0) in enumerate(gs):
-        if (d0.startswith("0") and 10 <= len(d0) <= 11) or (d0.startswith("81") and 11 <= len(d0) <= 12):
-            return True  # 区切りの無い番号
-        for n in (3, 4):
-            w = gs[i:i + n]
-            if len(w) < n or any(w[j + 1][0] - w[j][1] > 2 for j in range(n - 1)):
-                continue  # 固まりの間は 2 文字まで（区切りの文字の種類は問わない）
-            digits = "".join(x[2] for x in w)
-            if not all(2 <= len(x[2]) <= 5 for x in w[1:]):
-                continue
-            if (n == 3 and digits.startswith("0") and 10 <= len(digits) <= 11) or \
-                    (n == 4 and digits.startswith("81") and 11 <= len(digits) <= 12):
-                return True
-    return False
-
-
-def _postal(gs, t):
-    if re.search(r"〒\D{0,2}\d{3}\D{0,2}\d{4}", t):
-        return True
-    for i, (s0, e0, d0) in enumerate(gs):
-        if len(d0) == 7 and not t[e0:e0 + 1].isdigit():
-            return True
-        if len(d0) == 3 and i + 1 < len(gs):
-            s1, e1, d1 = gs[i + 1]
-            gap = t[e0:s1]
-            if len(d1) == 4 and gap in ("-", " ", "- ", " -") and not t[e1:].lstrip().startswith(UNITS) \
-                    and not t[e1:e1 + 1].isdigit():
-                return True
-    return False
-
-
 def _has_pii(text):
+    """個人の情報の形があるか。3 回のレビューで、番号の書き方を式で追うと、区切り・空き・桁の分け方ですり抜け続けた。
+    そこで書き方を追わず、次の 2 つで見る（安全の側に倒す。寸法の多い文も落ちるので、知らせで「番号は書かない」と言う）:
+    - 数字の多い所: 近く（24 文字の中）に数字が 7 つ以上ある。電話（10 桁〜）も郵便番号（7 桁）も、ここに当たる。
+    - 連絡先の語と印: @・アット・メール・電話・LINE・SNS の名・URL・ドメインの形。
+    名前は式では見分けられないので、受け入れの前に人が全文を読む（omochae.intake の review）。"""
     t = _norm(text)
-    if EMAIL.search(t) or CONTACT.search(t):
+    idx = [i for i, ch in enumerate(t) if ch.isdigit()]
+    if any(idx[i + 6] - idx[i] < 24 for i in range(len(idx) - 6)):
         return True
-    gs = _groups(t)
-    return _phone(gs, t) or _postal(gs, t)
+    return CONTACT.search(t) is not None
 
 
 def _strings(v, depth=0):
@@ -167,7 +129,7 @@ def check(r):
     except ValueError:
         return [Failure("F12.report", "報告", "入れ子が深すぎる")]
     if any(_has_pii(t) for t in texts):
-        out.append(Failure("F12.pii", "報告", "メールアドレス・電話番号・郵便番号・連絡先の形がある（個人の情報は書かない）"))
+        out.append(Failure("F12.pii", "報告", "数字の多い所か、連絡先の語（@・メール・電話・LINE・URL など）がある。番号や連絡先は書かない（寸法の数字も、近くに 7 つ以上あると落ちる）"))
     if set(r) - ALLOWED:
         out.append(Failure("F12.pii", "欄", f"決まりの外の欄が {len(set(r) - ALLOWED)} つある（名前や連絡先は書かない）"))
     t = r.get("template")

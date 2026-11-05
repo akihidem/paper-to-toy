@@ -54,6 +54,40 @@ with tempfile.TemporaryDirectory() as d:
     rid2, _ = intake.submit(GOOD, pathlib.Path(d))
     rep2 = json.loads((pathlib.Path(d) / "inbox" / f"{rid2}.json").read_text(encoding="utf-8"))
     assert "stuck_step" not in rep2 and "minutes" not in rep2 and "gave_up" not in rep2
+# 5c. 番号の欄に ² や ① を入れても落ちない（受け付けずに知らせる）。ID の形でない物は review で扱わない
+with tempfile.TemporaryDirectory() as d:
+    rid, msgs = intake.submit({**GOOD, "p0_step": ["²"], "stuck_step": ["①"]}, pathlib.Path(d))
+    assert rid is None and msgs, msgs
+    victim = pathlib.Path(d) / "victim.json"
+    victim.write_text("{}", encoding="utf-8")
+    assert intake.reject("../victim", pathlib.Path(d))[0] is False and victim.exists()
+    assert intake.accept("../victim", pathlib.Path(d), confirm="../victim")[0] is False
+# 5d. 画面の送り先は、手元の Host・同じ Origin・画面に埋めた合言葉（token）が揃わないと受け付けない。Content-Length の異常も断る
+import http.client, threading
+from http.server import HTTPServer
+with tempfile.TemporaryDirectory() as d:
+    intake.Handler.base = pathlib.Path(d)
+    srv = intake.make_server(0)
+    port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    def post(body, headers):
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+        c.request("POST", "/report", body=body, headers=headers)
+        r = c.getresponse(); r.read(); c.close()
+        return r.status
+    from urllib.parse import urlencode
+    good = urlencode({k: v[0] for k, v in GOOD.items()} | {"token": intake.Handler.token})
+    host = {"Host": f"127.0.0.1:{port}", "Content-Type": "application/x-www-form-urlencoded"}
+    assert post(good, host) == 200
+    assert post(good, {**host, "Host": "evil.example"}) == 403
+    assert post(good, {**host, "Origin": "https://evil.example"}) == 403
+    assert post(urlencode({k: v[0] for k, v in GOOD.items()} | {"token": "x"}), host) == 403
+    c = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+    c.putrequest("POST", "/report", skip_host=True); c.putheader("Host", f"127.0.0.1:{port}"); c.putheader("Content-Length", "-1"); c.endheaders()
+    assert c.getresponse().status == 400
+    c.close()
+    srv.shutdown()
+    assert srv.server_address[0] == "127.0.0.1"
 # 6. 画面は、全部の雛形を選べ、写真の欄が無く、同意の 2 つを持つ
 page = intake.form_page()
 from omochae.compose import TEMPLATES

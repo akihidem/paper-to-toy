@@ -17,6 +17,7 @@ import html
 import json
 import os
 import pathlib
+import re
 import secrets
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -29,6 +30,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 BASE = ROOT / "local" / "reports"
 MAX_PROBLEMS = 3
 MAX_BODY = 20_000  # 送られる文の上限（バイト）。長すぎる物は読まずに断る
+ID_FORM = re.compile(r"B-\d{8}-\d{6}-[0-9a-f]{4}")  # 受付の ID の形。形でない物は扱わない（../ で受付箱の外を消せた）
 CONSENTS = {"no_pii": "名前・連絡先・ほかの人の事を書いていない", "age": "18 歳以上か、保護者の同意がある"}
 MOVED_JA = {"moved": "動いた", "partly": "少し動いた", "not": "動かない"}
 TZ = datetime.timezone(datetime.timedelta(hours=9))
@@ -60,7 +62,8 @@ def report_from_fields(f):
     for key in ("stuck_step", "minutes"):
         v = one(key)
         if v:
-            r[key] = int(v) if v.isdigit() else v
+            # 半角の数字だけを数にする。isdigit は ² や ① も真で、int() が落ちた
+            r[key] = int(v) if re.fullmatch(r"[0-9]{1,4}", v) else v
     if one("gave_up"):
         r["gave_up"] = one("gave_up") == "yes"
     probs = []
@@ -70,7 +73,7 @@ def report_from_fields(f):
             continue
         pr = {"kind": kind, "note": note, "step": None}
         if step:
-            pr["step"] = int(step) if step.isdigit() else step
+            pr["step"] = int(step) if re.fullmatch(r"[0-9]{1,4}", step) else step
         probs.append(pr)
     r["problems"] = probs
     return r
@@ -98,6 +101,8 @@ def _log(base, line):
 
 def accept(rid, base=BASE, confirm=None):
     """受付箱の報告を受け入れる。confirm は人が打った ID。合わなければ断る。受け入れる前にもう一度 check を通す。"""
+    if not isinstance(rid, str) or not ID_FORM.fullmatch(rid):
+        return False, "受付の ID の形でない"
     d = dirs(base)
     src = d["inbox"] / f"{rid}.json"
     if not src.exists():
@@ -106,7 +111,7 @@ def accept(rid, base=BASE, confirm=None):
         return False, "確かめの ID が合わない（人が端末で打つ）"
     r = json.loads(src.read_text(encoding="utf-8"))
     if check(r):
-        return False, "報告が検査に通らない（受け入れずに却下する）"
+        return False, "報告が検査に通らない（受け入れない。review reject で却下する）"
     r["reviewed_at"] = datetime.datetime.now(TZ).isoformat(timespec="seconds")
     (d["accepted"] / src.name).write_text(json.dumps(r, ensure_ascii=False, indent=1), encoding="utf-8")
     src.unlink()
@@ -116,6 +121,8 @@ def accept(rid, base=BASE, confirm=None):
 
 def reject(rid, base=BASE, reason=""):
     """却下する。中身を消し、ID と確認の記録だけを残す。理由は決まった語だけ（文を残さない）。"""
+    if not isinstance(rid, str) or not ID_FORM.fullmatch(rid):
+        return False, "受付の ID の形でない"
     src = dirs(base)["inbox"] / f"{rid}.json"
     if not src.exists():
         return False, "受付箱に無い"
@@ -156,7 +163,7 @@ fieldset{{margin:.6rem 0}}.ok{{color:#185}}.ng{{color:#a22}}label{{display:inlin
 <label>かかった時間（分・およそ） <input name="minutes" size="4" inputmode="numeric"></label><br>
 <label>動きの感想<br><textarea name="motion_notes" rows="3" cols="50" maxlength="600"></textarea></label><br>
 <label>仕上がり・見た目の感想<br><textarea name="finish_notes" rows="3" cols="50" maxlength="600"></textarea></label>
-{rows}{consents}<button>送る</button></form>
+{rows}{consents}<input type="hidden" name="token" value="{html.escape(Handler.token)}"><button>送る</button></form>
 <script>const F={json.dumps(forms, ensure_ascii=False)};const t=document.getElementById('t'),f=document.getElementById('f');
 function fill(){{f.innerHTML='';for(const v of F[t.value]){{const o=document.createElement('option');o.value=o.textContent=v;f.appendChild(o)}}}}
 t.onchange=fill;fill();</script></html>"""
@@ -164,6 +171,15 @@ t.onchange=fill;fill();</script></html>"""
 
 class Handler(BaseHTTPRequestHandler):
     base = BASE
+    # 画面に埋めて、送る時に返させる合言葉。ほかのサイトが手元のブラウザーから送り込むのを止める（Host と Origin も見る）
+    token = secrets.token_urlsafe(16)
+    port = 0
+
+    def _same_site(self):
+        host = self.headers.get("Host", "")
+        ok_hosts = {f"127.0.0.1:{self.port}", f"localhost:{self.port}"}
+        origin = self.headers.get("Origin")
+        return host in ok_hosts and (origin is None or origin in {f"http://{h}" for h in ok_hosts})
 
     def _send(self, code, body):
         data = body.encode("utf-8")
@@ -179,15 +195,37 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path != "/report":
             return self._send(404, "無い")
-        n = int(self.headers.get("Content-Length") or 0)
+        if not self._same_site():
+            return self._send(403, "断った（手元の画面からだけ受け付ける）")
+        cl = self.headers.get("Content-Length", "")
+        if not re.fullmatch(r"[0-9]{1,6}", cl):
+            return self._send(400, "断った（長さが読めない）")
+        n = int(cl)
         if n > MAX_BODY:
             return self._send(413, form_page(["長すぎる"]))
-        fields = parse_qs(self.rfile.read(n).decode("utf-8", "replace"))
-        rid, msgs = submit(fields, self.base)
+        try:
+            fields = parse_qs(self.rfile.read(n).decode("utf-8", "replace"))
+            if (fields.get("token") or [""])[0] != self.token:
+                return self._send(403, "断った（画面を開き直して送る）")
+            rid, msgs = submit(fields, self.base)
+        except Exception:  # 想定外でも、送られた値や送った人の IP を記録に出さない（handle_error の traceback を出さない）
+            return self._send(400, form_page(["受け付けられなかった（画面を開き直して送る）"]))
         self._send(200 if rid else 400, form_page(msgs, rid))
 
     def log_message(self, *a):
         pass  # 送った人の IP や時刻の記録を残さない
+
+
+class QuietServer(HTTPServer):
+    def handle_error(self, request, client_address):
+        pass  # 既定は送った人の IP と traceback（送られた値を含みうる）を stderr に出すので、出さない
+
+
+def make_server(port):
+    """127.0.0.1 だけで開く。port 0 なら空いている番号。Handler.port を実際の番号にする（Host を確かめるため）。"""
+    srv = QuietServer(("127.0.0.1", port), Handler)
+    Handler.port = srv.server_address[1]
+    return srv
 
 
 def main(argv=None):
@@ -205,8 +243,9 @@ def main(argv=None):
     if args.cmd == "serve":
         Handler.base = base
         dirs(base)
-        print(f"http://127.0.0.1:{args.port}/ で開いた（手元の機械だけ）。止めるのは Ctrl-C", file=sys.stderr)
-        HTTPServer(("127.0.0.1", args.port), Handler).serve_forever()
+        srv = make_server(args.port)
+        print(f"http://127.0.0.1:{Handler.port}/ で開いた（手元の機械だけ）。止めるのは Ctrl-C", file=sys.stderr)
+        srv.serve_forever()
         return 0
     d = dirs(base)
     if args.action == "list":
@@ -216,6 +255,9 @@ def main(argv=None):
     if not args.id:
         print("ID が要る", file=sys.stderr)
         return 4
+    if not ID_FORM.fullmatch(args.id):
+        print("受付の ID の形でない", file=sys.stderr)
+        return 3
     if args.action == "show":
         p = d["inbox"] / f"{args.id}.json"
         if not p.exists():
