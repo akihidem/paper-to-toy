@@ -75,7 +75,7 @@ assert any("蓋の縁" in m for m in msgs({**MALLET, "head_r": 4, "wheel_r": 8, 
 stick_p = {**STICK, "stick_in": 6}
 fork = next(q for q in w.parts(stick_p) if q.key == "fork")
 A, fi = stick_p["fork_arm"], stick_p["fork_inner"]
-marks = [it for it in fork.art if it["kind"] == "line"]
+marks = [it for it in fork.art if it.get("mark") == "stop"]
 ys = sorted(round(y, 6) for it in marks for _, y in it["pts"])
 assert ys == [A - 6, A - 6, A + fi + 6, A + fi + 6], ys
 assert any("6mm" in s and "割り箸" in s for s in w.steps(stick_p)), w.steps(stick_p)
@@ -117,4 +117,33 @@ for p in (STICK, MALLET):
     fold = next(i for i, x in enumerate(st) if "谷折り" in x)
     assert cut < knife < fold, (cut, knife, fold)
 assert "中の四角い穴" not in w.steps(RAT)[1]  # 鼠車に中の穴は無い
+
+# 9. 位置の印（鼠車の人形を貼る所・春駒の割り箸を止める所）は、エンジンの位置の印（kind "mark"）で刷る。
+# 雛形が色と線を決めて濃い実線で描くと、「部品を実線で切る」の行で切る線と取り違え、四角を穴として切り抜くか、腕を切り離しうる。
+# 破線にすると谷折りと取り違える。色と線の形は描く所（render）が 1 つに決め、凡例に意味が出る
+from omochae import render
+from omochae.__main__ import load_source
+from omochae.compose import compose
+for p, key, tag in ((RAT, "body", "rider"), (STICK, "fork", "stop")):
+    q = next(x for x in w.parts(p) if x.key == key)
+    items = [it for it in q.art if it.get("mark") == tag]
+    assert items, (tag, "位置の印が無い")
+    assert all(it["kind"] == "mark" and "stroke" not in it and "sw" not in it for it in items), (tag, items)
+    _, lay, fl = compose("wheel_cart", p, load_source(w.SOURCES[p["ride"]]))
+    assert fl == [], [f.line() for f in fl]
+    assert any(t.text and "位置の印（切らない・折らない）" in t.text for t in lay["texts"]), (tag, "凡例に位置の印が無い")
+    svg = render.to_svg(lay)
+    assert svg.count(f'stroke-dasharray="{render.MARK_DASH}"') == len(items) + 1, tag  # 印の数 ＋ 凡例の見本 1 本
+# 春駒の二股には、印のほかに線の絵を置かない（腕を横切る実線が残ると切られる）
+assert not [it for it in next(x for x in w.parts(STICK) if x.key == "fork").art if it["kind"] == "line"]
+# 印を刷らない形（ぶりぶりは柄に鉛筆で印を付ける。春駒で差し込みが 0 に近い時は折り目が印）の凡例には出さない
+for p in (MALLET, {**STICK, "stick_in": 0.5}):
+    _, lay, fl = compose("wheel_cart", p, load_source(w.SOURCES[p["ride"]]))
+    assert fl == [], [f.line() for f in fl]
+    assert not any(t.text and "位置の印" in t.text for t in lay["texts"]), p["ride"]
+# 組み方の文は、印を刷った見た目（赤茶の点の線）で言う。刷らない時は折り目で止めると言う
+assert any("人形" in s and "赤茶の点の線" in s and "四角い印" in s for s in w.steps(RAT)), w.steps(RAT)
+assert any("割り箸の先" in s and "赤茶の点の線" in s for s in w.steps(STICK)), w.steps(STICK)
+st0 = w.steps({**STICK, "stick_in": 0.5})
+assert any("割り箸の先" in s and "折り目で止め" in s for s in st0) and not any("赤茶" in s for s in st0), st0
 print("ok")

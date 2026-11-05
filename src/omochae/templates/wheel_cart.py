@@ -60,6 +60,7 @@ HOLE_MARGIN = 4  # 穴の中心から紙の端・折り目までの見込み（�
 MIN_GROUND = 2  # 胴の底（二股の腕の先）と床のすき間。紙の胴は撓むので 0 では擦る見込み
 MIN_SIDE_GAP = 1.5  # 車輪と胴の側面（二股の内側・割り箸の先）のすき間。重ねた厚紙の車輪は少し首を振るので余裕を取る
 TIP_MARGIN = 2  # 重心が前後の車輪の接地点から内側にある幅。押した時の傾きで越えないための余裕
+STOP_MARK_MIN = 0.5  # 春駒の割り箸を止める印を刷る下限（差し込む深さ）。これ以下は印が頭の折り目と重なるので刷らず、折り目で止める
 AXLE_HOLE_R = 2.0  # 回る軸の穴。竹串（太さ約 3mm）が回るように緩くする
 WHEEL_HOLE_R = 1.3  # 車輪の穴。竹串の先であけ、軸に貼って留める
 SKEWER_D = 3.0  # 竹串の太さの見込み
@@ -288,6 +289,12 @@ def _line(pts, stroke, sw):
     return {"kind": "line", "pts": pts, "stroke": stroke, "sw": sw}
 
 
+def _mark(pts, tag, closed=False):
+    """組み立ての位置の印。色と線の形は描く所（render）が決める（赤茶の点の線）。雛形が濃い実線で描くと切る線と、破線で描くと谷折りと
+    取り違えるので、ここでは色も太さも持たない。tag は試験が印を見分けるための名。"""
+    return {"kind": "mark", "pts": pts, "closed": closed, "mark": tag}
+
+
 def _rect(x0, y0, x1, y1):
     return [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
 
@@ -327,9 +334,8 @@ def _rat_body(p):
     # 人形の耳を貼る位置の印。重心の式（cart_com_x）は人形が rider_at * L にあるとして数えるので、その位置を紙に刷る。
     # 耳は人形の幅の 0.2〜0.8（幅 0.6 倍）、奥行き 7mm。上の面の幅の真ん中に置く。
     rx, half, my = H + p["rider_at"] * L, p["figure_w"] * 0.3, (top0 + top1) / 2
-    rider_mark = [(rx - half, my - 3.5), (rx + half, my - 3.5), (rx + half, my + 3.5), (rx - half, my + 3.5), (rx - half, my - 3.5)]
     art = [_poly(_rect(H + e, top0 + e, H + L - e, top1 - e), PAPER),  # 上の面（人形を貼る）
-           dict(_line(rider_mark, DARK, 0.3), mark="rider"),
+           _mark(_rect(rx - half, my - 3.5, rx + half, my + 3.5), "rider", closed=True),
            _poly(_rect(H + e, b0 + e, H + L - e, b1 - e), BOARD),  # 底は板の色
            _poly(_rect(H + L + e, b0 + e, H + L + H - e, b1 - e), PAPER)]  # 後ろの壁（尾を貼る）
     # 前の壁は鼠の顔を正面から。壁は x = H の折り目で底から立つので、x の小さい方が上。
@@ -410,10 +416,10 @@ def _fork(p):
     e = 0.25
     art = [_poly(_rect(e, e, fw - e, A - e), WOOD), _poly(_rect(e, A + fi + e, fw - e, total - e), WOOD)]
     # 割り箸の先を止める印。車輪と割り箸の先のすき間の式は差し込む深さ stick_in で数えるので、両方の腕の、頭の折り目から
-    # stick_in の所に線を刷る。0 に近いと折り目と重なるので刷らない（折り目そのものが印になる）。
+    # stick_in の所に位置の印を刷る。0 に近いと折り目と重なるので刷らない（折り目そのものが印になる）。
     d = p["stick_in"]
-    if d > 0.5:
-        art += [_line([(0.3, A - d), (fw - 0.3, A - d)], DARK, 0.4), _line([(0.3, A + fi + d), (fw - 0.3, A + fi + d)], DARK, 0.4)]
+    if d > STOP_MARK_MIN:
+        art += [_mark([(0.3, A - d), (fw - 0.3, A - d)], "stop"), _mark([(0.3, A + fi + d), (fw - 0.3, A + fi + d)], "stop")]
     return Part(4, "fork", "二股", _rect(0, 0, fw, total), label_xy=(1, A * 0.4), label="4",
                 valley=[((0, A), (fw, A)), ((0, A + fi), (fw, A + fi))],
                 holes=[(fw / 2, a, AXLE_HOLE_R), (fw / 2, total - a, AXLE_HOLE_R)],
@@ -604,7 +610,7 @@ def steps(p):
         out += ["1 胴を破線で谷折りし、糊代で貼って箱にする",
                 "竹串を 1 胴の前の 2 つの穴に通し、後ろの 2 つの穴にもう 1 本通す",
                 f"車輪を竹串の両端に差し、胴との間を {p['wheel_gap']}mm あけて貼る（厚紙を挟んで測る）。軸ごと回る事を確かめる",
-                f"2 人形の耳を谷折りし、1 胴の上の面の四角い印に貼る（印の真ん中は前の端から {p['rider_at'] * p['body_length']:g}mm）", "3 尾を丸くして、後ろの壁に貼る",
+                f"2 人形の耳を谷折りし、1 胴の上の面の四角い印（赤茶の点の線。切らない）に貼る（印の真ん中は前の端から {p['rider_at'] * p['body_length']:g}mm）", "3 尾を丸くして、後ろの壁に貼る",
                 "机の上で押して、まっすぐ転がるか見る"]
     elif p["ride"] == "mallet":
         out += ["1 頭の真ん中の面の四角い穴を切る（カッターは大人がする）",
@@ -615,9 +621,12 @@ def steps(p):
                 f"車輪と蓋の間を {p['wheel_gap']}mm あけて貼る（厚紙を挟んで測る）。軸ごと回る事を確かめる",
                 "柄を持って、車輪を床に付けて引くか押す"]
     else:
+        # 割り箸を止める所は、刷った印の見た目で言う。印を刷らない深さ（_fork と同じ下限）では、折り目で止めると言う
+        stop = (f"割り箸の先は腕の位置の印（赤茶の点の線。頭の折り目から {p['stick_in']:g}mm）で止めて貼る" if p["stick_in"] > STOP_MARK_MIN
+                else "割り箸の先は頭の折り目で止めて貼る")
         out += ["1 頭と 2 頭の裏で割り箸の上の端を挟んで貼る", "3 布の胴を割り箸に巻き、頭の下に貼る",
                 "4 二股の真ん中の四角い穴を切る（カッターは大人がする）",
-                f"4 二股を破線で谷折りして コ の字にし、真ん中の四角い穴に割り箸の下の端を通す。割り箸の先は腕の線（頭の折り目から {p['stick_in']:g}mm）で止めて貼る（深く入れると車輪に当たる）",
+                "4 二股を破線で谷折りして コ の字にし、真ん中の四角い穴に割り箸の下の端を通す。" + stop + "（深く入れると車輪に当たる）",
                 "竹串を二股の穴と車輪の穴に通し、車輪を二股の真ん中に貼る。軸ごと回る事を確かめる",
                 "割り箸を持ち、車輪を床に付けて押す"]
     return out
