@@ -101,7 +101,7 @@ assert all("new_value" not in p for p in pw["problems"])
 # 4. 入口: check は 0 / 3、summarize は形の誤りや個人の情報のある報告を数えずに知らせる
 with tempfile.TemporaryDirectory() as d:
     good, bad = pathlib.Path(d, "r1.json"), pathlib.Path(d, "r2.json")
-    good.write_text(json.dumps(OK, ensure_ascii=False), encoding="utf-8")
+    good.write_text(json.dumps({**OK, "reviewed_at": "2026-11-05T10:00:00+09:00"}, ensure_ascii=False), encoding="utf-8")
     bad.write_text(json.dumps({**OK, "motion_notes": "x@y.jp"}, ensure_ascii=False), encoding="utf-8")
     run = lambda *a: subprocess.run([sys.executable, "-m", "omochae.feedback", *a], cwd=ROOT, capture_output=True, text=True,
                                     env={"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin"})
@@ -121,7 +121,8 @@ with tempfile.TemporaryDirectory() as d:
 
 # 5. 雛形を足したら、直しの行き先の床（FLOORS）にも足す。漏れると、その雛形の案が「族の床」としか言えない
 from omochae.compose import TEMPLATES
-assert set(TEMPLATES) <= set(fb.FLOORS), sorted(set(TEMPLATES) - set(fb.FLOORS))
+# 雛形に無い行も残さない（main に無い雛形の行があっても気づけなかった）
+assert set(TEMPLATES) == set(fb.FLOORS), sorted(set(TEMPLATES) ^ set(fb.FLOORS))
 # 例の報告（examples/reports/spinner_pinwheel.json）は通る
 assert fb.check(json.loads((ROOT / "examples/reports/spinner_pinwheel.json").read_text(encoding="utf-8"))) == []
 
@@ -167,5 +168,51 @@ finally:
 assert any(f.floor == "F12.report" and "problems" in f.line() for f in fb.check({**OK, "problems": 1}))
 assert any("problems[0].note" in f.line() for f in fb.check({**OK, "problems": [{"kind": "fit", "note": "あ" * 301}]}))
 assert fb.check({**OK, "problems": [{"kind": "fit", "note": "あ" * 300}]}) == []
+
+# 8. メモは信用しない文。改行と記号は、まとめに 1 行の字として出す（見出しの行や HTML のタグを差し込めた）
+NASTY = "擦れた\n\n# 見出し\r\n<script>alert(1)</script>\u2028## 次\x1b[31m **太** [字](x) `c` | _y_ & \\"
+for bad_note in ({"kind": "fit", "step": 4, "note": NASTY}, {"kind": "guide", "step": 4, "note": NASTY}):
+    r8 = {**OK, "problems": [bad_note]}
+    assert fb.check(r8) == [], [f.line() for f in fb.check(r8)]
+    md = fb._markdown(fb.summarize([r8])) + "\n" + fb._service_markdown(fb.service_summary([r8]))
+    plain = {**r8, "problems": [{**bad_note, "note": "擦れた"}]}
+    md_plain = fb._markdown(fb.summarize([plain])) + "\n" + fb._service_markdown(fb.service_summary([plain]))
+    assert md.count("\n") == md_plain.count("\n"), md  # 行が増えない
+    assert not any(c in md for c in ("\r", "\x1b", "\u2028")), repr(md)  # 見えない文字も残さない
+    line = next(ln for ln in md.splitlines() if "擦れた" in ln)
+    assert line.startswith("  - 「") and line.endswith("」"), line
+    # 字は残して読めるようにし、記号は無効にする
+    assert "<script>" not in md and "&lt;script&gt;" in line and "見出し" in line, line
+    for raw, safe in (("**", r"\*\*"), ("[字]", r"\[字\]"), ("`c`", r"\`c\`"), ("|", r"\|"), ("_y_", r"\_y\_"), ("&", "&amp;")):
+        assert safe in line, (raw, line)
+    # JSON の形でも、メモは 1 行にする（記号の無効化は Markdown の出す時だけ。JSON は JSON の決まりで守られる）
+    notes = [n for g in fb.summarize([r8]).values() for pr in g["problems"] for n in pr["notes"]] \
+        + [n for pr in fb.service_summary([r8])["problems"] for n in pr["notes"]]
+    assert notes and all(not any(c in n for c in "\n\r\x1b\u2028") for n in notes) and all("<script>" in n for n in notes), notes
+
+# 9. まとめは、人が受け入れた報告（reviewed_at がある）だけを数える。受付箱を直に指しても、読まれていない文を出さない
+with tempfile.TemporaryDirectory() as d:
+    pathlib.Path(d, "unread.json").write_text(json.dumps({**OK, "problems": [{"kind": "fit", "step": 4, "note": "山田といいます"}]}, ensure_ascii=False), encoding="utf-8")
+    pathlib.Path(d, "read.json").write_text(json.dumps({**OK, "reviewed_at": "2026-11-05T10:00:00+09:00"}, ensure_ascii=False), encoding="utf-8")
+    r = run("summarize", d)
+    assert r.returncode == 0 and "unread.json" in r.stderr and "山田" not in r.stdout + r.stderr, (r.stdout, r.stderr)
+    assert "報告 1 件" in r.stdout and "read.json" not in r.stderr.replace("unread.json", ""), (r.stdout, r.stderr)
+    # 決まりの外の値の印は、印にならない
+    pathlib.Path(d, "forged.json").write_text(json.dumps({**OK, "reviewed_at": "はい"}, ensure_ascii=False), encoding="utf-8")
+    r = run("summarize", d)
+    assert "forged.json" in r.stderr and "報告 1 件" in r.stdout, (r.stdout, r.stderr)
+# 例の報告は、README のとおりにまとめられる
+r = run("summarize", "examples/reports")
+assert r.returncode == 0 and "報告 1 件" in r.stdout and r.stderr == "", (r.stdout, r.stderr)
+
+# 10. 本物の報告の置き場は git の外。公開の repo で追跡する examples/reports に本物を置かない
+from omochae import intake
+assert intake.BASE.relative_to(ROOT).parts[0] == "local"
+assert "local/" in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+
+# 11. 命令の間違った呼び方は rc 4（2 は使わない）
+for wrong in ((), ("nope",), ("check",), ("summarize",), ("check", "a", "b"), ("summarize", "a", "--nope")):
+    r = run(*wrong)
+    assert r.returncode == 4, (wrong, r.returncode, r.stderr)
 
 print("ok")
