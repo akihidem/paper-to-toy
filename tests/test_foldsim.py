@@ -126,7 +126,7 @@ with tempfile.TemporaryDirectory() as d:
     assert r.returncode == 3 and "F5.overlap" in r.stderr, r.stderr
 
 # 5. 3D の中で折って組む（omochae.fold3d）。本人の決定で、提出の前は御来迎 つまみの形の 2 つだけを見る。
-#    3D.close: 外筒（と、竹串の線の前提になる内筒）を、刷った折り線で 90° ずつ谷折りすると角筒に閉じ、糊代が 1 面目に重なる
+#    3D.close: 外筒（と、竹串の線の前提になる内筒）を、型紙の折り線で 90° ずつ谷折りすると角筒に閉じ、糊代が 1 面目に重なる
 #    3D.skewer: 内筒の 2 つの穴を通す竹串が水平で、静かな時から押し上げ切るまで、外筒の溝の中を通る
 #    狙いは式と絵のずれを見つける事なので、刷る部品を 1 か所だけ崩した負の対照で、それぞれ 1 行だけ落ちる事も見る。
 import copy
@@ -148,8 +148,9 @@ def built(params):
 pc, p = built(TAB)
 notes, fails = fold3d.check(list(pc.values()), p)
 assert not fails, [f.line() for f in fails]
-# 何を確かめたかを、閉じる（外筒・内筒）・並ぶ（竹串）の順に 1 行ずつ言う
+# 何を確かめたかを、閉じる（外筒・内筒）・並ぶ（竹串）の順に 1 行ずつ言う。糊代の相手は帯の反対の端の 1 面目
 assert [n.split()[:2] for n in notes] == [["閉じる", "1"], ["閉じる", "2"], ["並ぶ", "竹串:"]], notes
+assert all("糊代は1 面目に" in n for n in notes[:2]), notes
 
 # 寸法を変えても、型紙の検査に通る組は 3D でも通る。通らない組が見つかったら、刷る紙は変えずに知らせる（今は無い）。
 # 寸法は互いに縛り合う（押し上げる量・筒の高さ・内筒の長さ・溝の上の余白・扇の台の大きさ）ので、範囲の端の総当たりでは
@@ -212,6 +213,7 @@ def widen_first(dx):
 
 
 NEG = [
+    ("tube", move_fold(1, 300.0), "3D.close", "1 外筒", "分けていない"),  # 折り線が外形の外 → 黙って飛ばさず落とす（4 にしない）
     ("tube", move_fold(2, 2.0), "3D.close", "1 外筒", "継ぎ目"),    # 3 本目の折り線を 2mm ずらす → 90° ずつでは閉じない
     ("tube", widen_first(2.0), "3D.close", "1 外筒", "継ぎ目"),     # 1 面目だけ 2mm 広い → 継ぎ目が 1 面目の縁に来ない
     ("tube", lambda q: q.glue.clear(), "3D.close", "1 外筒", "糊代"),  # 糊代の印が無い → 継ぎ目を貼れない
@@ -226,6 +228,13 @@ for key, fn, floor, where, word in NEG:
     assert [(f.floor, f.where) for f in fl] == [(floor, where)] and word in fl[0].message, (floor, where, [f.line() for f in fl])
 # 崩す前の部品はそのまま通る（上の負の対照が、写し方のせいで落ちたのでない事）
 assert not fold3d.check(tampered("tube", lambda q: None), p)[1]
+# 閉じる確かめは、外形の始めの点（動かさない面）に依らない。糊代の面から始めても、相手は帯の反対の端の面で、継ぎ目が合う
+w = 4 * A + p["tube_glue"]
+tube = copy.deepcopy(pc["tube"])
+k = tube.outline.index((w, 2))
+tube.outline = tube.outline[k:] + tube.outline[:k]
+note, fail = fold3d._close(tube, fold3d.fold(tube))
+assert fail is None and "継ぎ目のずれ 0.00mm・糊代は帯の反対の端の面に 100% 重なる" in note, (note, fail)
 
 
 # 入口（python -m omochae.fold3d）の終了の番号: 0 確かめて通った / 3 落ちた / 4 確かめられない
@@ -245,8 +254,12 @@ with tempfile.TemporaryDirectory() as d:
 
     r = cli3d("--params", params_file("bad.json", {"push_part": "tab", "fold_height": 50}))
     assert r.returncode == 3 and "F5.fan_height" in r.stderr, r.stderr
-    # 最小の 1 本はつまみの形だけ。ほかの形・雛形は「まだ組めない」で 4（通ったとは言わない）
-    r = cli3d("--params", params_file("stick.json", {"push_part": "stick"}))
+    # 形の値の打ち間違いは、まだ組めない形（4）でなく、型紙の検査の範囲の外（3）
+    r = cli3d("--params", params_file("typo.json", {"push_part": "tabb"}))
+    assert r.returncode == 3 and "F5.range" in r.stderr, r.stderr
+    # 最小の 1 本はつまみの形だけ。型紙の検査に通るほかの形・雛形は「まだ組めない」で 4（通ったとは言わない）。
+    # 柄の形は押す部品が筒の高さより短いと型紙の検査（F5.stroke）で 3 になるので、通る長さにする
+    r = cli3d("--params", params_file("stick.json", {"push_part": "stick", "pusher_height": 84}))
     assert r.returncode == 4 and "まだ 3D で組めない" in r.stderr, r.stderr
     r = cli3d("--template", "pivot_counterweight", "--params", params_file("neck.json", {"mount": "neck"}))
     assert r.returncode == 4 and "まだ 3D で組めない" in r.stderr, r.stderr

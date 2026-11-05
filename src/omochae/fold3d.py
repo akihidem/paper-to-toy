@@ -1,7 +1,8 @@
 """型紙の部品を 3D の中で折って組み、刷る部品の形が組み方と合うかを確かめる（最小の 1 本: 御来迎 つまみの形）。
 
 本人の考え（2026-11-05「手順をAIが3Dで組み立てて、その過程を手順書にする」）の最初の 1 本。本人の決定で、提出の前は 2 つだけを見る:
-- 3D.close: 外筒を、刷った折り線で 90° ずつ谷折りすると角筒に閉じ、糊代が 1 面目に重なる。内筒も同じく見る（竹串の線の前提なので）
+- 3D.close: 外筒を、型紙の折り線で 90° ずつ谷折りすると角筒に閉じ、糊代が帯の反対の端の面（1 面目）に重なる。内筒も同じく見る
+  （竹串の線の前提なので）。折り線が面を分けていない・つながらない面がある、も同じ床で落とす（式と絵のずれそのものなので）
 - 3D.skewer: 内筒の 2 つの穴を通す竹串が水平で、内筒を外筒に入れて静かな時から押し上げ切るまで、外筒の溝の中を通る
 判断の芯:
 - 寸法の式（check_physics・slot_span）でなく、刷る部品（外形・折り線・糊代・穴・溝の切り込み）から形を組む。式と絵がずれた時に見つけるため
@@ -9,6 +10,8 @@
 - 刷る紙・手順の文・凍結の床は変えない。入口は python -m omochae.fold3d だけで、型紙の検査（compose）には繋がない。
   3D.close・3D.skewer は凍結の基準（tests/frozen/criteria.md）の床ではない（足すかは本人が決める）
 前提と限り:
+- 外筒は折り線を刷らず、絵の色の境で折る（hide_folds）。ここで折るのは型紙の折り線のデータで、色の境がその上にある事は見ない
+  （型紙の絵は、折り線と同じ位置から面ごとに塗っている）
 - 内筒は外筒の真ん中に、同じ面の並び（1 面目と 1 面目を向かい合わせ）で入れる。すき間の分だけ横にずれる遊びは見ない
 - 竹串の太さは、溝の式（slot_span）と同じ knob_width と見る。刷った穴の丸（半径 1.2mm）は竹串の先であける所の印で、竹串の太さではない
 - 行程は、内筒の上の端が口より押し上げる量だけ下にある時（静かな時）から、口に届く時（押し上げ切る）まで。
@@ -124,24 +127,30 @@ def _long(a, b, ext=1.0):
     return LineString([(a[0] - ux, a[1] - uy), (b[0] + ux, b[1] + uy)])
 
 
+class FoldError(Exception):
+    """型紙の折り線と外形が合わず、折れない（3D.close で落とす。確かめられない 4 にはしない。式と絵のずれそのものなので）。"""
+
+
 def fold(part, deg=FOLD_DEG):
     """部品を折り線で面に分け、外形の始めの点を持つ面を動かさずに、折り線ごとに deg° 折る。谷は刷った面の側へ、山は裏へ折る。
 
     Returns 面の並び（list of Face）。親の面を子より先に並べる。最初の面が動かない面（筒なら 1 面目）。
+    折り線が面をちょうど 2 つに分けていない時と、折り線でつながらない面がある時は FoldError（黙って飛ばすと、崩れた型紙が通る）。
     """
     lines = [(ln, 1) for ln in part.valley] + [(ln, -1) for ln in part.mountain]
     polys = [Polygon(part.outline)]
     for (a, b), _ in lines:
         polys = [g for f in polys for g in split(f, _long(a, b)).geoms]
-    # 折り線の真ん中の点が縁にある 2 面を、その折り線でつなぐ
+    # 折り線に沿って縁を持つ 2 面を、その折り線でつなぐ。縁が線に沿う長さで見る（真ん中の点で見ると、溝や穴を通る折り線で外れる）
     adj = {}
-    for (a, b), sign in lines:
-        mid = Point((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
-        touch = [i for i, f in enumerate(polys) if f.boundary.distance(mid) < EPS]
-        if len(touch) == 2:
-            i, j = touch
-            adj.setdefault(i, []).append((j, (a, b), sign))
-            adj.setdefault(j, []).append((i, (a, b), sign))
+    for n, ((a, b), sign) in enumerate(lines, 1):
+        seg = LineString([a, b])
+        touch = [i for i, f in enumerate(polys) if f.boundary.intersection(seg).length > EPS]
+        if len(touch) != 2:
+            raise FoldError(f"{n} 本目の折り線が面を 2 つに分けていない（外形と合わない）")
+        i, j = touch
+        adj.setdefault(i, []).append((j, (a, b), sign))
+        adj.setdefault(j, []).append((i, (a, b), sign))
     start = Point(part.outline[0])
     root = next(i for i, f in enumerate(polys) if f.boundary.distance(start) < EPS)
     faces, index = [Face(polys[root], IDENTITY)], {root: 0}
@@ -164,6 +173,8 @@ def fold(part, deg=FOLD_DEG):
                 T = _turn(parent.T, o, d, -ang)
             index[j] = len(faces)
             faces.append(Face(polys[j], T, (a, b), k))
+    if len(faces) < len(polys):
+        raise FoldError(f"折り線でつながらない面が {len(polys) - len(faces)} つある（外形と折り線が合わない）")
     return faces
 
 
@@ -187,9 +198,26 @@ def _seam(part, face, ends):
     return min(gaps, default=math.inf)
 
 
-def _close(part, faces):
-    """糊代の面が、継ぎ目を合わせてほかの面に重なるか。Returns (所見の文, 失敗)。どちらか片方だけ。
+def _far_end(faces, g):
+    """折り線でつながる面の木の上で、面 g から一番遠い面（帯の反対の端）。筒の糊代の面なら、帯の始めの 1 面目。"""
+    def up(k):
+        out = [k]
+        while faces[out[-1]].parent is not None:
+            out.append(faces[out[-1]].parent)
+        return out
+    pg = up(g)
 
+    def dist(k):
+        pk = up(k)
+        common = next(x for x in pk if x in pg)
+        return pk.index(common) + pg.index(common)
+    return max(range(len(faces)), key=dist)
+
+
+def _close(part, faces):
+    """糊代の面が、継ぎ目を合わせて帯の反対の端の面に重なるか。Returns (所見の文, 失敗)。どちらか片方だけ。
+
+    相手は帯の反対の端の面に限る。どの面でもよいとすると、折り線の崩れで糊代が別の面に貼り付く形を通しうる（レビューの指摘）。
     継ぎ目を先に見る。折り線が 1 本ずれた時に、継ぎ目と糊代の重なりの 2 行が出ると、1 つの崩れが 2 つに見えるため。
     """
     where = part.label
@@ -198,19 +226,22 @@ def _close(part, faces):
     glued = _glue_faces(part, faces)
     if not glued:
         return None, Failure("3D.close", where, "糊代が折り線で区切られた 1 面になっておらず、折って貼れない")
-    g = glued[0]
-    ends = [g.at(pt) for pt in g.hinge]
-    others = [k for k, f in enumerate(faces) if f is not g and k != g.parent]
-    gap, k = min((_seam(part, faces[k], ends), k) for k in others)
+    gi = next(i for i, f in enumerate(faces) if f is glued[0])
+    g, k = faces[gi], _far_end(faces, gi)
+    # 糊代の面の折り線。外形の始めの点が糊代の面にあると、その面が動かない面になり、折り線は子の面の側が持つ
+    hinge = g.hinge or next((f.hinge for f in faces if f.parent == gi), None)
+    if k == gi or hinge is None:
+        return None, Failure("3D.close", where, "糊代を折って貼る相手の面が無い")
+    gap = _seam(part, faces[k], [g.at(pt) for pt in hinge])
     if gap > TOL:
-        return None, Failure("3D.close", where, f"刷った折り線で 90° ずつ谷折りすると、継ぎ目が {gap:.1f}mm ずれ、角筒に閉じない")
+        return None, Failure("3D.close", where, f"型紙の折り線で 90° ずつ谷折りすると、継ぎ目が {gap:.1f}mm ずれ、角筒に閉じない")
     f = faces[k]
     mapped = [f.flat(g.at(pt)) for pt in g.poly.exterior.coords]
     lift = max(abs(z) for _, z in mapped)
     cover = Polygon([pt for pt, _ in mapped]).intersection(f.poly).area / g.poly.area
     if lift > TOL or cover < GLUE_COVER:
         return None, Failure("3D.close", where, f"糊代が貼る相手の面に重ならない（浮き {lift:.1f}mm・重なり {cover:.0%}）")
-    target = "1 面目" if k == 0 else "ほかの面"
+    target = "1 面目" if k == 0 else "帯の反対の端の面"
     folds = len(part.valley) + len(part.mountain)
     return f"閉じる {where}: 折り線 {folds} 本を 90° ずつ谷折りすると角筒に閉じる（継ぎ目のずれ {gap:.2f}mm・糊代は{target}に {cover:.0%} 重なる）", None
 
@@ -303,7 +334,11 @@ def check(parts, p):
         raise ToolMissing("外筒と内筒が無い（最小の 1 本は、御来迎 つまみの形だけを組む）")
     notes, failures, folded = [], [], {}
     for q in (by[OUTER], by[INNER]):
-        folded[q.key] = fold(q)
+        try:
+            folded[q.key] = fold(q)
+        except FoldError as e:
+            failures.append(Failure("3D.close", q.label, str(e)))
+            continue
         note, fail = _close(q, folded[q.key])
         if fail:
             failures.append(fail)
@@ -320,13 +355,13 @@ def run(template_id, params, source, title=None, inject=None):
     """型紙と同じ検査（compose）を通ってから、3D で組んで確かめる。Returns (所見, 失敗)。
 
     型紙の検査に落ちる寸法は、組む前にその失敗を返す（落ちる寸法の部品を「組める形」として確かめないため。omochae.foldsim と同じ）。
+    まだ組めない形かは、型紙の検査の後で見る。先に見ると、形の値の打ち間違いも F5.range（3）でなく「まだ組めない」（4）になった（レビューの指摘）。
     """
-    tpl = TEMPLATES[template_id]
-    if template_id != "slider_fan" or not isinstance(params, dict) or {**tpl.DEFAULTS, **params}.get(tpl.FORM) != "tab":
-        raise ToolMissing("まだ 3D で組めない形（最小の 1 本は、御来迎 つまみの形の外筒と竹串だけ）")
     p, layout, failures = compose(template_id, params, source, title=title, inject=inject or {})
     if failures:
         return [], failures
+    if template_id != "slider_fan" or p.get(TEMPLATES[template_id].FORM) != "tab":
+        raise ToolMissing("まだ 3D で組めない形（最小の 1 本は、御来迎 つまみの形の外筒と竹串だけ）")
     return check(layout["parts"], p)
 
 
