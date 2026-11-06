@@ -1,0 +1,501 @@
+"""作り方の 3D を、組み方の文と 1 対 1 の段ごとの形にして JSON で出す。
+
+窓口の決定（2026-11-07 カード 020154）「サイトの3Dの作り直しは推し(a)、エンジンが JSON で出す形で進めてください。」による。
+サイトの「組み立てを立体で見る」は、この JSON を読んで描く（形の決めは ~/work/hackathon-grove/state/3d-json/FORMAT-v1.md と同じ）。
+
+判断の芯:
+- 紙の形は刷る部品（雛形の parts）から読み、折り線で分けた面を omochae.fold3d.fold で硬いまま折る。完成図を別に描かない。
+  紙か寸法を直すと 3D も一緒に変わる。たわみ・紙の厚み・糊は入れない（形の確かめで、動くかは確かめない）。
+- 段は組み方の文（steps）と 1 対 1。段ごとに、部品ごとの置き場（根の面の行列）と、折り線ごとの角と、面ごとの行列を出す。
+  描く側は面ごとの行列だけで描いてもよく、折る途中を動かすなら面のつながり（tree）と角（angles）を使う。
+- 座標はサイトの組み立ての頁と同じ: 長さは mm、x が右・y が下・z が見る人の方。部品の座標は刷った紙の上の座標（y は下）で、刷った面は +z。
+  行列は CSS の matrix3d と同じ列優先の 16 個で、部品の座標の点 (x, y, 0, 1) を世界の点へ写す。
+- 部品を置く所は、刷った位置の印（脚の四角・尾の四角・軸の穴）から決める（印と貼った物の所がずれないため）。
+"""
+import argparse
+import json
+import math
+import pathlib
+import sys
+
+from .compose import TEMPLATES
+from .fold3d import FoldError, fold
+
+FORMAT = "omochae-assembly-3d/1"
+ROOT = pathlib.Path(__file__).resolve().parents[2]
+
+# 4×4 の行列は行の並び（[[...], ...]）で持ち、JSON に出す時だけ列優先の 16 個にする
+I4 = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+# fold3d は頁の点を (x, -y, 0) に持ち上げ、y が上の 3D で折る。サイトの座標（y が下）へは y を裏返す。持ち上げと戻しは同じ行列
+FLIP = [[1.0, 0.0, 0.0, 0.0], [0.0, -1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+
+
+def mul(a, b):
+    return [[sum(a[i][k] * b[k][j] for k in range(4)) for j in range(4)] for i in range(4)]
+
+
+def apply(m, p):
+    x, y, z = p
+    return tuple(m[i][0] * x + m[i][1] * y + m[i][2] * z + m[i][3] for i in range(3))
+
+
+def css(m):
+    """列優先の 16 個（CSS の matrix3d と同じ順）。"""
+    return [round(m[r][c], 5) for c in range(4) for r in range(4)]
+
+
+def _sub(a, b):
+    return tuple(x - y for x, y in zip(a, b))
+
+
+def _unit(a):
+    n = math.sqrt(sum(x * x for x in a))
+    return tuple(x / n for x in a)
+
+
+def _cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def _frame(p0, p1, p2):
+    """3 点の正規直交の向き（列が e1・e2・e3）。e1 は p0→p1、e3 は 3 点の面の向き。"""
+    e1 = _unit(_sub(p1, p0))
+    e3 = _unit(_cross(e1, _sub(p2, p0)))
+    e2 = _cross(e3, e1)
+    return (e1, e2, e3)
+
+
+def rigid(src, dst):
+    """src の 3 点を dst の 3 点へ写す剛体の変換（4×4）。3 点の形が同じ（距離が同じ）時に正しい。"""
+    a, b = _frame(*src), _frame(*dst)
+    # R = B · Aᵀ（A・B は列が向きの行列）
+    R = [[sum(b[k][i] * a[k][j] for k in range(3)) for j in range(3)] for i in range(3)]
+    t = _sub(dst[0], tuple(sum(R[i][j] * src[0][j] for j in range(3)) for i in range(3)))
+    return [R[0] + [t[0]], R[1] + [t[1]], R[2] + [t[2]], [0.0, 0.0, 0.0, 1.0]]
+
+
+def translate(x=0.0, y=0.0, z=0.0):
+    return [[1.0, 0.0, 0.0, x], [0.0, 1.0, 0.0, y], [0.0, 0.0, 1.0, z], [0.0, 0.0, 0.0, 1.0]]
+
+
+def _from_fold(T):
+    R, t = T
+    return [list(R[0]) + [t[0]], list(R[1]) + [t[1]], list(R[2]) + [t[2]], [0.0, 0.0, 0.0, 1.0]]
+
+
+class Sheet:
+    """刷る部品 1 つを、折り線で分けた面にした物。面の番号は fold3d.fold の並び（根の面が 0）で、角を変えても同じ。"""
+
+    def __init__(self, part):
+        self.part = part
+        self.kind = {tuple(map(tuple, ln)): "valley" for ln in part.valley}
+        self.kind.update({tuple(map(tuple, ln)): "mountain" for ln in part.mountain})
+        flat = fold(part, deg=0)
+        self.panels = [[(round(x, 4), round(y, 4)) for x, y in f.poly.exterior.coords[:-1]] for f in flat]
+        self.rows = {i: {"parent": f.parent, "hinge": [list(f.hinge[0]), list(f.hinge[1])], "kind": self.kind[tuple(map(tuple, f.hinge))]}
+                     for i, f in enumerate(flat) if f.parent is not None}
+
+    def local(self, angles):
+        """折り線ごとの角（度。無い線は 0）で折った時の、面ごとの行列（部品の座標 → 根の面を動かさない 3D、サイトの向き）。"""
+        faces = fold(self.part, deg=0, angles=angles)
+        return [mul(FLIP, mul(_from_fold(f.T), FLIP)) for f in faces], faces
+
+    def panel_of(self, x, y):
+        """部品の座標の点を含む面の番号。"""
+        from shapely.geometry import Point, Polygon
+        pt = Point(x, y)
+        return min(range(len(self.panels)), key=lambda i: Polygon(self.panels[i]).distance(pt))
+
+
+def pose(sheet, angles, place):
+    """1 つの部品の、置き場・角・面ごとの行列。place は根の面を動かさない 3D から世界への行列。"""
+    local, faces = sheet.local(angles)
+    world = [mul(place, m) for m in local]
+    by_face = {}
+    for i, f in enumerate(faces):
+        if f.hinge is not None:
+            by_face[str(i)] = round(abs(angles.get(f.hinge, 0.0)), 4)
+    return {"place": css(world[0]), "angles": by_face, "panels": {str(i): css(m) for i, m in enumerate(world)}}, world
+
+
+def place_by(sheet, angles, pts_local, pts_world):
+    """部品の座標の 3 点 pts_local が、折った後に世界の pts_world に来る置き場。"""
+    local, _ = sheet.local(angles)
+    idx = [sheet.panel_of(x, y) for x, y in pts_local]
+    pre = [apply(local[i], (x, y, 0.0)) for i, (x, y) in zip(idx, pts_local)]
+    return rigid(pre, pts_world)
+
+
+def part_json(q):
+    """刷る部品の形と絵（部品の座標）。"""
+    s = Sheet(q)
+    labels = [{"text": t, "x": x, "y": y, "size": 2.8} for t, x, y in (q.label_lines or [(q.label, *q.label_xy)]) if t]
+    return {"key": q.key, "number": q.number, "name": q.name, "outline": [list(p) for p in q.outline],
+            "panels": [{"id": i, "poly": [list(p) for p in poly]} for i, poly in enumerate(s.panels)],
+            "tree": {"root": 0, "rows": {str(i): r for i, r in s.rows.items()}},
+            "art": q.art, "glue": q.glue, "holes": [list(h) for h in q.holes], "round_cuts": [list(c) for c in q.round_cuts],
+            "labels": labels}, s
+
+
+def _signed_turn(parent, child, hinge):
+    """子の面が親の面に対して、折り線の 1 点目から 2 点目の向きのまわりに回った角（度・右ねじで正）。サイトの頁の turn と同じ向き。"""
+    rel = mul(_invert(parent), child)
+    (x1, y1), (x2, y2) = hinge
+    u = _unit((x2 - x1, y2 - y1, 0.0))
+    R = [row[:3] for row in rel[:3]]
+    vee = (R[2][1] - R[1][2], R[0][2] - R[2][0], R[1][0] - R[0][1])
+    s = sum(a * b for a, b in zip(u, vee)) / 2
+    c = (R[0][0] + R[1][1] + R[2][2] - 1) / 2
+    return math.degrees(math.atan2(s, c))
+
+
+def _invert(m):
+    """剛体の変換の逆。"""
+    R = [row[:3] for row in m[:3]]
+    t = [m[0][3], m[1][3], m[2][3]]
+    Rt = [[R[j][i] for j in range(3)] for i in range(3)]
+    ti = [-sum(Rt[i][k] * t[k] for k in range(3)) for i in range(3)]
+    return [Rt[0] + [ti[0]], Rt[1] + [ti[1]], Rt[2] + [ti[2]], [0.0, 0.0, 0.0, 1.0]]
+
+
+def _circle(cx, cy, r, n=48):
+    return [[round(cx + r * math.cos(2 * math.pi * k / n), 4), round(cy + r * math.sin(2 * math.pi * k / n), 4)] for k in range(n)]
+
+
+class Scene:
+    """部品の面と、刷った紙の上の置き場。段ごとの形（POSE）を作る。"""
+
+    def __init__(self, layout, paper_gap=30.0):
+        self.page = layout["page"]
+        self.parts = {q.key: q for q in layout["parts"]}
+        self.sheets = {k: Sheet(q) for k, q in self.parts.items()}
+        # 刷った紙は机の上（y = 0）の、組み立てる所の奥（z が負）に置く。頁の x はそのまま x、頁の y は z
+        self.paper_z0 = -(self.page.h + paper_gap)
+
+    def on_paper(self, key, lift=0.0):
+        """部品が、刷った紙の上の刷った所に、刷った面を上にして寝ている置き場。"""
+        q = self.parts[key]
+        flat = {}
+        src = [(0.0, 0.0), (10.0, 0.0), (0.0, 10.0)]
+        dst = [(q.x + x - self.page.w / 2, -lift, self.paper_z0 + q.y + y) for x, y in src]
+        return place_by(self.sheets[key], flat, src, dst)
+
+    def state(self, key, angles, place):
+        sheet = self.sheets[key]
+        local, faces = sheet.local(angles)
+        world = [mul(place, m) for m in local]
+        turns, ang = {}, {}
+        for i, f in enumerate(faces):
+            if f.parent is not None:
+                turns[str(i)] = round(_signed_turn(local[f.parent], local[i], f.hinge), 4)
+                ang[str(i)] = round(abs(angles.get(f.hinge, 0.0)), 4)
+        return {"place": css(world[0]), "turns": turns, "angles": ang, "panels": {str(i): css(m) for i, m in enumerate(world)}}, world
+
+    def pose(self, states, hidden=(), rods=None, balls=None, view=None, on_paper=False, tool=None, custom=()):
+        out = {"parts": {}, "hidden": sorted(hidden), "rods": rods or {}, "balls": balls or {},
+               "view": view or {"rx": -20, "ry": 30}, "on_paper": bool(on_paper)}
+        for key, (angles, place) in states.items():
+            if key in hidden:
+                continue
+            st, _ = self.state(key, angles, place)
+            if key in custom:
+                st["custom"] = True
+            out["parts"][key] = st
+        if tool:
+            out["tool"] = tool
+        return out
+
+    def part_list(self):
+        out = []
+        for key, q in self.parts.items():
+            data, sheet = part_json(q)
+            from shapely.geometry import Point, Polygon
+            for panel in data["panels"]:
+                poly = Polygon(panel["poly"])
+                inner = [_circle(cx, cy, r) for cx, cy, r in q.round_cuts if poly.contains(Point(cx, cy))]
+                inner += [[[x, y], [x + w, y], [x + w, y + h], [x, y + h]] for x, y, w, h in q.cuts if poly.contains(Point(x + w / 2, y + h / 2))]
+                if inner:
+                    panel["inner"] = inner
+            out.append(data)
+        return out
+
+
+def _world_pt(world, sheet, x, y):
+    """部品の座標の点の、世界の点（その点を含む面の行列で写す）。"""
+    return apply(world[sheet.panel_of(x, y)], (x, y, 0.0))
+
+
+def rot_x(deg):
+    a = math.radians(deg)
+    c, s = math.cos(a), math.sin(a)
+    return [[1.0, 0.0, 0.0, 0.0], [0.0, c, -s, 0.0], [0.0, s, c, 0.0], [0.0, 0.0, 0.0, 1.0]]
+
+
+def rot_z(deg):
+    a = math.radians(deg)
+    c, s = math.cos(a), math.sin(a)
+    return [[c, -s, 0.0, 0.0], [s, c, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+
+
+def _all_lines(part, deg):
+    return {tuple(map(tuple, ln)): float(deg) for ln in list(part.valley) + list(part.mountain)}
+
+
+def _tiger(scene, p):
+    """張子の首振り虎（首の形）の段ごとの形。手順の文（pivot_counterweight.steps）と 1 対 1。
+
+    判断の芯:
+    - 胴は箱に折る角を tests/test_pivot_fold3d.py と同じにする（角の面の 4 本は 45°、ほかは 90°）。上の面は手順 11 まで開けておく
+      （上の面の 2 本の線を 0°）。胴の底の面を机に置く（脚を貼るまでは机の上、貼った後は脚の高さだけ上）。
+    - 軸は胴の 2 つの穴の真ん中を通る（刷った穴の所から読む）。首の帯・頭・重りの腕・粘土は軸に対して置き、揺れる時は軸のまわりに回す。
+    - 帯は穴の側の端が軸、反対の端（前）が頭の真ん中（揺れの式が頭の真ん中を帯の先に置くのと同じ）。頭は両面なら 180° 折る。
+    - 脚の角筒の上の口は、胴の底の四角（位置の印）に、尾の糊代は上の面の後ろの四角に合わせる（印と貼った物がずれないため）。
+    """
+    from .templates import pivot_counterweight as pc
+    if p["mount"] != "neck":
+        return None
+    parts, S = scene.parts, scene.sheets
+    H, L, W, c = p["body_height"], p["body_length"], p["body_width"], p["body_round"]
+    d = c / math.sqrt(2) if c else 0
+    Wt, Hs, g = W - 2 * d, H - d, p["glue"]
+    top0, top1 = g, g + Wt
+    b0 = top1 + c + Hs
+    b1 = b0 + W
+    legh = p["leg_height"]
+    legs = [k for k in ("leg1", "leg2", "leg3", "leg4") if k in parts]
+
+    # 胴の折る角（閉じた箱）と、上の面を開けた角
+    closed = _all_lines(parts["body"], 90)
+    rows = sorted((ln for ln in closed if ln[0][1] == ln[1][1] and ln[0][0] == H and ln[1][0] == H + L), key=lambda ln: ln[0][1])
+    if c:
+        for i in (0, 1, 2, len(rows) - 1):
+            closed[rows[i]] = 45.0
+    opened = dict(closed)
+    for ln in rows:
+        if abs(ln[0][1] - top0) < 1e-9 or abs(ln[0][1] - top1) < 1e-9:
+            opened[ln] = 0.0
+
+    def body_place(angles, ybot):
+        src = [(H, b0), (H + L, b0), (H, b1)]
+        dst = [(0.0, ybot, W / 2), (L, ybot, W / 2), (0.0, ybot, -W / 2)]
+        return place_by(S["body"], angles, src, dst)
+
+    def axle_of(angles, place):
+        local, _ = S["body"].local(angles)
+        world = [mul(place, m) for m in local]
+        (x1, y1, _), (x2, y2, _) = (_world_pt(world, S["body"], hx, hy) for hx, hy, _ in parts["body"].holes)
+        return (x1 + x2) / 2, (y1 + y2) / 2, world
+
+    # 首の帯・頭・腕を、軸を原点にした「立てた」置き場で決める（後で机に寝かせる・軸へ動かす・揺らす）
+    sw = p["strip_width"]
+    strip_len = p["neck_length"] + 12
+    band = {ln: 180.0 for ln in _all_lines(parts["strip"], 0)}
+    head_ang = {ln: 180.0 for ln in _all_lines(parts["head"], 0)}
+    hd = parts["head"]
+    fy = hd.mountain[0][0][1] if hd.mountain else None
+    w, h = p["head_w"], p["head_h"]
+    head_mid = (w / 2, 1.5 * fy) if fy is not None else (w / 2, h / 2)
+    tip = -(strip_len - pc.STRIP_HOLE)  # 帯の先（頭の真ん中）の、軸からの x
+    za = 0.6  # 腕は帯の横（重ならないように少しずらす。見せる時だけ）
+
+    def neck_places(G):
+        """軸を原点にした立てた置き場に、G（4×4）を掛けた置き場。"""
+        strip = place_by(S["strip"], band, [(sw / 2, pc.STRIP_HOLE), (sw / 2, pc.STRIP_HOLE + 10), (sw, pc.STRIP_HOLE)],
+                         [apply(G, (0.0, 0.0, 0.0)), apply(G, (-10.0, 0.0, 0.0)), apply(G, (0.0, sw / 2, 0.0))])
+        hx, hy = head_mid
+        head = place_by(S["head"], head_ang, [(hx, hy), (hx + 10, hy), (hx, hy + 10)],
+                        [apply(G, (tip, 0.0, 0.0)), apply(G, (tip + 10, 0.0, 0.0)), apply(G, (tip, 10.0, 0.0))])
+        drop = place_by(S["drop"], {}, [(4.0, 4.0), (4.0, 14.0), (14.0, 4.0)],
+                        [apply(G, (0.0, 0.0, za)), apply(G, (0.0, 10.0, za)), apply(G, (10.0, 0.0, za))]) if "drop" in parts else None
+        clay = apply(G, (0.0, p["weight_below_axle"], za))
+        return strip, head, drop, clay
+
+    cur = {k: ({}, scene.on_paper(k)) for k in parts}
+    steps_text = pc.steps(p)
+    steps = []
+    view_side = {"rx": -15, "ry": 25}
+
+    def snap(**kw):
+        return scene.pose({k: v for k, v in cur.items()}, **kw)
+
+    page_w = scene.page.w
+    # 1. 物差し
+    ruler = None
+    steps.append([snap(on_paper=True, view={"rx": -70, "ry": 0}, tool=ruler)])
+    # 2. 切る・小さい穴（紙から部品を切り離す）
+    steps.append([snap(on_paper=True, view={"rx": -70, "ry": 0}, tool={"kind": "scissors"}), snap(view={"rx": -70, "ry": 0})])
+    # 3. 前の壁の丸い穴を切る
+    steps.append([snap(view={"rx": -70, "ry": 0, "focus": ["body"]}, tool={"kind": "knife"})])
+    # 4. 胴を箱に（上の面は開ける）
+    cur["body"] = ({}, body_place({}, 0.0))
+    a = snap(view={"rx": -35, "ry": 30, "focus": ["body"]})
+    cur["body"] = (opened, body_place(opened, 0.0))
+    steps.append([a, snap(view={"rx": -20, "ry": 30, "focus": ["body"]})])
+    xa, ya, _ = axle_of(opened, cur["body"][1])
+    # 首の組を机に寝かせる置き場（胴の前の机の上。立てた置き場を x の軸のまわりに 90° 倒す）
+    lay = mul(translate(-70.0, 0.0, 0.0), rot_x(90))
+    # 5. 帯を半分に折る
+    s_lay, h_lay, d_lay, _ = neck_places(lay)
+    cur["strip"] = ({}, place_by(S["strip"], {}, [(sw / 2, pc.STRIP_HOLE), (sw / 2, pc.STRIP_HOLE + 10), (sw, pc.STRIP_HOLE)],
+                                [apply(lay, (0.0, 0.0, 0.0)), apply(lay, (-10.0, 0.0, 0.0)), apply(lay, (0.0, sw / 2, 0.0))]))
+    a = snap(view={"rx": -50, "ry": 10, "focus": ["strip"]})
+    cur["strip"] = (band, s_lay)
+    steps.append([a, snap(view={"rx": -50, "ry": 10, "focus": ["strip"]})])
+    # 6. 頭を折って帯の先を挟む
+    hx, hy = head_mid
+    cur["head"] = ({}, place_by(S["head"], {}, [(hx, hy), (hx + 10, hy), (hx, hy + 10)],
+                                [apply(lay, (tip - 30, 0.0, 0.0)), apply(lay, (tip - 20, 0.0, 0.0)), apply(lay, (tip - 30, 10.0, 0.0))]))
+    a = snap(view={"rx": -50, "ry": 10, "focus": ["strip", "head"]})
+    cur["head"] = (head_ang, h_lay)
+    steps.append([a, snap(view={"rx": -50, "ry": 10, "focus": ["strip", "head"]})])
+    # 7. 帯を前の壁の穴に入れ、竹串を通す（立てて穴の前へ → 軸の所へ → 竹串）
+    front = mul(translate(xa - 40.0, ya, 0.0), I4)
+    s7, h7, _, _ = neck_places(front)
+    cur["strip"], cur["head"] = (band, s7), (head_ang, h7)
+    a = snap(view=view_side)
+    at = translate(xa, ya, 0.0)
+    s7, h7, d7, clay7 = neck_places(at)
+    cur["strip"], cur["head"] = (band, s7), (head_ang, h7)
+    b = snap(view=view_side)
+    skewer = {"skewer": {"from": [xa, ya, (W + 20) / 2], "to": [xa, ya, -(W + 20) / 2]}}
+    steps.append([a, b, snap(view=view_side, rods=skewer)])
+    # 8. 腕に竹串・粘土・仮留め
+    cur["drop"] = ({}, d7)
+    a = snap(view=view_side, rods=skewer)
+    clay = {"clay": {"at": list(clay7)}}
+    steps.append([a, snap(view=view_side, rods=skewer, balls=clay)])
+    # 9. 腕を帯に貼る
+    steps.append([snap(view=view_side, rods=skewer, balls=clay)])
+    # 10. 脚を角筒にして底の四角へ（胴の組を脚の高さだけ上げる）
+    leg_ang = {k: _all_lines(parts[k], 90) for k in legs}
+    if legs:
+        for i, k in enumerate(legs):
+            cur[k] = (leg_ang[k], mul(translate(L + 20 + 12 * i, 0.0, -30.0), place_by(S[k], leg_ang[k], [(0.0, 3.0), (7.0, 3.0), (14.0, 3.0)],
+                                                                                              [(0.0, -legh, 0.0), (7.0, -legh, 0.0), (7.0, -legh, -7.0)])))
+        a = snap(view=view_side, rods=skewer, balls=clay)
+        up = translate(0.0, -legh, 0.0)
+        cur["body"] = (opened, mul(up, cur["body"][1]))
+        for k in ("strip", "head", "drop"):
+            cur[k] = (cur[k][0], mul(up, cur[k][1]))
+        xa, ya = xa, ya - legh
+        clay7 = (clay7[0], clay7[1] - legh, clay7[2])
+        skewer = {"skewer": {"from": [xa, ya, (W + 20) / 2], "to": [xa, ya, -(W + 20) / 2]}}
+        clay = {"clay": {"at": list(clay7)}}
+        _, _, bworld = axle_of(opened, cur["body"][1])
+        marks = [a_ for a_ in parts["body"].art if a_["kind"] == "mark" and a_.get("mark") == "leg"]
+        for k, mk in zip(legs, marks):
+            m = [_world_pt(bworld, S["body"], x, y) for x, y in mk["pts"]]
+            src = [(0.0, 3.0), (7.0, 3.0), (14.0, 3.0)]
+            for order in ((0, 1, 2), (1, 0, 3), (0, 3, 2), (3, 0, 1), (1, 2, 3), (2, 1, 0), (2, 3, 0), (3, 2, 1)):
+                pl = place_by(S[k], leg_ang[k], src, [m[j] for j in order])
+                local, _ = S[k].local(leg_ang[k])
+                bottom = apply(mul(pl, local[S[k].panel_of(3.5, 3.0 + legh)]), (3.5, 3.0 + legh, 0.0))
+                if bottom[1] > m[0][1] + legh - 0.5:
+                    break
+            cur[k] = (leg_ang[k], pl)
+        steps.append([a, snap(view=view_side, rods=skewer, balls=clay)])
+    # 11. 上の面を閉じる
+    ybot = -legh if legs else 0.0
+    cur["body"] = (closed, body_place(closed, ybot))
+    steps.append([snap(view={"rx": -30, "ry": 30}, rods=skewer, balls=clay)])
+    # 12. 尾の糊代を折って、上の面の後ろの四角に貼る
+    tail_ang = _all_lines(parts["tail"], 90)
+    _, _, bworld = axle_of(closed, cur["body"][1])
+    mk = next(a_ for a_ in parts["body"].art if a_["kind"] == "mark" and a_.get("mark") == "tail")
+    xs, ys = [x for x, _ in mk["pts"]], [y for _, y in mk["pts"]]
+    sq = {"f0": (min(xs), min(ys)), "f1": (min(xs), max(ys)), "b0": (max(xs), min(ys))}
+    tl = pc.TAIL_LEN
+    cur["tail"] = (tail_ang, mul(translate(L + 30, -40.0, 0.0), place_by(S["tail"], tail_ang, [(0.0, tl), (pc.TAIL_W, tl), (0.0, tl + pc.TAIL_TAB)],
+                                                                        [(0.0, 0.0, 0.0), (0.0, 0.0, -pc.TAIL_W), (pc.TAIL_TAB, 0.0, 0.0)])))
+    a = snap(view={"rx": -30, "ry": 30}, rods=skewer, balls=clay)
+    for f0, f1, b0_ in ((sq["f0"], sq["f1"], sq["b0"]), (sq["f1"], sq["f0"], (sq["b0"][0], max(ys)))):
+        pl = place_by(S["tail"], tail_ang, [(0.0, tl), (pc.TAIL_W, tl), (0.0, tl + pc.TAIL_TAB)],
+                      [_world_pt(bworld, S["body"], *f0), _world_pt(bworld, S["body"], *f1), _world_pt(bworld, S["body"], *b0_)])
+        local, _ = S["tail"].local(tail_ang)
+        tipw = apply(mul(pl, local[0]), (pc.TAIL_W / 2, 0.0, 0.0))
+        if tipw[1] < _world_pt(bworld, S["body"], *f0)[1] - 10:
+            break
+    cur["tail"] = (tail_ang, pl)
+    steps.append([a, snap(view={"rx": -25, "ry": 35}, rods=skewer, balls=clay)])
+    # できあがりの動き: 頭が揺れて止まる（軸のまわりに回す）
+    finale = []
+    base = {k: cur[k] for k in ("strip", "head", "drop")}
+    for deg in (12.0, -8.0, 4.0, 0.0):
+        swing = mul(translate(xa, ya, 0.0), mul(rot_z(deg), translate(-xa, -ya, 0.0)))
+        for k, (ang, pl) in base.items():
+            cur[k] = (ang, mul(swing, pl))
+        cpos = apply(swing, tuple(clay7))
+        finale.append(snap(view={"rx": -10, "ry": 20}, rods=skewer, balls={"clay": {"at": list(cpos)}}))
+    for k, v in base.items():
+        cur[k] = v
+    if len(steps) != len(steps_text):
+        raise ValueError(f"段の数 {len(steps)} が手順の文の数 {len(steps_text)} と合わない")
+    rods = {"skewer": {"r": 1.0, "color": "#c8a46a", "kind": "rod", "owner": "body"}}
+    balls = {"clay": {"r": round(pc.clay_r(p["weight_g"]), 3), "color": "#8a6f55"}}
+    return steps_text, steps, finale, rods, balls
+
+
+RECIPES = {"pivot_counterweight": _tiger}
+
+
+def build(scenario_path, commit=None):
+    """場面の JSON（examples/ の形）から、作り方の 3D の JSON を作る。Returns dict。組み立ての書き方が無い雛形は None。"""
+    from .__main__ import load_source
+    from .compose import compose
+    path = pathlib.Path(scenario_path)
+    sc = json.loads(path.read_text(encoding="utf-8"))
+    tid = sc["template"]
+    if tid not in RECIPES:
+        return None
+    tpl = TEMPLATES[tid]
+    p = {**tpl.DEFAULTS, **sc["params"]}
+    _, layout, fails = compose(tid, p, load_source(sc["source_id"]))
+    if fails:
+        raise ValueError("型紙の検査に落ちる寸法では 3D を作らない: " + "; ".join(f.line() for f in fails))
+    scene = Scene(layout)
+    made = RECIPES[tid](scene, p)
+    if made is None:
+        return None
+    texts, steps, finale, rods, balls = made
+    toy = path.stem.replace("_", "-")
+    return {
+        "format": FORMAT, "toy": toy, "template": tid, "source_id": sc["source_id"], "params": sc["params"],
+        "paper": {"w": scene.page.w, "h": scene.page.h, "at": {q.key: [round(q.x, 4), round(q.y, 4)] for q in layout["parts"]}},
+        "parts": scene.part_list(),
+        "steps": [{"n": i + 1, "text": t, "poses": poses} for i, (t, poses) in enumerate(zip(texts, steps))],
+        "finale": {"poses": finale},
+        "rods": rods, "balls": balls,
+        "engine": {"commit": commit, "command": f"python -m omochae.assembly3d --scenario {path.as_posix()}"},
+    }
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(prog="python -m omochae.assembly3d", description="作り方の 3D を、手順と 1 対 1 の段ごとの形にして JSON で出す")
+    ap.add_argument("--scenario", required=True, help="場面の JSON（examples/tora_v6.json など）")
+    ap.add_argument("--out", help="書き出す JSON（無ければ標準出力）")
+    ap.add_argument("--commit", help="出所に書く commit（無ければ git の HEAD）")
+    args = ap.parse_args(argv)
+    commit = args.commit
+    if commit is None:
+        import subprocess
+        r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True)
+        commit = r.stdout.strip() or None
+    try:
+        data = build(args.scenario, commit)
+    except (FoldError, ValueError) as e:
+        print(f"作れない: {e}", file=sys.stderr)
+        return 3
+    if data is None:
+        print("この雛形の組み立ての書き方はまだ無い", file=sys.stderr)
+        return 4
+    text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    if args.out:
+        pathlib.Path(args.out).write_text(text, encoding="utf-8")
+        print(args.out)
+    else:
+        print(text)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

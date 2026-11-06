@@ -1,0 +1,183 @@
+"""作り方の 3D の JSON（omochae.assembly3d。窓口の決定 2026-11-07 カード 020154「…(a)、エンジンが JSON で出す形…」）を確かめる。
+
+サイトの組み立ての頁はこの JSON を読んで描く（形の決めは ~/work/hackathon-grove/state/3d-json/FORMAT-v1.md）。次を見る:
+1. 段と手順の文が 1 対 1（数も文も同じ）。どの POSE も、隠した物のほかの部品を全部持ち、面の数が部品の面の数と同じ。
+2. 面ごとの行列（panels）と、根の置き場（place）＋面のつながり（tree）＋向きの付いた角（turns）から作った形が同じ
+   （サイトは折る途中を turns で動かし、panels で確かめる。サイトの確かめは 0.7mm 以内）。
+3. 虎 v6 のできあがり（最後の段の最後の POSE）:
+   - 胴は閉じた箱で、底は脚の高さだけ上。どの面も刷った面が外を向く。糊代 5 枚は貼る相手の面に寝る（0.6mm 以内・95% 以上重なる）。
+   - 脚の角筒の上の口は、胴の底の四角（位置の印）と同じ所で、脚の下の端は机（y = 0）。尾の糊代は上の面の後ろの四角に重なり、尾は上に立つ。
+   - 竹串は胴の 2 つの穴を通り、前の壁の丸い穴の真ん中は竹串と同じ高さ。帯の穴は竹串の上。頭は両面で、帯の先が頭の真ん中。
+   - 粘土の玉は 5 重りの腕の下の穴の所。
+4. できあがりの動き（finale）: 頭が揺れて止まる。最後は段の終わりの形と同じ。
+5. 入口: 書き出せる（終わりの値 0）。組み立ての書き方が無い形（御来迎のつまみの形）は 4。
+紙は折り線で分けた硬い面（fold3d と同じ）。紙の厚み・糊・たわみは入れない。
+"""
+import json
+import math
+import os
+import pathlib
+import subprocess
+import sys
+import tempfile
+
+from shapely.geometry import Polygon
+
+from omochae.assembly3d import build
+from omochae.templates import pivot_counterweight as pc
+
+ROOT = pathlib.Path(__file__).resolve().parents[1]
+data = build(ROOT / "examples/tora_v6.json", commit="test")
+v6 = dict(pc.DEFAULTS, **json.loads((ROOT / "examples/tora_v6.json").read_text(encoding="utf-8"))["params"])
+parts = {q["key"]: q for q in data["parts"]}
+TOL = 0.01  # 行列は 5 桁に丸めて出すので、世界の点は 0.01mm まで（サイトの確かめは 0.7mm）
+
+
+def M(c):
+    """列優先の 16 個 → 行の並びの 4×4。"""
+    return [[c[col * 4 + row] for col in range(4)] for row in range(4)]
+
+
+def mul(a, b):
+    return [[sum(a[i][k] * b[k][j] for k in range(4)) for j in range(4)] for i in range(4)]
+
+
+def ap(m, p):
+    x, y = p[0], p[1]
+    return tuple(m[i][0] * x + m[i][1] * y + m[i][3] for i in range(3))
+
+
+def hinge(p1, p2, deg):
+    """部品の座標の、点 p1 を通り p1→p2 の向きの線のまわりに deg 回す 4×4（右ねじで正。サイトの頁の hinge と同じ）。"""
+    ux, uy = p2[0] - p1[0], p2[1] - p1[1]
+    n = math.hypot(ux, uy)
+    x, y = ux / n, uy / n
+    a = math.radians(deg)
+    c, s, t = math.cos(a), math.sin(a), 1 - math.cos(a)
+    R = [[t * x * x + c, t * x * y, s * y], [t * x * y, t * y * y + c, -s * x], [-s * y, s * x, c]]
+    px, py = p1
+    tr = [px - (R[0][0] * px + R[0][1] * py), py - (R[1][0] * px + R[1][1] * py), -(R[2][0] * px + R[2][1] * py)]
+    return [R[0] + [tr[0]], R[1] + [tr[1]], R[2] + [tr[2]], [0.0, 0.0, 0.0, 1.0]]
+
+
+def normal(m):
+    return (m[0][2], m[1][2], m[2][2])
+
+
+# 1. 段と文
+assert data["format"] == "omochae-assembly-3d/1" and data["toy"] == "tora-v6" and data["engine"]["commit"] == "test"
+assert [s["text"] for s in data["steps"]] == pc.steps(v6) and [s["n"] for s in data["steps"]] == list(range(1, len(pc.steps(v6)) + 1))
+for s in data["steps"]:
+    assert s["poses"], s["n"]
+    for pose in s["poses"]:
+        assert set(pose["parts"]) | set(pose["hidden"]) == set(parts), (s["n"], sorted(pose["parts"]))
+        for key, st in pose["parts"].items():
+            assert len(st["panels"]) == len(parts[key]["panels"]), (s["n"], key)
+
+# 2. panels と place＋tree＋turns が同じ形
+worst = 0.0
+for pose in [q for s in data["steps"] for q in s["poses"]] + data["finale"]["poses"]:
+    for key, st in pose["parts"].items():
+        tree = parts[key]["tree"]
+        mats = {str(tree["root"]): M(st["place"])}
+
+        def of(i):
+            if i not in mats:
+                row = tree["rows"][i]
+                h = row["hinge"]
+                mats[i] = mul(of(str(row["parent"])), hinge(h[0], h[1], st["turns"][i]))
+            return mats[i]
+        for pan in parts[key]["panels"]:
+            i = str(pan["id"])
+            a, b = of(i), M(st["panels"][i])
+            worst = max(worst, max(math.dist(ap(a, pt), ap(b, pt)) for pt in pan["poly"]))
+assert worst < 0.01, worst
+
+# 3. 虎 v6 のできあがり
+last = data["steps"][-1]["poses"][-1]
+world = {key: {str(p["id"]): M(last["parts"][key]["panels"][str(p["id"])]) for p in parts[key]["panels"]} for key in last["parts"]}
+H, L, W, legh, ax = v6["body_height"], v6["body_length"], v6["body_width"], v6["leg_height"], v6["axle_height"]
+body = parts["body"]
+pts = [ap(world["body"][str(p["id"])], q) for p in body["panels"] for q in p["poly"]]
+lo, hi = [min(q[k] for q in pts) for k in range(3)], [max(q[k] for q in pts) for k in range(3)]
+assert all(abs(a - b) < TOL for a, b in zip(lo, (0.0, -legh - H, -W / 2))) and all(abs(a - b) < TOL for a, b in zip(hi, (L, -legh, W / 2))), (lo, hi)
+center = ((lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, 0.0)
+# 面の点は 4 桁に丸めて出すので、糊代の面は重なりの広さで見分ける（99% 以上が糊代の多角形の内）
+glue_panels = {p["id"] for p in body["panels"] if any(Polygon(g).intersection(Polygon(p["poly"])).area >= 0.99 * Polygon(p["poly"]).area for g in body["glue"])}
+assert len(glue_panels) == 5, glue_panels
+for p in body["panels"]:
+    if p["id"] in glue_panels:
+        continue
+    m = world["body"][str(p["id"])]
+    c = Polygon(p["poly"]).centroid
+    w = ap(m, (c.x, c.y))
+    assert sum((w[k] - center[k]) * normal(m)[k] for k in range(3)) > 0, p["id"]  # 刷った面が外
+
+
+def lies_on(m_tab, tab_poly, m_face, face_poly, tol=0.6):
+    """糊代の面が、相手の面に寝て（面から tol 以内）、95% 以上重なるか。"""
+    inv_n, o = normal(m_face), ap(m_face, (0.0, 0.0))
+    pts3 = [ap(m_tab, q) for q in tab_poly]
+    if any(abs(sum((q[k] - o[k]) * inv_n[k] for k in range(3))) > tol for q in pts3):
+        return False
+    # 相手の面の座標へ戻す（回転の転置）
+    R = [row[:3] for row in m_face[:3]]
+    flat = [tuple(sum(R[k][i] * (q[k] - o[k]) for k in range(3)) for i in range(2)) for q in pts3]
+    return Polygon(flat).intersection(Polygon(face_poly)).area >= 0.95 * Polygon(tab_poly).area
+
+
+for gid in glue_panels:
+    tab = next(p for p in body["panels"] if p["id"] == gid)
+    assert any(lies_on(world["body"][str(gid)], tab["poly"], world["body"][str(p["id"])], p["poly"])
+               for p in body["panels"] if p["id"] not in glue_panels), gid
+# 脚: 上の口は底の四角、下の端は机
+marks = [a for a in body["art"] if a["kind"] == "mark" and a.get("mark") == "leg"]
+bottom = next(p for p in body["panels"] if Polygon(p["poly"]).contains(Polygon(marks[0]["pts"]).centroid))
+for k, mk in zip(("leg1", "leg2", "leg3", "leg4"), marks):
+    sq = [ap(world["body"][str(bottom["id"])], q) for q in mk["pts"]]
+    leg = parts[k]
+    top = [ap(world[k][str(leg["panels"][1]["id"])], q) for q in ((0.0, 3.0), (7.0, 3.0))]
+    assert all(min(math.dist(t, s) for s in sq) < TOL for t in top), (k, top, sq)
+    ys = [ap(world[k][str(p["id"])], q)[1] for p in leg["panels"] for q in p["poly"]]
+    assert abs(max(ys)) < TOL and abs(min(ys) + legh) < TOL, (k, min(ys), max(ys))
+# 尾: 糊代は上の面の後ろの四角、尾は上に立つ
+tail = parts["tail"]
+mk = next(a for a in body["art"] if a["kind"] == "mark" and a.get("mark") == "tail")
+top_face = next(p for p in body["panels"] if Polygon(p["poly"]).contains(Polygon(mk["pts"]).centroid))
+tab = tail["panels"][1]
+assert lies_on(world["tail"][str(tab["id"])], tab["poly"], world["body"][str(top_face["id"])], mk["pts"], tol=1e-6)
+tip = ap(world["tail"]["0"], (pc.TAIL_W / 2, 0.0))
+assert tip[1] < -legh - H - pc.TAIL_LEN + 1, tip  # 上の面より尾の長さだけ上
+# 竹串・首の穴・帯・頭・粘土
+sk = last["rods"]["skewer"]
+holes = [ap(world["body"][str(p["id"])], (x, y)) for x, y, _ in body["holes"] for p in body["panels"] if Polygon(p["poly"]).buffer(1e-6).contains(Polygon([(x, y), (x + 1e-3, y), (x, y + 1e-3)]))]
+for h in holes:
+    assert abs(h[0] - sk["from"][0]) < TOL and abs(h[1] - sk["from"][1]) < TOL, (h, sk)
+front = next(p for p in body["panels"] if p.get("inner"))
+ring = front["inner"][0]
+hole_c = ap(world["body"][str(front["id"])], (sum(x for x, _ in ring) / len(ring), sum(y for _, y in ring) / len(ring)))
+assert abs(hole_c[1] - sk["from"][1]) < 1e-3 and abs(hole_c[0]) < TOL, hole_c  # 前の壁（x = 0）の穴の真ん中は竹串の高さ
+strip_hole = ap(world["strip"]["0"], (v6["strip_width"] / 2, pc.STRIP_HOLE))
+assert math.dist(strip_hole[:2], tuple(sk["from"][:2])) < TOL, strip_hole
+tip_x = sk["from"][0] - (v6["neck_length"] + 6)
+head = parts["head"]
+fy = head["tree"]["rows"]["1"]["hinge"][0][1]
+mid = ap(world["head"]["0"], (v6["head_w"] / 2, 1.5 * fy))
+assert abs(mid[0] - tip_x) < TOL and abs(mid[1] - sk["from"][1]) < TOL, mid
+assert normal(world["head"]["0"])[2] > 0.999 and normal(world["head"]["1"])[2] < -0.999  # 両側に顔
+clay = last["balls"]["clay"]["at"]
+assert abs(clay[1] - (sk["from"][1] + v6["weight_below_axle"])) < TOL and abs(clay[0] - sk["from"][0]) < TOL, clay
+# 4. できあがりの動き
+fin = data["finale"]["poses"]
+assert len(fin) >= 3 and fin[-1]["parts"]["head"]["panels"] == last["parts"]["head"]["panels"]
+assert any(f["parts"]["head"]["panels"] != last["parts"]["head"]["panels"] for f in fin[:-1])
+# 5. 入口
+env = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
+with tempfile.TemporaryDirectory() as d:
+    out = pathlib.Path(d) / "tora-v6.json"
+    r = subprocess.run([sys.executable, "-m", "omochae.assembly3d", "--scenario", str(ROOT / "examples/tora_v6.json"), "--out", str(out), "--commit", "x"],
+                       cwd=ROOT, env=env, capture_output=True, text=True)
+    assert r.returncode == 0 and json.loads(out.read_text(encoding="utf-8"))["toy"] == "tora-v6", r.stderr
+    r = subprocess.run([sys.executable, "-m", "omochae.assembly3d", "--scenario", str(ROOT / "examples/fan_tab.json")], cwd=ROOT, env=env, capture_output=True, text=True)
+    assert r.returncode == 4, (r.returncode, r.stderr)
+print(f"ok 作り方の 3D の JSON（虎 v6・{len(data['steps'])} 段・形のずれ {worst:.1e}mm）")
