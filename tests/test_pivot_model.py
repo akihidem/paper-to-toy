@@ -90,17 +90,25 @@ print("ok 重りの腕の下の穴と試してから貼る順")
 #    （軸の穴の側）に来る。前は 180° 回していて、2 枚目の頭が後ろの端に来た（前にも言われて直っていなかった所）
 # 2. 2〜5 番に部品の名を刷る（札は部品の枠の内。compose の F5.text_overlap が見る）
 # 3・4. 首の形では、胴の上の面に軸の竹串が横切る所の点の線、用意する物に竹串と粘土の置き所・丸い印は穴・4 尾だけ色がある理由
-nose = min(range(len(pc._BODY)), key=lambda i: pc._BODY[i][0])
+# 側面は縞と白い帯と白い脚（実物の写真の直し C・F）になったので、向きは脚で見る。どちらの側面も、脚（白い面に紺の線の物）は
+# 床の辺の側（1 枚目は胴の底の面との境 b0、2 枚目は b1）にあり、前の脚と後ろの脚は 2 枚で同じ x（前の端 H と後ろの端 H + L の近く）
 for mount in ("neck", "hang"):
     q = dict(DEFAULTS, mount=mount, **({"axle_height": 50} if mount == "hang" else {}))
     body = next(x for x in pc.parts(q) if x.key == "body")
-    sides = [a for a in body.art if a["kind"] == "poly" and a.get("fill") == pc.TIGER and a.get("stroke") == pc.STRIPE]
-    assert len(sides) == 2, (mount, len(sides))
-    noses = [a["pts"][nose][0] for a in sides]
-    hx = body.holes[0][0]
-    H, L = q["body_height"], q["body_length"]
-    # 2 枚とも鼻先は同じ x で、軸の穴の側（前の端 H の近く）。後ろの端 H + L からは遠い
-    assert abs(noses[0] - noses[1]) < 1e-9 and all(abs(n - hx) < abs(n - (H + L)) for n in noses), (mount, noses, hx)
+    H, L, W, g = q["body_height"], q["body_length"], q["body_width"], q["glue"]
+    top1 = g + W
+    b0, b1 = top1 + H, top1 + H + W
+    legs = [a for a in body.art if a["kind"] == "poly" and a.get("fill") == pc.WHITE and a.get("stroke") == pc.STRIPE]
+    assert len(legs) == 4, (mount, len(legs))
+    for y0, y1, foot in ((top1, b0, b0), (b1, b1 + H, b1)):
+        side = [a for a in legs if all(y0 <= y <= y1 for _, y in a["pts"])]
+        assert len(side) == 2, (mount, foot, len(side))
+        # 脚は床の辺から脚の高さ（LEG_TOP）の内。背の辺の側には無い
+        assert all(abs(y - foot) <= pc.LEG_TOP * H + 0.5 for a in side for _, y in a["pts"]), (mount, foot)
+        xs = sorted(sum(x for x, _ in a["pts"]) / len(a["pts"]) for a in side)
+        assert xs[0] - H < L / 4 and (H + L) - xs[1] < L / 4, (mount, xs)
+    cx = sorted(round(sum(x for x, _ in a["pts"]) / len(a["pts"]), 6) for a in legs)
+    assert cx[0] == cx[1] and cx[2] == cx[3], cx  # 2 枚の側面で脚の x が同じ（x は裏返さない。EP-0016）
     _, layout, fails = compose("pivot_counterweight", q, load_source(pc.SOURCE))
     assert not fails, (mount, [f.line() for f in fails])
 labels = {x.key: x.label for x in pc.parts(neck)}
@@ -131,3 +139,48 @@ assert any("5 腕の上の穴に通す" in m and "点の線の下を通る" in m
 assert any("5 腕の下の穴の、点の線の所に付ける" in m for m in mat), mat
 assert any("丸い印は穴" in m and "4 尾は外に見えるので色を刷り" in m for m in mat), mat
 print("ok 虎の側面の向き・部品の名・竹串と粘土の印")
+
+
+# 実物の写真の直し（本人の決定 2026-11-06「実物の写真と照らした直しは、御来迎・虎とも全部入れる。次の版へ」）
+# A. 首の穴は丸い切り抜きで、縁は赤。穴の真ん中は軸の高さ（前の壁は x = H が床の辺）。四角い切り込みは無い
+import json
+import pathlib
+
+v5 = json.loads((pathlib.Path(__file__).resolve().parents[1] / "examples/tora_v5.json").read_text(encoding="utf-8"))
+q5 = dict(DEFAULTS, **v5["params"])
+for q in (neck, q5):
+    body = next(x for x in pc.parts(q) if x.key == "body")
+    H, W, g = q["body_height"], q["body_width"], q["glue"]
+    cy = g + W + H + W / 2
+    assert body.cuts == [] and body.round_cuts == [(H - q["axle_height"], cy, q["opening"] / 2)], body.round_cuts
+    rims = [a for a in body.art if a["kind"] == "poly" and a.get("fill") == pc.RIM]
+    assert len(rims) == 1 and all(abs(math.hypot(x - (H - q["axle_height"]), y - cy) - (q["opening"] / 2 + pc.RIM_W)) < 1e-6 for x, y in rims[0]["pts"])
+hang = dict(DEFAULTS, mount="hang", axle_height=50)
+assert not any(x.round_cuts or x.cuts for x in pc.parts(hang))
+assert "1 胴の前の壁の丸い穴を切る（カッターは大人がする）" in pc.steps(neck)
+# 丸い印が 2 種ある（竹串であける小さい穴と、切り抜く大きな丸）ので、用意する物と組み方の文で言い分ける
+assert any("小さい丸い印は穴（竹串の先であける）" in m and "赤い縁の大きな丸は切り抜く" in m for m in pc.materials(neck)), pc.materials(neck)
+assert "部品を実線で切る。胴の小さい穴は竹串の先であける" in pc.steps(neck) and "部品を実線で切る。胴の小さい穴は竹串の先であける" in pc.steps(hang)
+assert not any("大きな丸" in m for m in pc.materials(hang)), pc.materials(hang)  # 吊る形に切り抜く丸は無い
+# E. 尾は根元の糊代を山折りし、上の面の後ろの端の近くの四角（位置の印）に貼って立てる。どちらの形も同じ
+for q in (neck, hang):
+    ps = {x.key: x for x in pc.parts(q)}
+    tail = ps["tail"]
+    assert tail.mountain == [((0, pc.TAIL_LEN), (pc.TAIL_W, pc.TAIL_LEN))] and len(tail.glue) == 1 and tail.height == pc.TAIL_LEN + pc.TAIL_TAB
+    marks = [a for a in ps["body"].art if a["kind"] == "mark" and a.get("mark") == "tail"]
+    assert len(marks) == 1 and marks[0].get("closed"), marks
+    H, L, W, g = q["body_height"], q["body_length"], q["body_width"], q["glue"]
+    xs, ys = [x for x, _ in marks[0]["pts"]], [y for _, y in marks[0]["pts"]]
+    # 四角は尾の糊代と同じ大きさで、上の面（y が g〜g＋W）の後ろの端（x = H＋L）の近く
+    assert abs(max(xs) - min(xs) - pc.TAIL_TAB) < 1e-9 and abs(max(ys) - min(ys) - pc.TAIL_W) < 1e-9, marks
+    assert H + L - pc.TAIL_BACK - pc.TAIL_TAB - 1e-9 <= min(xs) and max(xs) <= H + L and g <= min(ys) and max(ys) <= g + W, marks
+    assert pc.steps(q)[-1] == "4 尾の糊代を山折りし、1 胴の上の面の後ろの点の線の四角に貼る。尾は上へ反らせる", pc.steps(q)[-1]
+    assert check_art([ps["body"], tail]) == [], [f.line() for f in check_art([ps["body"], tail])]
+# 次の組（tora-v5）の寸法は examples/tora_v5.json に置く（既定の寸法は凍結の場面が使うので変えない）。
+# A: 軸（＝首の穴の真ん中）は前の面の高さの半ばより少し上（写真の目測で 5〜6 割）。D: 頭の長さは胴の長さの 0.55〜0.6 倍
+assert v5["template"] == "pivot_counterweight" and q5["mount"] == "neck"
+assert pc.check_range(q5) == [] and check_physics(q5) == [], [f.line() for f in pc.check_range(q5) + check_physics(q5)]
+assert 0.5 <= q5["axle_height"] / q5["body_height"] <= 0.65 and 0.55 <= q5["head_w"] / q5["body_length"] <= 0.6, q5
+_, _, fails = compose("pivot_counterweight", q5, load_source(v5["source_id"]))
+assert not fails, [f.line() for f in fails]
+print("ok 実物の写真の直し")

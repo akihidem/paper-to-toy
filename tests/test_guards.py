@@ -255,8 +255,11 @@ try:
     assert render.MARK_COLOR in svg and f'stroke-dasharray="{render.MARK_DASH}"' in svg
 finally:
     pc.parts = orig_parts
-_, lay, _ = compose(pc.ID, {"mount": "hang", "axle_height": 50}, tiger)
+# 印を使わない紙（御来迎のつまみの形）の凡例は今までどおり。虎は尾を貼る四角の印（実物の写真の直し E）を、どちらの形も使う
+_, lay, _ = compose(sf.ID, {"push_part": "tab"}, load_source(sf.SOURCE))
 assert not any(t.text and "位置の印" in t.text for t in lay["texts"])
+_, lay, _ = compose(pc.ID, {"mount": "hang", "axle_height": 50}, tiger)
+assert any(t.text and "位置の印" in t.text for t in lay["texts"])
 # 閉じた印は戻る辺も刷るので、検査も戻る辺まで見る。印は描く所が決めた太さと丸い端で見る。穴や中の切り込みにかかる印は、切ると消えるので落とす
 from omochae.floors import check_art
 def art_fail(art, key="body", mount="hang"):
@@ -265,8 +268,35 @@ def art_fail(art, key="body", mount="hang"):
 assert art_fail({"kind": "mark", "pts": [(44, 42), (56, 42), (56, 84)], "closed": True}), "閉じた印の戻る辺を見ていない"
 assert art_fail({"kind": "mark", "pts": [(2, 9), (6, 9)], "stroke": "#000"}, key="strip") == [], "印に書いた stroke で太さが 0 になった"
 body = next(x for x in pc.parts({**pc.DEFAULTS, "mount": "neck"}) if x.key == "body")
-cx, cy, cw, ch = body.cuts[0]
-assert art_fail({"kind": "mark", "pts": [(cx + 1, cy + ch / 2), (cx + cw - 1, cy + ch / 2)]}, mount="neck"), "切り込みにかかる印を通した"
+# 首の穴は丸い切り抜き（実物の写真の直し A）。丸い切り抜きにかかる印も、切ると消えるので落とす
+cx, cy, r = body.round_cuts[0]
+assert art_fail({"kind": "mark", "pts": [(cx - r + 1, cy), (cx + r - 1, cy)]}, mount="neck"), "丸い切り抜きにかかる印を通した"
+# 矩形の切り込みにかかる印も、前と同じく落とす（矩形の切り込みを持つ部品で見る）
+rect = Part(1, "plate", "板", [(0, 0), (40, 0), (40, 40), (0, 40)], cuts=[(10, 10, 20, 20)], art=[{"kind": "mark", "pts": [(12, 20), (28, 20)]}])
+assert any("切り込みにかかり" in f.message for f in check_art([rect])), "切り込みにかかる印を通した"
+# 丸い切り抜き（round_cuts）が部品の外に出たら、穴と同じ床（F5.hole）で落とす。刷る時は切る線と同じ実線の円で描く
+from omochae.floors import check_holes
+from shapely.geometry import LineString, Point
+sq = [(0, 0), (40, 0), (40, 40), (0, 40)]
+assert [f.floor for f in check_holes([Part(1, "plate", "板", sq, round_cuts=[(38, 20, 5)])])] == ["F5.hole"]
+assert check_holes([Part(1, "plate", "板", sq, round_cuts=[(20, 20, 5)])]) == []
+# 円の弧だけがわずかにかかる寸法も落とす。円の内に入る多角形（64 頂点）の 2 つの頂点の真ん中の向きで、円から 0.003mm 内に
+# 引いた折り線は、円にはかかるが内の多角形にはかからない（前の見方では通っていた）
+import math as _m
+_a, _d = _m.pi / 64, 4.997  # 頂点の間の真ん中の向きと、中心から線までの長さ（円の半径 5 より短く、内の多角形の 5·cos(π/64)≈4.994 より長い）
+_ux, _uy = _m.cos(_a), _m.sin(_a)
+_p = ((20 + _d * _ux + 8 * _uy, 20 + _d * _uy - 8 * _ux), (20 + _d * _ux - 8 * _uy, 20 + _d * _uy + 8 * _ux))
+assert Point(20, 20).buffer(5, quad_segs=16).intersects(LineString(_p)) is False  # 内の多角形にはかからない（試験の前提）
+assert [f.floor for f in check_holes([Part(1, "plate", "板", sq, mountain=[_p], round_cuts=[(20, 20, 5)])])] == ["F5.hole"]
+# 逆に、円から 0.003mm 離れた折り線（頂点の向き）は円にかからないので通す（円を外から包む多角形で見ると、落としていた）
+assert check_holes([Part(1, "plate", "板", sq, mountain=[((25.003, 0), (25.003, 40))], round_cuts=[(20, 20, 5)])]) == []
+assert check_holes([Part(1, "plate", "板", sq, glue=[[(25.003, 0), (40, 0), (40, 40), (25.003, 40)]], round_cuts=[(20, 20, 5)])]) == []
+# 丸い切り抜きが折り線か糊代にかかる時も落とす（外形の内でも、折る所・貼る所を切り取る）
+assert [f.floor for f in check_holes([Part(1, "plate", "板", sq, mountain=[((0, 22), (40, 22))], round_cuts=[(20, 20, 5)])])] == ["F5.hole"]
+assert [f.floor for f in check_holes([Part(1, "plate", "板", sq, glue=[[(0, 30), (40, 30), (40, 40), (0, 40)]], round_cuts=[(20, 27, 5)])])] == ["F5.hole"]
+_, lay, _ = compose(pc.ID, {"mount": "neck"}, tiger)
+neck_r = pc.DEFAULTS["opening"] / 2
+assert re.search(rf'<circle [^>]*r="{neck_r:g}(\.0+)?"', render.to_svg(lay)), "丸い切り抜きを円で刷っていない"
 
 # 作業の覚え書きは、追跡している .gitignore だけで外れる（.git/info/exclude は clone に付いてこないので、まっさらな repo で見る）
 if shutil.which("git"):

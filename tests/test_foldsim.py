@@ -11,7 +11,7 @@ import sys
 import tempfile
 
 from omochae.__main__ import load_source
-from omochae.foldsim import export
+from omochae.foldsim import ROUND_SEGMENTS, export
 from omochae.templates import pivot_counterweight, slider_fan
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -25,8 +25,8 @@ def check(out, tpl, params, head):
         key = f.name[len(head) + 1:-len("_foldsim.svg")]
         q, svg = by_key[key], f.read_text(encoding="utf-8")
         assert svg.count("#ff0000") == len(q.mountain) and svg.count("#0000ff") == len(q.valley), key
-        # 黒は外形の辺と、中を切り抜く穴の矩形の 4 辺（Origami Simulator は黒を外形と中の穴と読む）
-        assert svg.count("#000000") == len(q.outline) + 4 * len(q.cuts), key
+        # 黒は外形の辺と、中を切り抜く穴の矩形の 4 辺と、丸い切り抜きを近づけた多角形の辺（Origami Simulator は黒を外形と中の穴と読む）
+        assert svg.count("#000000") == len(q.outline) + 4 * len(q.cuts) + ROUND_SEGMENTS * len(q.round_cuts), key
     return sorted(f.name for f in out)
 
 
@@ -40,12 +40,13 @@ assert check(out, slider_fan, tab, "slider_fan") == ["slider_fan_base_foldsim.sv
 neck = {"mount": "neck"}
 out, failures = export("pivot_counterweight", neck, load_source(pivot_counterweight.SOURCE), tempfile.mkdtemp(), name="tiger")
 assert not failures
-assert check(out, pivot_counterweight, neck, "tiger") == ["tiger_body_foldsim.svg", "tiger_strip_foldsim.svg"]
+# 尾は根元の糊代を山折りして立てる（実物の写真の直し E）ので、折りのある部品として書き出す
+assert check(out, pivot_counterweight, neck, "tiger") == ["tiger_body_foldsim.svg", "tiger_strip_foldsim.svg", "tiger_tail_foldsim.svg"]
 out, _ = export("slider_fan", tab, load_source(slider_fan.SOURCE), tempfile.mkdtemp(), parts={"fan"})
 assert [f.name for f in out] == ["slider_fan_fan_foldsim.svg"]
 
-# 虎の首の形の胴は、前の壁の穴（cuts）を黒で書く
-assert pivot_counterweight.parts({**pivot_counterweight.DEFAULTS, **neck})[0].cuts
+# 虎の首の形の胴は、前の壁の丸い穴（round_cuts。実物の写真の直し A）を黒で書く
+assert pivot_counterweight.parts({**pivot_counterweight.DEFAULTS, **neck})[0].round_cuts
 
 # 3. 検査に落ちる寸法は書き出さず、前の回の同じ頭の SVG も残さない。部品を減らした回は、減らした分だけになる
 d = tempfile.mkdtemp()
@@ -95,7 +96,8 @@ try:
     export("pivot_counterweight", {"mount": "hang", "axle_height": 50}, tsrc, dh, parts={"drop"})
     raise AssertionError("今の形に無い部品を通した")
 except ValueError as e:
-    assert "この形に無い部品: drop" in str(e) and len(list(pathlib.Path(dh).iterdir())) == 2
+    # 吊る形の書き出しは胴・首の帯・尾の 3 つ（尾は根元の糊代を山折りする。実物の写真の直し E）。前の SVG は消さない
+    assert "この形に無い部品: drop" in str(e) and len(list(pathlib.Path(dh).iterdir())) == 3
 # 知らない部品の key は落とす
 try:
     export("slider_fan", tab, src, tempfile.mkdtemp(), parts={"fan", "fna"})
