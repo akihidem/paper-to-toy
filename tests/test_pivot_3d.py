@@ -88,11 +88,17 @@ assert any("尾の糊代の四角" in m for m in fails(dict(q5, body_width=20, b
 low = dict(neck, axle_height=15, head_h=26, weight_below_axle=5, weight_behind=0)
 assert any("床に近すぎる" in m for m in fails(low)) and not any("床に近すぎる" in m for m in fails(dict(low, leg_height=10)))
 # 吊る形は、脚がある時も床までは胴の底で見る（保守側）。頭の裏の粘土の玉が前の脚に当たるかは、玉の大きさ・位置・傾きで変わるので、
-# 胴の底より下へ頭を出さない形だけを通す（頭が脚の前にある寸法・玉が脚の間を通る寸法も落とす。限り）
-for ear, hw in ((12, 26), (25, 15)):
-    hang_low = dict(pc.DEFAULTS, mount="hang", body_height=30, axle_height=26, ear_length=ear, head_w=hw, head_h=20, weight_below_axle=20)
-    assert any("床に近すぎる" in m for m in fails(hang_low)), (ear, fails(hang_low))
-    assert any("床に近すぎる" in m for m in fails(dict(hang_low, leg_height=10))), (ear, fails(dict(hang_low, leg_height=10)))
+# 胴の底より下へ頭を出さない形だけを通す。境は「頭の下の端が胴の底から 3mm」: ちょうど 3mm は通し、それより低いと落とす。
+# 脚の分を足せば床に届かない寸法は「前の脚に当たらないかを確かめられない」と言い、脚が無い時や脚を足しても届く時は「床に近すぎる」
+hang = dict(pc.DEFAULTS, mount="hang", axle_height=pc.DEFAULTS["body_height"] - pc.HOLE_MARGIN)
+arm = pc.axle_to_head_top(hang)
+edge = pc.DEFAULTS["body_height"] - pc.HOLE_MARGIN - 3 - arm  # 頭の下の端が胴の底からちょうど 3mm になる頭の高さ
+floor_msgs = lambda q: [m for m in fails(q) if "床に近すぎる" in m or "前の脚に当たらないか" in m]
+ok_q = dict(hang, head_h=edge, weight_below_axle=arm + 1)
+bad_q = dict(hang, head_h=edge + 1, weight_below_axle=arm + 1)
+assert floor_msgs(ok_q) == [] and floor_msgs(dict(ok_q, leg_height=10)) == [], (floor_msgs(ok_q), floor_msgs(dict(ok_q, leg_height=10)))
+assert floor_msgs(bad_q) == ["頭の下端が床に近すぎる"], floor_msgs(bad_q)
+assert len(floor_msgs(dict(bad_q, leg_height=10))) == 1 and "前の脚に当たらないかを確かめられない" in floor_msgs(dict(bad_q, leg_height=10))[0]
 # 低すぎる脚は落とし、形は壊さない（横の糊代の頂点の順と指の線）
 assert any("脚が低すぎ" in m for m in fails(dict(q5, leg_height=3))) and not any("脚が低すぎ" in m for m in fails(q5))
 for hh in (0.5, 1, 2, 3, pc.LEG_MIN):

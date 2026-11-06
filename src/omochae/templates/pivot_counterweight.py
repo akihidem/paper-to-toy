@@ -176,7 +176,11 @@ def check_physics(p):
         # 吊る形は型紙の 1 枚でない読みなので、当たりの式は入れず、胴の底より下へ頭を出さない形だけを通す
         # （玉が脚に当たらない低い頭の寸法も落とす。限りとして README に書いた）
         if H - HOLE_MARGIN - reach < 3:
-            out.append(Failure("F5.pivot", "頭", "頭の下端が床に近すぎる"))
+            # 脚の分を足せば床に届かない寸法は、床の近さでなく「脚に当たらないかを確かめられない」と言う（物の決めつけでない文にする）
+            if p["leg_height"] > 0 and H + p["leg_height"] - HOLE_MARGIN - reach >= 3:
+                out.append(Failure("F5.pivot", "頭", "頭が胴の底より下へ出て、前の脚に当たらないかを確かめられない（吊る形は、脚がある時も頭を胴の底より下へ出さない）"))
+            else:
+                out.append(Failure("F5.pivot", "頭", "頭の下端が床に近すぎる"))
     else:
         # 首の帯が穴の縁に当たらずに MIN_SWING まで揺れるか。帯の面は軸に直交する（軸は帯の面の穴を貫く）ので、
         # 帯の幅は穴の中で縦に並ぶ。軸は前の壁の NECK_BACK 後ろ。θ 傾くと、壁の所で帯の中心は NECK_BACK·tanθ 動き、
