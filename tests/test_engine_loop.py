@@ -312,12 +312,14 @@ assert "判定はしない" in out and "den_den（この repo の雛形の一覧
 for word in ("効いた", "改善し", "良くな", "悪くな", "増えた", "減った", "上がっ", "下がっ", "%", "％", "↑", "↓", "平均"):
     assert word not in out, word
 
-# 9. repo の台帳（git に入る物）は読めて、作った人の文の欄を持たない
+# 9. repo の台帳（git に入る物）は読めて、作った人の文の欄を持たない。知見の 1 行（finding）は採る人が自分の言葉で書いた物なので
+# 欄として持ってよいが、連絡先の形が無く、長さの上限の中にある
 os.environ.pop("OMOCHAE_ENGINE_LEDGER")
 real = el.ledger()
 assert real["versions"] and real["versions"][0]["version"] == 1
-assert all(set(p) <= {"id", "target", "title", "numbers", "adopted_at"} for v in real["versions"] for p in v["proposals"])
-assert all(set(p) <= {"id", "target", "title", "numbers", "adopted_at"} for p in real["next"])
+entries = [p for v in real["versions"] for p in v["proposals"]] + real["next"]
+assert all(set(p) <= {"id", "target", "title", "numbers", "adopted_at", "finding"} for p in entries)
+assert all(not el.has_contact(p["finding"]) and len(p["finding"]) <= el.MAX_TEXT for p in entries if "finding" in p)
 
 # 10. 呼び方の誤り（引数なし・知らない命令・要る引数が無い・知らない印）は rc 4。1 と 2 は使わない（終了の番号の決まり。#71）。--help は rc 0
 for wrong in ((), ("no_such_command",), ("take",), ("adopt",), ("release", "--no-such-flag"), ("compare", "extra")):

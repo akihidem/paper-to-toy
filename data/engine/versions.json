@@ -149,6 +149,40 @@
    },
    "finding": "折る線と曲げる印を紙に刷り、題の「紙の角を軸へ寄せる」を、どの色をどの面にするかまで分かる字にする",
    "adopted_at": "2026-11-06"
+  },
+  {
+   "id": "EP-0012",
+   "target": {
+    "kind": "template",
+    "name": "slider_fan"
+   },
+   "title": "slider_fan（紙 NDL-1187053-R0000005-L.H-A）: 作った人の工夫（直した点と思いつき）を、雛形に入れるか見る",
+   "numbers": {
+    "fixes": 0,
+    "ideas": 0,
+    "craft_talks": 2,
+    "keeps": 0,
+    "reports": 1
+   },
+   "finding": "開く糸を扇の両端と筒の穴に結ぶ段を手順に足す。溝が下の端から切り込む形だと紙で分かる印を刷る。扇の足が曲がって傾かないよう、畳んだ扇の根元を巻く帯の部品を足す",
+   "adopted_at": "2026-11-06"
+  },
+  {
+   "id": "EP-0011",
+   "target": {
+    "kind": "template",
+    "name": "pivot_counterweight"
+   },
+   "title": "pivot_counterweight（紙 NDL-1187053-R0000014-R.H-A）: 作った人の工夫（直した点と思いつき）を、雛形に入れるか見る",
+   "numbers": {
+    "fixes": 0,
+    "ideas": 0,
+    "craft_talks": 3,
+    "keeps": 0,
+    "reports": 1
+   },
+   "finding": "重りを 5 腕の穴から糸で下げる形を手順と部品表に入れる。腕の先に糸を留める所と位置の印を刷る。胴を閉じる前に重りの位置を試してから貼る順にする",
+   "adopted_at": "2026-11-06"
   }
  ]
 }
