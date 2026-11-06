@@ -409,6 +409,12 @@ def _dome_part(p):
     for j in range(1, 2 * n):
         xs = j * w / 2
         top += [(xs - SLIT_W / 2, 0), (xs, depth), (xs + SLIT_W / 2, 0)]
+    # 継ぎ目の糊代にも、帯の頭の g mm にある切り込みと同じ所（C + xs）に切り込みを入れる。輪にすると糊代が帯の頭に重なるので、
+    # 切り込みの無い糊代だと、重なった所の切り込みを塞いで沿わせにくくなる（検品の指摘: 半径 15・切れ 12・糊代 10 で 2 本塞いだ）
+    for j in range(1, 2 * n):
+        xs = j * w / 2
+        if xs < g - SLIT_W:
+            top += [(C + xs - SLIT_W / 2, 0), (C + xs, depth), (C + xs + SLIT_W / 2, 0)]
     pts = top + [(C + g, 0), (C + g, b)]
     for i in reversed(range(n)):
         pts += _gore(p, (i + 0.5) * w, b)[:-1] if i else _gore(p, (i + 0.5) * w, b)
@@ -420,8 +426,10 @@ def _dome_part(p):
     # 山折りなら外を向いて円錐の内の面に着く
     part.mountain = [((0, b), (C, b))]
     # 帯の糊代は、切り込みを除いた形にする（糊代の斜線が切り込みの上に刷られると、切る所が見えなくなる）
+    # 重心の式は帯を切り込みの無い長方形の重さで見る（切り込みの細い V は帯の 2% ほどで、重い側に見るので安全側。検品の指摘）
     band = Polygon([(0, 0), (C, 0), (C, b), (0, b)]).intersection(Polygon(pts))
-    part.glue = [list(band.exterior.coords)[:-1], [(C, 0), (C + g, 0), (C + g, b), (C, b)]]
+    seam = Polygon([(C, 0), (C + g, 0), (C + g, b), (C, b)]).intersection(Polygon(pts))
+    part.glue = [list(band.exterior.coords)[:-1], list(seam.exterior.coords)[:-1]]
     part.art = [{"kind": "poly", "pts": _gore(p, (i + 0.5) * w, b + 0.3, 0.3), "fill": DOME} for i in range(n)]
     # 粘土を詰める高さの線。底の極から切れの上を arc だけ戻った所（高さ h の緯度）。全部の切れに引くと、詰めた粘土が真ん中に平らか見える。
     # 位置の印（赤茶の点の線。凡例に「切らない・折らない」）で刷る。前は濃い実線で、切る線と取り違えて切った人がいた（EP-0001）
