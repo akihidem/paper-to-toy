@@ -41,6 +41,7 @@ for wba in (pc.RANGES["weight_below_axle"][0], 0.5, 1, 2, 3, 3.6, 4, 5, 12, 20, 
             st, mat = pc.steps(q), pc.materials(q)
             # 検査に通る寸法では、粘土の玉は軸の竹串から離れ（玉の真ん中は軸の下 半径 + AXLE_CLEAR 以上）、下の穴はいつもある
             assert wba >= pc.clay_r(wg) + pc.AXLE_CLEAR and wba >= pc.LOWER_HOLE_MIN, q
+            assert wba + pc.clay_r(wg) <= ax - 3 + 1e-9, q  # 玉の下が底から 3mm 以上
             (ax_x, ax_y, _), (hx, hy, hr) = drop.holes[0], drop.holes[1]
             assert hx == ax_x and abs((hy - ax_y) - wba) < 1e-9, (q, drop.holes)  # 軸の穴の真下、weight_below_axle の所
             ring = [a for a in drop.art if a["kind"] == "mark" and a.get("mark") == "weight"]
@@ -61,6 +62,10 @@ for wba in (pc.RANGES["weight_below_axle"][0], 0.5, 1, 2, 3, 3.6, 4, 5, 12, 20, 
             assert any("下の穴（点の丸）の所に粘土" in s and "仮に留め" in s for s in st), st
             assert any("頭の傾きを見て" in s and "貼る" in s for s in st), st
 assert seen >= 10 and hangable >= 1, (seen, hangable)
+# 重い玉の下が底に当たる寸法（検品の指摘の例）は、玉の下の端で落とす。玉の真ん中だけ見ると通っていた
+low = dict(neck, axle_height=30, weight_below_axle=15, weight_g=15, weight_behind=0)
+assert any("粘土の玉の下が底に当たる" in f.message for f in check_physics(low)), [f.line() for f in check_physics(low)]
+# 検査に通る首の形の寸法では、粘土の玉の下が底から 3mm 以上離れる（上の組で見た通る組の全部）
 # 浅い重りに重い玉（検品の指摘の例）は、玉が軸の竹串にかかるので検査で落とす
 shallow = dict(neck, weight_below_axle=1, weight_g=15, weight_behind=0)
 assert any("軸の竹串にかかる" in f.message for f in check_physics(shallow)), [f.line() for f in check_physics(shallow)]

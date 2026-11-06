@@ -95,7 +95,7 @@ THREAD_R = 0.6  # 糸の穴の半径（御来迎の開く糸の穴と同じ）
 CLAY_DENSITY = 1.8e-3  # 油粘土の密度 g/mm³（弥次郎兵衛と同じ見込み）
 HANG_MIN = 5  # 糸で下げる時の、穴から玉の上までの長さの下限 mm。これより短いと糸を結ぶ間が無いので、下げる形を出さない
 LOWER_HOLE_MIN = 1.0 + THREAD_R + 2  # 下の穴を開ける weight_below_axle の下限（軸の穴との間に紙を 2mm 残す）
-# 粘土の玉の上の端と軸の穴（半径 1.0）の間に残す余り。玉の真ん中は軸の下 clay_r + AXLE_CLEAR 以上（検品の指摘: 浅い重りの寸法で、
+# 粘土の玉の上の端から軸の中心までに残す余り（軸の穴の半径 1.0 を引くと、穴の縁まで 1mm）。玉の真ん中は軸の下 clay_r + AXLE_CLEAR 以上（検品の指摘: 浅い重りの寸法で、
 # 重い玉が軸の竹串にかかるのに検査が通っていた）。この決まりで、検査に通る寸法では下の穴がいつもある（玉の半径は 0.2g でも 3mm）
 AXLE_CLEAR = 2.0
 
@@ -169,6 +169,10 @@ def check_physics(p):
     if p["mount"] == "neck" and p["weight_below_axle"] < clay_r(p["weight_g"]) + AXLE_CLEAR:
         r = clay_r(p["weight_g"])
         out.append(Failure("F5.pivot", "重り", f"粘土の玉（半径 {r:.1f}mm）が軸の竹串にかかる（玉の真ん中は軸の下 {p['weight_below_axle']}mm。{r + AXLE_CLEAR:.1f}mm 以上下に）"))
+    if p["mount"] == "neck" and p["weight_below_axle"] <= ax - 3 < p["weight_below_axle"] + clay_r(p["weight_g"]):
+        # 首の形の粘土の玉は腕に付くので、静かな時（一番低い）の玉の下の端で見る（検品の指摘: 真ん中だけ見ると、重い玉の下が底に当たっても通った）。
+        # 真ん中が底に近すぎる時は、下の今の決まりが落とすので、ここでは重ねて言わない
+        out.append(Failure("F5.pivot", "重り", f"粘土の玉の下が底に当たる（玉の下は軸の下 {p['weight_below_axle'] + clay_r(p['weight_g']):.1f}mm、軸の高さ {ax}mm）"))
     if p["weight_below_axle"] > ax - 3:
         out.append(Failure("F5.pivot", "重り", f"重りが底に当たる（軸の下 {p['weight_below_axle']}mm、軸の高さ {ax}mm）"))
     if p["strip_width"] > p["body_width"] - 6:
