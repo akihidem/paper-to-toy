@@ -3,6 +3,7 @@
 なぜ組を試験で見るか: 雛形は、どの出典（--source）が選ばれたかを知らない。姿の値と出典の記録は場面が組にして渡すので、
 組を間違えると、印は正しく刷られても絵と出典が食い違う。下の PAIRS は雛形の FIGURES とは別に手で書いた表で、両方が合う事を見る。
 """
+import itertools
 import json
 import math
 import pathlib
@@ -473,5 +474,38 @@ for fig, f in t.FIGURES.items():
     # 勧めの立て方を書いても書かなくても同じ（勧めの紙を変えない）。書いた値はそのまま勝つ
     assert t.filled({"figure": fig}) == {**t.filled({"figure": fig, "stand": f["stand"]})}, fig
     assert t.filled({"figure": fig, "stand": "base", "slot_length": 30})["slot_length"] == 30, fig
+
+# 表のとおり stand に easel を書いた値で刷れる。勧めが台の姿は下の縁が細いので、既定の脚では貼る面が背に収まらないか、横へ倒れる。
+# 下の 11 種は、脚の寸法をどう変えても刷れない。式の余白は勧めが脚の姿と同じ物で、緩めない。
+# 貼れない: 下が細い棒で、脚の一番細い幅でも貼る面が背に収まらない。倒れる: どの脚でも足の形の内に重心が余白を持って入らない。
+# 両立しない: 貼れる脚と倒れない脚はあるが、同じ脚では両方を満たさない。
+NO_EASEL = {"kubi": "貼れない", "torisao": "貼れない", "torisao_hoso": "貼れない",
+            "hagoita": "倒れる", "chigibako": "倒れる", "hebi": "倒れる",
+            "shitadashi": "両立しない", "hamayumi": "両立しない", "mochibana": "両立しない", "kidachi": "両立しない", "fumei_tama": "両立しない"}
+for fig, f in t.FIGURES.items():
+    src = json.loads((ROOT / "data/sources" / f"{f['source']}.json").read_text(encoding="utf-8"))
+    r = check_params(t.ID, {"figure": fig, "stand": "easel"}, src)
+    if fig not in NO_EASEL:
+        assert r["passed"], ("stand: easel を書くと刷れない", fig, r["errors"])
+        continue
+    assert not r["passed"] and all("F5.stand" in e for e in r["errors"]), (fig, r)
+    base = t.filled({**t.DEFAULTS, "figure": fig, "stand": "easel"})
+    stick = stand = 0
+    for w, length, glue, angle in itertools.product(range(6, 31, 6), range(10, 121, 20), (10, 30, 50), range(10, 61, 10)):
+        fails = t.check_physics({**base, "tab_width": w, "tab_length": length, "tab_glue": glue, "tab_angle": angle})
+        sticks = not any("貼る面" in x.message for x in fails)
+        stands = not any("貼る面" not in x.message for x in fails)
+        assert not (sticks and stands), ("通る脚がある。NO_EASEL から外して、勧めの寸法を持たせる", fig, w, length, glue, angle)
+        stick += sticks
+        stand += stands
+    assert (NO_EASEL[fig] != "貼れない" or stick == 0) and (NO_EASEL[fig] != "倒れる" or stand == 0), (fig, stick, stand)
+# 脚の勧めは 1 倍の値で、倍率を書いた値には重ねない。覆面の幅は 1 倍だと 22mm しか通らず、0.85 倍以下へ縮めると貼る面が背に収まらないので、前は通った値が落ちる。
+fukumen_src = json.loads((ROOT / "data/sources" / f"{t.FIGURES['fukumen']['source']}.json").read_text(encoding="utf-8"))
+for sc in (0.75, 0.8, 0.85):
+    assert check_params(t.ID, {"figure": "fukumen", "stand": "easel", "scale": sc}, fukumen_src)["passed"], ("倍率を書いた脚が落ちる", sc)
+for fig, f in t.FIGURES.items():
+    if "suggest_easel" in f:
+        for sc in (0.75, 0.9, 1.25, 1.5):
+            assert t.figure_defaults(fig, sc, "easel") == t.figure_defaults(fig, sc), ("倍率を書いた脚に勧めを重ねた", fig, sc)
 
 print("ok")
