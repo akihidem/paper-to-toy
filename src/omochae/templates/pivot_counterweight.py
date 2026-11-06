@@ -21,6 +21,10 @@ DEFAULTS = {
     # 立体の脚の高さと、胴の上の角を落とす幅（制作者の追加の指示 2026-11-06「虎の足と胴体を立体的にして、さらにリアリティを追求する」）。
     # 既定は 0（脚なし・箱）。凍結の場面は既定の寸法で動くので、次の組の見本（examples/tora_v5.json）だけが使う
     "leg_height": 0, "body_round": 0,
+    # 頭の顔の数（制作者の指示 2026-11-06「顔は、両側に貼れるように首から立体的にするか、両側から見た物を用意して。」の後の方）。
+    # 2 は、今の顔と、頭の上で折り返した鏡写しの顔を 1 つの部品にする（_head_part）。既定は 1（今の頭）で、凍結の場面の紙は変えない。
+    # 次の組の見本（examples/tora_v6.json）だけが 2 を使う
+    "head_sides": 1,
     # 紙の面密度は見込み。実物の紙を量ったら置き換える。
     "paper_gsm": 150,
 }
@@ -31,6 +35,7 @@ RANGES = {
     "head_w": (15, 45), "head_h": (15, 45),
     "weight_g": (0.2, 15), "weight_below_axle": (-20, 60), "weight_behind": (-10, 40),
     "leg_height": (0, 15), "body_round": (0, 10),
+    "head_sides": (1, 2),
     "paper_gsm": (40, 400),
 }
 MOUNTS = ("neck", "hang")
@@ -89,12 +94,16 @@ def check_range(p):
             out.append(Failure("F5.range", k, "知らない寸法の名前"))
         elif not isinstance(v, (int, float)) or isinstance(v, bool) or not RANGES[k][0] <= v <= RANGES[k][1]:
             out.append(Failure("F5.range", k, f"{v} は範囲 {RANGES[k]} の外"))
+        elif k == "head_sides" and not float(v).is_integer():
+            # 範囲 (1, 2) の間の 1.5 などは、刷る頭の形が無い（顔は 1 つか 2 つ）
+            out.append(Failure("F5.range", k, f"{v} は 1 か 2 でない（顔の数は整数）"))
     return out
 
 
 def mass_points(p):
-    """揺れる部分の質量の点。紙の頭は重りより桁で軽い。"""
-    head_m = paper_mass(p["head_w"] * p["head_h"], p["paper_gsm"])
+    """揺れる部分の質量の点。紙の頭は重りより桁で軽い。両面の頭（head_sides 2）は紙が 2 枚なので、頭の紙の重さも 2 倍にする
+    （頭の上の尖りを外した分は小さいので引かない。頭の紙は外形の箱で見込む）。"""
+    head_m = paper_mass(p["head_w"] * p["head_h"], p["paper_gsm"]) * p["head_sides"]
     if p["mount"] == "neck":
         head = (head_m, p["neck_length"] + 6, 0)
         strip = (paper_mass(2 * p["strip_width"] * (p["neck_length"] + 12), p["paper_gsm"]), p["neck_length"] / 2, 0)
@@ -162,6 +171,9 @@ def check_physics(p):
         # 式と刷る物を同じにする。吊る形の軸は耳の穴で決まるので、axle_height が違えば式が別の物を計算している。
         if abs(p["axle_height"] - ax) > 0.5:
             out.append(Failure("F5.pivot", "軸の高さ", f"axle_height {p['axle_height']} が、刷る耳の穴の高さ（胴の高さ−{HOLE_MARGIN}＝{ax}）と違う"))
+        # 重りは頭の裏に貼る（組み方の文）。両面の頭は裏どうしを貼り合わせるので、粘土を貼る裏が無い
+        if p["head_sides"] == 2:
+            out.append(Failure("F5.pivot", "頭", "吊る形は頭の裏に粘土を貼るので、頭を両面（head_sides 2）にできない"))
         # 重りは頭の裏に貼る（組み方の文）。式の位置が頭の外なら、その文では作れない。
         arm = axle_to_head_top(p)
         if not arm <= p["weight_below_axle"] <= arm + p["head_h"]:
@@ -230,6 +242,10 @@ _HEAD = [(40, 345), (60, 300), (95, 265), (135, 245), (150, 232), (172, 250), (1
 _MOUTH = [(62, 385), (130, 382), (150, 405), (100, 438), (72, 422)]
 _EYES = [[(72, 295), (92, 295), (96, 315), (76, 318)], [(115, 325), (140, 325), (142, 345), (118, 348)]]
 _HEAD_LINES = [[(100, 275), (120, 300)], [(125, 262), (140, 285)], [(155, 285), (205, 310)], [(165, 355), (195, 380)], [(205, 350), (220, 372)]]
+# 両面の頭（head_sides 2）の外形。頭の上の尖り（y 232〜250。頭の高さの約 8%）を外して、頭の上を y 250 の平らな線にし、そこを折り線にする。
+# 最初の点 (172, 250) は輪郭の点、最後の点 (125, 250) は輪郭の辺 (95, 265)〜(135, 245) の上で、最後と最初を結ぶ辺が平らな頭の上。
+# 顔の絵（縞・斑・目・口）は y 262 より下にあり、外す所にかからない
+_HEAD_FLAT = [(172, 250), (195, 265), (235, 320), (245, 385), (215, 415), (150, 420), (100, 445), (70, 425), (58, 390), (40, 345), (60, 300), (95, 265), (125, 250)]
 # 実物の頭の差し色（写真）: 赤い斑・白目の黒い瞳・口の先の白い歯。頭の絵と同じ点の座標で置く
 _HEAD_SPOTS = [(185, 300, 9), (212, 348, 7)]
 _PUPILS = [(85, 307), (129, 337)]
@@ -357,11 +373,23 @@ def _panel(x0, y0, x1, y1, fill):
 
 
 def _head_part(p):
+    """2 頭。head_sides 2 の時は、今の顔と、頭の上で折り返した鏡写しの顔を 1 つの部品にする（両面の頭）。
+
+    制作者の指示（2026-11-06「顔は、両側に貼れるように首から立体的にするか、両側から見た物を用意して。」）の後の方（両側から見た物）。
+    今の頭は 1 枚の横顔で、3 首の帯の横の面に貼るので、反対の側からは頭の白い裏が見えた。
+    - 頭の上の山折りの線で後ろの半分を後ろへ折り、3 首の帯の先を 2 枚の間に挟んで、裏どうしを貼る。山折り（刷った面の裏へ折る）なので、
+      刷った面（顔）が両側の外を向く。糊は裏に付けるので糊代の斜線は刷らない（御来迎の両面の像と同じ作り）。
+    - 後ろの半分は前と同じ絵の上下を返した物で、折ると反対の側からも、口が前を向いた顔が見える（左右は鏡写し）。
+    - 頭の上の尖りを外して平らにし、そこを折り線にする（_HEAD_FLAT）。外すのは頭の高さの約 8% で、顔の絵より上。
+    頭を首から立体にする形（指示の前の方）は作っていない。吊る形は頭の裏に粘土を貼るので、両面にしない（check_physics が落とす）。
+    """
     w, h = p["head_w"], p["head_h"]
     sx, sy = w / (245 - 40), h / (445 - 232)
     scale = lambda ps: _scale(ps, 40, 232, sx, sy, 0, 0)
-    outline = scale(_HEAD)
-    art = [{"kind": "poly", "pts": outline, "fill": TIGER, "stroke": STRIPE, "sw": 0.2}]
+    two = p["head_sides"] == 2
+    outline = scale(_HEAD_FLAT if two else _HEAD)
+    # 両面の頭の地は、輪郭に紺の線を引かない。線は平らな頭の上（折り線）にも乗り、絵が折り線をまたぐ（F5.image_box）。外形は切る線で刷られる
+    art = [{"kind": "poly", "pts": outline, "fill": TIGER} if two else {"kind": "poly", "pts": outline, "fill": TIGER, "stroke": STRIPE, "sw": 0.2}]
     # 実物の頭（写真）: 赤い斑・紺の縞・黒い大きな口の線で口の中は赤・口の先に白い歯・白目に黒い瞳
     art += [{"kind": "poly", "pts": scale(_circle(cx, cy, r)), "fill": RIM} for cx, cy, r in _HEAD_SPOTS]
     art += [{"kind": "line", "pts": scale(line), "stroke": STRIPE, "sw": 0.45} for line in _HEAD_LINES]
@@ -370,7 +398,19 @@ def _head_part(p):
     art += [{"kind": "poly", "pts": scale(e), "fill": EYE, "stroke": INK, "sw": 0.2} for e in _EYES]
     art += [{"kind": "poly", "pts": scale(_circle(cx, cy, 4.5)), "fill": INK} for cx, cy in _PUPILS]
     # 2〜5 番にも部品の名を刷る（EP-0016: 1 番だけ名があり、ほかは番号だけだった）
-    return Part(2, "head", "頭", outline, label_xy=(w * 0.5, h * 0.6), label="2 頭", art=art)
+    if not two:
+        return Part(2, "head", "頭", outline, label_xy=(w * 0.5, h * 0.6), label="2 頭", art=art)
+    yf = outline[0][1]
+    assert abs(outline[-1][1] - yf) < 1e-9  # 頭の上の平らな辺は水平（_HEAD_FLAT の点を変えた時に見落とさないため）
+    mirror = lambda q: (q[0], 2 * yf - q[1])
+    back = [mirror(q) for q in reversed(outline[1:-1])]  # 前の輪郭を逆にたどった鏡写し。折り線の両端は前と同じ点なので入れない
+    dy = h - 2 * yf  # 後ろの半分の上の端（鏡写しのあご）を 0 にする
+    shift = lambda q: (q[0], q[1] + dy)
+    art_back = [{**item, "pts": [mirror(q) for q in item["pts"]]} for item in art]
+    # 札は前の半分の、今の頭と同じ所（後ろの半分には刷らない）
+    return Part(2, "head", "頭", [shift(q) for q in outline + back], label_xy=(w * 0.5, h * 0.6 + dy), label="2 頭",
+                mountain=[(shift(outline[-1]), shift(outline[0]))],
+                art=[{**item, "pts": [shift(q) for q in item["pts"]]} for item in art + art_back])
 
 
 def parts(p):
@@ -580,7 +620,11 @@ def steps(p):
         # （見直しの指摘: 穴の無い寸法でも「下の穴」と言っていた）
         clay = (f"下の穴（点の線）の所に粘土を付ける{hang}" if p["weight_below_axle"] >= LOWER_HOLE_MIN
                 else f"粘土の真ん中を、上の穴の {p['weight_below_axle']:g}mm 下に付ける")
-        out += ["3 首の帯の前の端に 2 頭を貼る", "帯を前の壁の穴に入れ、竹串を胴の穴と帯の穴に通す",
+        # 両面の頭（head_sides 2）は、折って帯の先を 2 枚の間に挟む。帯の先は頭の真ん中まで（揺れの式は頭の真ん中を帯の先に置く）。
+        # 帯は胴から来るので、口と反対の側（頭の後ろ）から入れる。手順の数と番号は変えない
+        head = ("2 頭を頭の上の山折りの線で後ろへ折る。3 首の帯の先を、口と反対の側から 2 枚の間の真ん中まで挟み、裏どうしを貼る"
+                if p["head_sides"] == 2 else "3 首の帯の前の端に 2 頭を貼る")
+        out += [head, "帯を前の壁の穴に入れ、竹串を胴の穴と帯の穴に通す",
                 f"5 重りの腕の上の穴にも竹串を通す。{clay}。腕は 3 首の帯に添えて、テープで仮に留める（まだ貼らない）",
                 "頭の傾きを見て腕の位置を決めてから、腕を 3 首の帯に貼る"]
     else:
