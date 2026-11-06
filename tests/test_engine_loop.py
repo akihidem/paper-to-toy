@@ -500,14 +500,14 @@ def survey(b):
     g.pop("current_set")
     b["current_sets"] = {}
     b["groups"] = [{**copy.deepcopy(g), "template": "spinner", "paper": "pinwheel",
-                    "texts": [{"kind": "idea", "step": None, "text": "真ん中の穴が小さく、棒を通しにくい", "count": 1},
-                              {"kind": "keep", "step": None, "text": "制作手順が書いてない", "count": 1}]},
+                    "texts": [{"kind": "idea", "step": None, "text": "軸の穴の場所がわかりにくい", "count": 1},
+                              {"kind": "keep", "step": None, "text": "組み方の手順がほしい", "count": 1}]},
                    {**copy.deepcopy(g), "template": "wheel_cart", "paper": "stick",
-                    "texts": [{"kind": "keep", "step": None, "text": "接着箇所が少ないせいで、ポロポロ落ちる", "count": 1},
-                              {"kind": "idea", "step": None, "text": "車の穴の位置が分かりにくい", "count": 1}]},
+                    "texts": [{"kind": "keep", "step": None, "text": "車の接着がむずかしい", "count": 1},
+                              {"kind": "idea", "step": None, "text": "車軸の穴が大きすぎる", "count": 1}]},
                    {**copy.deepcopy(g), "template": "lever_link", "paper": "saru_take",
-                    "texts": [{"kind": "keep", "step": None, "text": "絶対パーツ足りない。説明が少なく作る順番が分からない", "count": 1},
-                              {"kind": "idea", "step": None, "text": "部品を貼る所が外れやすいので接着の場所を書いてほしい", "count": 1}]}]
+                    "texts": [{"kind": "keep", "step": None, "text": "パーツが足りない気がする。作る順番を知りたい", "count": 1},
+                              {"kind": "idea", "step": None, "text": "腕が外れやすいので留め方を知りたい", "count": 1}]}]
 
 
 (tmp / "survey.json").write_text(json.dumps(variant(survey), ensure_ascii=False), encoding="utf-8")
@@ -516,6 +516,6 @@ sk = {p["key"]: p for p in el.proposals()}
 assert "shared:hole:spinner+wheel_cart" in sk, sorted(sk)
 assert "shared:steps:lever_link+spinner" in sk and "shared:join:lever_link+wheel_cart" in sk, sorted(sk)
 assert not any(k.startswith("shared:parts:") for k in sk), "足りない部品は 1 つの雛形だけなので、共有の案にしない"
-assert [t["text"] for t in sk["shared:hole:spinner+wheel_cart"]["evidence"]] == ["真ん中の穴が小さく、棒を通しにくい", "車の穴の位置が分かりにくい"]
+assert [t["text"] for t in sk["shared:hole:spinner+wheel_cart"]["evidence"]] == ["軸の穴の場所がわかりにくい", "車軸の穴が大きすぎる"]
 
 print("OK test_engine_loop")
