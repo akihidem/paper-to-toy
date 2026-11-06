@@ -414,17 +414,19 @@ def _dome_part(p):
     # 切り込みの無い糊代だと、重なった所の切り込みを塞いで沿わせにくくなる（検品の指摘: 半径 15・切れ 12・糊代 10 で 2 本塞いだ）
     # 糊代の端に SLIT_EDGE より近い切り込みは、細い V にすると端との間に紙の筋が残るので、糊代の端の角を切り込みの深さまで斜めに落とす
     # （2 回目の検品の指摘: 前の条件 xs < g − SLIT_W は、糊代に収まる切り込みまで落としていた。半径 15・切れ 7・糊代 7 で 1 本）
-    end = (C + g, 0)
+    # 落とす線は切り込みの縁に沿わせる（3 回目の検品の指摘: 端の角から V の頂点を通らずに斜めに落とすと、切り込みの半分ほどを
+    # 糊代が塞いだ）。頂点が糊代の中なら、左の縁を頂点まで下り、その深さで糊代の端まで横へ。頂点が糊代の外なら、左の縁を糊代の端まで下る
+    end = [(C + g, 0)]
     for j in range(1, 2 * n):
         xs = j * w / 2
         lo, hi = xs - SLIT_W / 2, xs + SLIT_W / 2
         if hi + SLIT_EDGE <= g:
             top += [(C + lo, 0), (C + xs, depth), (C + hi, 0)]
         elif lo < g:
-            top.append((C + lo, 0))
-            end = (C + g, depth)
+            end = ([(C + lo, 0), (C + xs, depth), (C + g, depth)] if xs <= g
+                   else [(C + lo, 0), (C + g, depth * (g - lo) / (xs - lo))])
             break
-    pts = top + ([end] if end[1] else [(C + g, 0)]) + [(C + g, b)]
+    pts = top + end + [(C + g, b)]
     for i in reversed(range(n)):
         pts += _gore(p, (i + 0.5) * w, b)[:-1] if i else _gore(p, (i + 0.5) * w, b)
     # 札に部品の名を入れ、どちらが底かを紙で分かるようにする（作る前のレビューの指摘から採った案 EP-0001、2026-11-06:

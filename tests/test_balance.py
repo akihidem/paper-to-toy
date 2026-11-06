@@ -173,11 +173,15 @@ for R in (t.RANGES["base_r"][0], O["base_r"], t.RANGES["base_r"][1]):
             dome = next(x for x in t.parts(q) if x.key == "dome")
             w = 2 * math.pi * R / n
             under = [j * w / 2 for j in range(1, 2 * n) if j * w / 2 - t.SLIT_W / 2 < g]  # 糊代が少しでも重なる帯の頭の切り込み
-            tips = [pt for pt in dome.outline if abs(pt[1] - (b - t.SLIT_KEEP)) < 1e-9]
-            assert len(tips) == 2 * n - 1 + len(under), (q, len(tips))
             C = 2 * math.pi * R
-            # 糊代の中の切り込みは同じ所（C + xs）に V があり、糊代の端に近い 1 本は、端の角を切り込みの深さまで落とした所（C + g）がある
-            assert all(any(abs(x - (C + xs)) < 1e-9 or abs(x - (C + g)) < 1e-9 for x, _ in tips) for xs in under), q
+            tips = [pt for pt in dome.outline if abs(pt[1] - (b - t.SLIT_KEEP)) < 1e-9 and pt[0] < C - 1e-9]
+            assert len(tips) == 2 * n - 1, (q, len(tips))  # 帯の切り込み（糊代の側は下で面積で見る）
+            # 輪にすると、糊代（C〜C+g）は帯の頭（0〜g）に重なる。帯の切り込みの V を糊代の側へ写し、糊代の紙が V を塞がない
+            # （重なる面積がほぼ 0）事を見る。頂点の数だけを見ると、V の半分を塞ぐ形でも通った（3 回目の検品の指摘）
+            tab = Polygon(dome.outline).intersection(box(C, 0, C + g, b))
+            for xs in under:
+                v = Polygon([(C + xs - t.SLIT_W / 2, 0), (C + xs, b - t.SLIT_KEEP), (C + xs + t.SLIT_W / 2, 0)])
+                assert tab.intersection(v).area < 1e-6, (q, xs, tab.intersection(v).area)
             checked_seam += bool(under)
             assert Polygon(dome.outline).is_valid and all(Polygon(dome.outline).buffer(1e-6).contains(Polygon(gl)) for gl in dome.glue), q
             assert check_art([dome]) == [], (q, [f.line() for f in check_art([dome])])
