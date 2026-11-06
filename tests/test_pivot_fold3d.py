@@ -2,10 +2,12 @@
 
 凍結の基準の 3D の床（3D.close など）は御来迎のつまみの形だけを見るので、虎は試験で見る。omochae.fold3d.fold で、刷る部品の外形と
 折り線から面を組み、次を見る:
-- 胴: 糊代 5 枚が、それぞれ別の面に寝て（面から 0.6mm 以内）、その面に 95% 以上重なる。刷った面（色の面）は、どの面も箱の外を向く。
+- 胴: 糊代 5 枚が、それぞれ貼る相手の面に寝て（面から 0.6mm 以内）、その面に 95% 以上重なる。相手は、端の壁の上の糊代 2 枚が
+  1 枚目の側面、下の糊代 2 枚が 2 枚目の側面、上の面の糊代が帯の最後の面（角を落とした胴は 2 つ目の角の面、箱は 2 枚目の側面）。
+  刷った面（色の面）は、どの面も箱の外を向く。
   角を落とした胴（body_round）は、角の面の 2 本ずつの折り線と、上の面の糊代の折り線を 45° 折る（断面は八角に近い形）。
-- 脚: 横の糊代が角筒の 1 面目の内に寝て重なり、4 面とも刷った面が外を向く。上の 2 つの糊代は外へ 90° 開き、刷った面（斜線）が上
-  （胴の底に貼る側）を向く。
+- 脚: 横の糊代が角筒の 1 面目の内に寝て重なり、4 面とも刷った面が外を向く。上の 2 つの糊代は角筒の内へ 90° 山折りし、刷った面
+  （斜線）が上（胴の底に貼る側）を向く。
 面は硬い板、折り線は蝶番と見て、紙の厚み・たわみ・摩擦は入れない（fold3d と同じ）。通っても、紙で組める保証ではない。
 端の壁の糊代の根元の角を落とす前の形は、糊代と側面が 1 枚の面になり、折って組めなかった。
 """
@@ -47,7 +49,7 @@ def body_angles(body, p):
 
 
 def lies_on(g, faces, skip):
-    """糊代の面 g が、ほかの面のどれかに寝て（面から 0.6mm 以内）、その面に 95% 以上重なるか。"""
+    """糊代の面 g が寝て（面から 0.6mm 以内）、95% 以上重なる面。無ければ None。"""
     pts = [g.at(pt) for pt in g.poly.exterior.coords[:-1]]
     for f in faces:
         if f is g or f in skip:
@@ -56,8 +58,8 @@ def lies_on(g, faces, skip):
         if all(abs(z) <= 0.6 for _, z in flat):
             proj = Polygon([xy for xy, _ in flat])
             if proj.is_valid and proj.intersection(f.poly).area >= 0.95 * g.poly.area:
-                return True
-    return False
+                return f
+    return None
 
 
 def outward(faces):
@@ -72,7 +74,21 @@ def check_body(p):
     faces = fold(body, angles=body_angles(body, p))
     glue = _glue_faces(body, faces)
     assert len(glue) == 5, (p["mount"], len(glue))
-    assert all(lies_on(g, faces, glue) for g in glue), [lies_on(g, faces, glue) for g in glue]
+    # 帯の面を、頁の上の真ん中の y で見分ける（上・角・1 枚目の側面・底・2 枚目の側面・角の順に y が増える）
+    H, L, W, g, c = p["body_height"], p["body_length"], p["body_width"], p["glue"], p["body_round"]
+    d = c / math.sqrt(2)
+    ch1 = g + (W - 2 * d) + c
+    b0, b1 = ch1 + (H - d), ch1 + (H - d) + W
+    ch2 = b1 + (H - d)
+    strip = lambda f: H < f.poly.centroid.x < H + L
+    side1 = next(f for f in faces if strip(f) and ch1 < f.poly.centroid.y < b0)
+    side2 = next(f for f in faces if strip(f) and b1 < f.poly.centroid.y < ch2)
+    last = next(f for f in faces if strip(f) and f.poly.centroid.y > ch2) if c else side2
+    for gl in glue:
+        y = gl.poly.centroid.y
+        want = last if y < g else (side1 if y < b0 else side2)  # 上の面の糊代は y が 0〜g、壁の上の糊代は b0 の上、下の糊代は b1 の下
+        got = lies_on(gl, faces, glue)
+        assert got is want, (p["mount"], c, round(y, 1), got is None)
     walls = [f for f in faces if f not in glue]
     assert outward(walls) == 0, outward(walls)
     return len(walls)
@@ -96,9 +112,9 @@ for leg in legs:
     tabs = [g for g in glue if g not in side]
     assert len(side) == 1 and len(tabs) == 2, (len(side), len(tabs))
     tube = [f for f in faces if f not in glue]
-    assert len(tube) == 4 and lies_on(side[0], tube, []), leg.key
-    assert outward(tube) == 0, leg.key
     f0 = next(f for f in tube if f.poly.contains(Polygon([(a / 2 - 0.1, t + h / 2 - 0.1), (a / 2 + 0.1, t + h / 2 - 0.1), (a / 2 + 0.1, t + h / 2 + 0.1)]).centroid))
+    assert len(tube) == 4 and lies_on(side[0], tube, []) is f0, leg.key  # 横の糊代は、角筒の 1 面目（x が 0〜a）の内に貼る
+    assert outward(tube) == 0, leg.key
     up = unit(sub(f0.at((a / 2, t)), f0.at((a / 2, t + h))))  # 脚の下の端から上の端（胴の底の側）への向き
     assert all(dot(g.normal, up) > 0.99 for g in tabs), [dot(g.normal, up) for g in tabs]
 
