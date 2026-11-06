@@ -156,6 +156,35 @@
     ]
    },
    "note": "虎 tora-v6（#129・合体 e7cf5f7）。首の形。見本は examples/tora_v6.json（v5 の見本に head_sides 2）"
+  },
+  {
+   "version": 6,
+   "commit": "de4c5840cd20205afc29491f78887b13fb9a1b89",
+   "at": "2026-11-06",
+   "proposals": [
+    {
+     "id": "EP-0048",
+     "target": {
+      "kind": "template",
+      "name": "slider_fan"
+     },
+     "title": "slider_fan（紙 rise）: 作る前のレビューの指摘を、雛形に入れるか見る",
+     "numbers": {
+      "reviews": 3,
+      "reports": 0
+     },
+     "finding": "蛇腹の扇の開く角は帯の長さ ÷ 高さで決まり、大きくする時は両方を同じ割合で伸ばすと形が保てる。御来迎は扇をまるごと倍にし、内筒と外筒の隙間を狭めて抵抗を持たせた（paper-to-toy #132）"
+    }
+   ],
+   "sheet_sets": {
+    "slider_fan": "goraigo-v14"
+   },
+   "sources": {
+    "slider_fan": [
+     "NDL-1187053-R0000005-L"
+    ]
+   },
+   "note": "御来迎 goraigo-v14（#132・合体 de4c584）。形は rise。見本は examples/goraigo_v14.json で、必須の紙もこれ。前の組 goraigo-v13（#127）は版を刻んでおらず、v14 はその上に積んだ直し"
   }
  ],
  "next": [
