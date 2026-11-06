@@ -35,14 +35,16 @@ for key, forms in groups.items():
         assert len(got) == 1, (key, forms)
 assert set(DIFFERENT_TOYS) <= set(groups)  # 名指しした組が、雛形の変更で消えていない
 
-# 3. 本人の決定のたたき台（御来迎・首振り虎は元の repo の H-A）。必須 2 種の紙は、そのたたき台で刷る場面
-assert sheets.is_sheet("slider_fan", "tab") and sheets.is_sheet("pivot_counterweight", "neck")
+# 3. 本人の決定のたたき台（御来迎は筒を外す形 lift（2026-11-06）、首振り虎は元の repo の H-A）。必須 2 種の紙は、そのたたき台で刷る場面。
+#    御来迎の lift には凍結の場面が無い（凍結の置き場は足さない）ので examples/fan_lift.json で刷る。pos_tab（既定の tab）は別の読みの場面
+assert sheets.is_sheet("slider_fan", "lift") and sheets.is_sheet("pivot_counterweight", "neck")
+assert not any(sheets.is_sheet("slider_fan", f) for f in ("tab", "tube", "stick"))
 assert not sheets.is_sheet("pivot_counterweight", "hang")
-for name in ("pos_tab", "pos_tiger_neck"):
-    sc = json.loads((ROOT / "tests/frozen/scenarios" / f"{name}.json").read_text(encoding="utf-8"))
+for path in (ROOT / "examples/fan_lift.json", ROOT / "tests/frozen/scenarios/pos_tiger_neck.json"):
+    sc = json.loads(path.read_text(encoding="utf-8"))
     tpl = TEMPLATES[sc["template"]]
     form = sc["params"].get(tpl.FORM, tpl.DEFAULTS[tpl.FORM])
-    assert sheets.is_sheet(sc["template"], form), (name, form)
+    assert sheets.is_sheet(sc["template"], form), (path.name, form)
 
 # 4. 一覧（サイトが使う）: 行は全部の形のまま。sheet と reading_of と source_id が付き、sheet の行は玩具ごとに 1 つ
 table = ways.table()

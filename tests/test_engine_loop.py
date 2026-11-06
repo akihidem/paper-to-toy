@@ -423,7 +423,8 @@ def toys(b):
     b["current_sets"] = {}
     b["groups"] = [{**copy.deepcopy(g), "paper": "pinwheel", "texts": say("pinwheel")}, {**copy.deepcopy(g), "paper": "top", "texts": say("top")},
                    {**copy.deepcopy(g), "template": "slider_fan", "sheet_set": "goraigo-v10", "paper": "tube", "texts": say("tube")},
-                   {**copy.deepcopy(g), "template": "slider_fan", "sheet_set": "goraigo-v10", "paper": "tab", "texts": say("tab")}]
+                   {**copy.deepcopy(g), "template": "slider_fan", "sheet_set": "goraigo-v10", "paper": "tab", "texts": say("tab")},
+                   {**copy.deepcopy(g), "template": "slider_fan", "sheet_set": "goraigo-v11", "paper": "lift", "texts": say("lift")}]
 
 
 (tmp / "toys.json").write_text(json.dumps(variant(toys), ensure_ascii=False), encoding="utf-8")
@@ -437,12 +438,14 @@ for kind in ("craft", "review", "motion"):
 for kind, word in (("craft", "羽"), ("review", "穴")):
     assert [t["text"] for t in toy[f"{kind}:spinner:spin-v1:pinwheel"]["evidence"]] == [f"pinwheel の{'羽を少し細くした' if word == '羽' else '軸の穴が小さく見える'}"]
 assert toy["review:spinner:spin-v1:pinwheel"]["numbers"]["reviews"] == 1 and toy["motion:spinner:spin-v1:top"]["numbers"]["not_moved"] == 2
-# 別の読みの形（ヒント）の声も案にする。機械は捨てず、型紙でない事と型紙の形を並べて、人が決める
+# 別の読みの形（ヒント）の声も案にする。機械は捨てず、型紙でない事と型紙の形を並べて、人が決める。
+# 御来迎の型紙は lift（本人の決定 2026-11-06）。前の型紙 tab で刷った紙（goraigo-v10）の声も、別の読みとして今の型紙の形を並べる
 reading = toy["craft:slider_fan:goraigo-v10:tube"]
-assert "別の読み" in reading["why"] and "型紙は tab" in reading["why"], reading["why"]
-assert "別の読み" not in toy["craft:slider_fan:goraigo-v10:tab"]["why"] and "別の読み" not in toy["craft:spinner:spin-v1:top"]["why"]
+assert "別の読み" in reading["why"] and "型紙は lift" in reading["why"], reading["why"]
+assert "型紙は lift" in toy["craft:slider_fan:goraigo-v10:tab"]["why"], toy["craft:slider_fan:goraigo-v10:tab"]["why"]
+assert "別の読み" not in toy["craft:slider_fan:goraigo-v11:lift"]["why"] and "別の読み" not in toy["craft:spinner:spin-v1:top"]["why"]
 out = cli("compare").stdout
-assert "別の読み" in row_of(out, "tube") and "型紙は tab" in row_of(out, "tube") and "別の読み" not in row_of(out, "tab"), out
+assert "別の読み" in row_of(out, "tube") and "型紙は lift" in row_of(out, "tube") and "別の読み" not in row_of(out, "lift"), out
 # 採る時に人が書く知見の 1 行は、台帳に入る（頁が読む）。書かなければ欄が無い。連絡先の形と長すぎる文は断る。採らない案には書けない
 pin, top = toy["review:spinner:spin-v1:pinwheel"]["id"], toy["review:spinner:spin-v1:top"]["id"]
 assert cli("adopt", pin, "--by", "作る人", "--finding", f"穴の大きさは {PHONE} へ").returncode == 3
