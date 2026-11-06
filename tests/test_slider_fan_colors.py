@@ -43,13 +43,13 @@ for A in (sf.RANGES["tube_side"][0], 30, sf.RANGES["tube_side"][1]):
         x0, y0, x1, y1 = sf.label_box(A, H)
         assert 1 <= x0 and x1 <= A - 1.2 - 1, (A, H, x0, x1)  # 左の折り線（筒の端）と、右の角の 2 本線（一辺−1.2）から 1mm 以上
         assert 4.5 + 1 <= y0 and y1 <= H - 5 - 1, (A, H, y0, y1)  # 上の帯（部品の札もここ）と下の帯から 1mm 以上
-        assert y1 - y0 >= x1 - x0, (A, H, x1 - x0, y1 - y0)  # 札は縦長（太く短い筒でも横長にしない。検品の指摘）
+        assert y1 - y0 >= x1 - x0, (A, H, x1 - x0, y1 - y0)  # 札は縦長（太く短い筒でも横長にしない。見直しの指摘）
 for form in sf.PUSH_PARTS:
     p = {**sf.DEFAULTS, "push_part": form, **({"pusher_height": 84} if form in ("tube", "stick") else {})}
     tube = {q.key: q for q in sf.parts(p)}["tube"]
     x0, y0, x1, y1 = sf.label_box(p["tube_side"], p["tube_height"])
     # 札は外筒の絵に本当に描かれる: 紫の枠が札の枠そのもので、白い紙がその内にある（位置の式だけ見ていると、
-    # 描く所が消えても別の面へ描いても通った。検品の指摘）
+    # 描く所が消えても別の面へ描いても通った。見直しの指摘）
     frames = [a for a in tube.art if a.get("fill") == sf.LABEL_FRAME]
     papers = [a for a in tube.art if a.get("fill") == sf.LABEL_PAPER]
     assert len(frames) == 1 and len(papers) == 1, (form, len(frames), len(papers))

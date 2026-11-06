@@ -88,7 +88,7 @@ assert "印に合わせて" in text and "「2 箱」の字のある壁を前" in
 # 出典は形によらず 22 コマ左の 1 つ（形は同じ玩具の作り分け）
 assert set(pj.SOURCES) == set(pj.FORMS) and set(pj.SOURCES.values()) == {pj.SOURCE}
 
-# 8. 二度目の見直しの指摘（中・低）を押さえる
+# 8. 見直しの指摘（中・低）を押さえる
 def msgs(**kw):
     return [f.message for f in pj.check_physics({**pj.DEFAULTS, **kw})]
 
