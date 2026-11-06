@@ -544,7 +544,8 @@ def _check_rise(p):
     来る（内筒を下から押す形と同じ見方）。静かな時の台の上の面は H − s、内筒はその下へ長さ L だけ伸びる。
     - 静かな時に、受けの底の紙と畳んだ扇と像が、口から 2mm 下に隠れる（F5.fan_height・F5.figure_height）。
     - 内筒は外筒より RISE_GRIP 以上長く、押し切った時にも下の端が外筒の下へ出て、指でつまんで押し引きできる（F5.stroke）。
-      静かな時は H − s の所に台があり、内筒の下の端は s + (L − H) 出る。内筒はいつも外筒の高さの全部で支えられる。
+      静かな時は H − s の所に台があり、内筒は外筒に H − s 差し込まれ、下の端は s + (L − H) 出る。押し切った時は外筒の高さの全部で
+      支えられる。静かな時の差し込みが内筒の一辺より短いと、内筒が外筒の中で傾く（F5.stroke。検品の指摘）。
     - 台は内筒に蓋をして糊代を内筒の外の面に貼るので、台の一辺は内筒の一辺から 1mm まで（F5.base_size）。
     - 扇の下の端（要）は台の上の面にあり、押し切ると口の高さに来る。扇は台の縁と口の角より下へは開けないので、開く角の見込みの
       上限（帯の長さ ÷ 板の高さ）が、要から台の縁・口の角を見た角（ほぼ 180°）に収まる（F5.fan_clearance）。
@@ -559,8 +560,9 @@ def _check_rise(p):
         out.append(Failure("F5.figure_height", "像", f"像の高さ {p['figure_h']} が折りの高さ＋6={h + 6} を超える"))
     if s < p["figure_h"] + 2:
         out.append(Failure("F5.figure_height", "像", f"像の高さ {p['figure_h']}＋2 が押し上げる量 {s} を超え、静かな時に像が口から出る"))
-    if s > H:
-        out.append(Failure("F5.stroke", "内筒", f"押し上げる量 {s} が筒の高さ {H} を超え、静かな時に台が筒の下に出る"))
+    if H - s < a:
+        # 押し上げる量が筒の高さを超える寸法（静かな時に台が筒の下に出る）も、ここで落ちる
+        out.append(Failure("F5.stroke", "内筒", f"静かな時に内筒が外筒に {H - s:g}mm しか差し込まれず、一辺 {a} より短いので傾く"))
     if L < H + RISE_GRIP:
         out.append(Failure("F5.stroke", "内筒", f"内筒の長さ {L} が筒の高さ {H}＋{RISE_GRIP} に足りず、押し切った時に内筒の下の端が外筒の下へ出ないので、指で押し切れず引き下げられない"))
     slide_ok = a < A - 1
@@ -643,7 +645,10 @@ def place(by_key, page, top, gap):
             base.x, base.y = row_x, row_y
             fig.x, fig.y = row_x + base.width + gap * 2, row_y
             c.x, c.y = fig.x + fig.width + gap * 2, row_y
-            return left_y, fan.x - page.x0 - gap, page.x0
+            # 文字は左の列の筒の下から刷るが、文字の列は右の段の下まで横に伸びるので、段の下の端より下から始める
+            # （筒が短く扇が長い寸法で、文字が段に重なった。検品の指摘）
+            row_bottom = row_y + max(base.height, fig.height, c.height)
+            return max(left_y, row_bottom + gap), fan.x - page.x0 - gap, page.x0
     base.x, base.y = page.x0, left_y
     fig.x, fig.y = page.x0 + base.width + gap * 2, left_y
     row = max(base.height, fig.height)

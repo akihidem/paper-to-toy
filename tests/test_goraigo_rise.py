@@ -91,12 +91,21 @@ assert floors(push_amount=30) == ["F5.fan_height"]                       # 受�
 assert floors(figure_h=30) == ["F5.figure_height"]                       # 像 30＋2 が押し上げる量 31 を超え、静かな時に像が出る
 assert floors(pusher_height=111) == ["F5.stroke"]                        # 内筒が外筒＋10 に足りず、押し切ると下に出ない
 assert floors(push_amount=103) == ["F5.stroke"]                          # 押し上げる量が筒の高さを超え、静かな時に台が筒の下に出る
+assert floors(push_amount=81) == ["F5.stroke"]                           # 静かな時の差し込み 21 が内筒の一辺 22 より短く、傾く
+assert floors(push_amount=80) == []                                       # 差し込み 22 なら通る（境）
 assert floors(pusher_side=25, base_side=25) == ["F5.slide_clearance"]    # 内筒が外筒の一辺−1 より小さくない（蓋の行は重ねない）
 assert floors(base_side=21) == ["F5.base_size"]                          # 台が内筒より小さく、糊代を内筒の外の面に貼れない
 assert floors(base_side=24) == ["F5.base_size"]                          # 台が内筒より 1mm を超えて大きい
 assert floors(pusher_side=24, base_side=25) == ["F5.base_size"]          # 蓋をした台（25＋紙 2 枚）が外筒の一辺−1 に収まらない
 assert floors(fold_count=24) == ["F5.fan_clearance"]                     # 24 枚 × 4mm は 192° で、ほぼ 180° に収まらない
 assert floors(figure_w=25) == ["F5.figure_base"]                         # 像の幅 25 が筒の一辺−2 を超え、筒に入らない
+# 右の列の段の下に文字が重ならない: 筒が短く扇が長い寸法（段が左の列の筒より下まで来る）でも、配置の検査が通る
+short = {**SC["params"], "tube_height": 70, "pusher_height": 80, "push_amount": 48, "fold_count": 35, "fold_height": 45}
+assert sf.check_physics({**sf.DEFAULTS, **short}) == [], [f.line() for f in sf.check_physics({**sf.DEFAULTS, **short})]
+_, lay, fs = compose("slider_fan", short, SRC)
+assert fs == [], [f.line() for f in fs]
+pl = {q.key: q for q in lay["parts"]}
+assert pl["base"].x > pl["tube"].x + pl["tube"].width and pl["base"].y + pl["base"].height > pl["pusher"].y + pl["pusher"].height
 # 既定の寸法（つまみの形の寸法）に形だけ rise を入れると床に落ちる。rise は寸法ごと書く（見本は examples/goraigo_v12.json）
 assert "F5.stroke" in [f.floor for f in sf.check_physics({**sf.DEFAULTS, "push_part": sf.RISE})]
 print("ok 御来迎の内筒を下から押し上げる形（rise）と次の組の見本")
