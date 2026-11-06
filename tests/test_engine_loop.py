@@ -312,12 +312,14 @@ assert "判定はしない" in out and "den_den（この repo の雛形の一覧
 for word in ("効いた", "改善し", "良くな", "悪くな", "増えた", "減った", "上がっ", "下がっ", "%", "％", "↑", "↓", "平均"):
     assert word not in out, word
 
-# 9. repo の台帳（git に入る物）は読めて、作った人の文の欄を持たない
+# 9. repo の台帳（git に入る物）は読めて、作った人の文の欄を持たない。知見の 1 行（finding）は採る人が自分の言葉で書いた物なので
+# 欄として持ってよいが、連絡先の形が無く、長さの上限の中にある
 os.environ.pop("OMOCHAE_ENGINE_LEDGER")
 real = el.ledger()
 assert real["versions"] and real["versions"][0]["version"] == 1
-assert all(set(p) <= {"id", "target", "title", "numbers", "adopted_at"} for v in real["versions"] for p in v["proposals"])
-assert all(set(p) <= {"id", "target", "title", "numbers", "adopted_at"} for p in real["next"])
+entries = [p for v in real["versions"] for p in v["proposals"]] + real["next"]
+assert all(set(p) <= {"id", "target", "title", "numbers", "adopted_at", "finding"} for p in entries)
+assert all(not el.has_contact(p["finding"]) and len(p["finding"]) <= el.MAX_TEXT for p in entries if "finding" in p)
 
 # 10. 呼び方の誤り（引数なし・知らない命令・要る引数が無い・知らない印）は rc 4。1 と 2 は使わない（終了の番号の決まり。#71）。--help は rc 0
 for wrong in ((), ("no_such_command",), ("take",), ("adopt",), ("release", "--no-such-flag"), ("compare", "extra")):
@@ -459,5 +461,18 @@ assert ver["sources"]["spinner.pinwheel"] == ["NDL-1187053-R0000014-L-spinner"] 
 assert ver["proposals"][0]["finding"] == "軸の穴は、羽の幅に合わせて大きめに取る"
 out = cli("compare").stdout
 assert "版 1" in row_of(out, "pinwheel") and "版 1" not in row_of(out, "top") and "版 1" in row_of(out, "tab") and "版 1" in row_of(out, "tube"), out
+
+# 14. 案の番号は、置き場（git の外）だけでなく台帳（git の中）の番号とも重ねない。新しい機械や空の置き場で束を受けると、
+# 番号が EP-0001 から振り直され、台帳にある案と同じ番号になって台帳が読めなくなる（README の手順の試験で見つけた）
+os.environ["OMOCHAE_ENGINE_LOOP"] = str(tmp / "local4")
+os.environ["OMOCHAE_ENGINE_LEDGER"] = str(tmp / "versions4.json")
+row = lambda pid: {"id": pid, "target": {"kind": "template", "name": "spinner"}, "title": "前の案", "numbers": {}}
+(tmp / "versions4.json").write_text(json.dumps({"versions": [{"version": 1, "commit": "abc1234", "at": "2026-11-05", "proposals": [row("EP-0002")], "sheet_sets": {}, "note": ""}],
+                                                "next": [row("EP-0005")]}, ensure_ascii=False), encoding="utf-8")
+assert cli("take", str(tmp / "toys.json")).returncode == 0
+fresh = sorted(p["id"] for p in el.proposals())
+assert fresh and fresh[0] == "EP-0006", fresh
+assert cli("adopt", fresh[0], "--by", "作る人").returncode == 0
+assert [p["id"] for p in el.ledger()["next"]] == ["EP-0005", "EP-0006"]
 
 print("OK test_engine_loop")

@@ -527,11 +527,17 @@ def propose():
     どちらの時も、Issue の下書きを置き場に置く（#72。人の操作を待たない）。立てるのは人で、ここから外へは送らない。"""
     have = {p["key"]: p for p in proposals()}
     d = _dirs()["proposals"]
+    # 番号は、置き場の案と台帳の案の両方より後にする。置き場は git の外で機械ごとに違い、台帳は git の中で共有される。
+    # 置き場だけで数えると、空の置き場（新しい機械・README の手順）で EP-0001 から振り直し、台帳の案と同じ番号になって台帳が読めなくなる。
+    led = ledger()
+    taken = [int(p.stem[3:]) for p in d.glob("EP-*.json")] + [int(e["id"][3:]) for e in [*(q for v in led["versions"] for q in v.get("proposals", [])), *led.get("next", [])]
+                                                               if isinstance(e.get("id"), str) and PROPOSAL_ID.fullmatch(e["id"])]
     made, renewed = [], []
     for dr in drafts(groups(sources())):
         old = have.get(dr["key"])
         if old is None:
-            n = max((int(p.stem[3:]) for p in d.glob("EP-*.json")), default=0) + 1
+            n = max(taken, default=0) + 1
+            taken.append(n)
             p = {"id": f"EP-{n:04d}", "status": "draft", **dr, "made_at": _now()}
             _dump(d / f"{p['id']}.json", p, exclusive=True)
             made.append(p)
