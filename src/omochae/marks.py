@@ -14,9 +14,12 @@ HYPOTHESIS = "仮説: AI が考えた、試すための 1 つの翻案です。�
 
 
 def mark_lines(source, omit=None):
+    """型紙に刷る印の行。古い刷り物から起こした型紙は所蔵（holding）を、科学の模型（江戸の玩具でない試作）は、所蔵の代わりに
+    形の比の出所の文献（reference）を刷る。科学の模型に所蔵の文を刷ると、持っていない所蔵を言う事になるため。"""
     if omit == "all":
         return []
-    lines = [f"所蔵: {source['holding']}", source["modification_note"], HYPOTHESIS]
+    head = f"出典: {source['reference']}" if source.get("reference") else f"所蔵: {source['holding']}"
+    lines = [head, source["modification_note"], HYPOTHESIS]
     if omit != "source_id":
         lines.insert(2, f"出典ID: {source['source_id']}")
     return lines
@@ -35,12 +38,16 @@ def check_pdf(pdf_path, source):
     # 印が折り返されても読めるよう、空白と改行を全部取ってから探す。
     flat = "".join(out.split())
     # 短い語だけを探すと、本文が欠けても化けても別の所に同じ語が残れば通ってしまう。刷った文をそのまま探す。
-    need = {
-        "所蔵": HOLDER,
-        "所蔵の文": source["holding"],
-        "永続ID": source["persistent_id"],
-        "改変": source["modification_note"],
-        "出典ID": source["source_id"],
-        "仮説": HYPOTHESIS,
-    }
+    if source.get("reference"):
+        # 科学の模型: 所蔵の代わりに、文献の文がそのまま読める事を見る（所蔵の名と永続 ID は持たない）
+        need = {"出典の文献": source["reference"], "改変": source["modification_note"], "出典ID": source["source_id"], "仮説": HYPOTHESIS}
+    else:
+        need = {
+            "所蔵": HOLDER,
+            "所蔵の文": source["holding"],
+            "永続ID": source["persistent_id"],
+            "改変": source["modification_note"],
+            "出典ID": source["source_id"],
+            "仮説": HYPOTHESIS,
+        }
     return [Failure("F1.marks", name, f"PDF から「{text}」を取り出せない") for name, text in need.items() if "".join(text.split()) not in flat]

@@ -98,6 +98,18 @@
    "rc": 0,
    "sha256": "e6ef60cc674b74a61920f7d879efbc26affa6ac55825de125986281837e10600"
   },
+  "helix_neg.json": {
+   "floors": [
+    "F5.range"
+   ],
+   "rc": 3,
+   "sha256": "966136797ed68b73f3587e5f45e935012f9a58585096e17ae209896d786c954c"
+  },
+  "helix_pos.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "62b7a9d025cc0c2ebe9552bacc552c1816c1ab8fd14a2983e8995dde029d242a"
+  },
   "launcher_neg.json": {
    "floors": [
     "F5.launch"
@@ -1145,7 +1157,9 @@
   "test_frozen_manifest",
   "test_goraigo_rise",
   "test_goraigo_rise_3d",
+  "test_goraigo_v14",
   "test_guards",
+  "test_helix",
   "test_init_python",
   "test_intake",
   "test_launcher",
@@ -1155,8 +1169,10 @@
   "test_path_confine",
   "test_pdf_repeatable",
   "test_pivot_3d",
+  "test_pivot_arm_label",
   "test_pivot_fold3d",
   "test_pivot_hang_model",
+  "test_pivot_head_sides",
   "test_pivot_model",
   "test_pivot_neck_opening",
   "test_popup_jar",
