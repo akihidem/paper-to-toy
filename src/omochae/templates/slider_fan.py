@@ -560,8 +560,10 @@ def _check_rise(p):
         out.append(Failure("F5.figure_height", "像", f"像の高さ {p['figure_h']} が折りの高さ＋6={h + 6} を超える"))
     if s < p["figure_h"] + 2:
         out.append(Failure("F5.figure_height", "像", f"像の高さ {p['figure_h']}＋2 が押し上げる量 {s} を超え、静かな時に像が口から出る"))
-    if H - s < a:
-        # 押し上げる量が筒の高さを超える寸法（静かな時に台が筒の下に出る）も、ここで落ちる
+    if s > H:
+        # 台が筒の下に出る寸法は、差し込みが負になるので、傾きの文でなく、この文で言う（検品の指摘: 「-1mm しか差し込まれず」と言った）
+        out.append(Failure("F5.stroke", "内筒", f"押し上げる量 {s} が筒の高さ {H} を超え、静かな時に台が筒の下に出る"))
+    elif H - s < a:
         out.append(Failure("F5.stroke", "内筒", f"静かな時に内筒が外筒に {H - s:g}mm しか差し込まれず、一辺 {a} より短いので傾く"))
     if L < H + RISE_GRIP:
         out.append(Failure("F5.stroke", "内筒", f"内筒の長さ {L} が筒の高さ {H}＋{RISE_GRIP} に足りず、押し切った時に内筒の下の端が外筒の下へ出ないので、指で押し切れず引き下げられない"))

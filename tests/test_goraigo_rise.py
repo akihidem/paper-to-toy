@@ -92,6 +92,10 @@ assert floors(figure_h=30) == ["F5.figure_height"]                       # 像 3
 assert floors(pusher_height=111) == ["F5.stroke"]                        # 内筒が外筒＋10 に足りず、押し切ると下に出ない
 assert floors(push_amount=103) == ["F5.stroke"]                          # 押し上げる量が筒の高さを超え、静かな時に台が筒の下に出る
 assert floors(push_amount=81) == ["F5.stroke"]                           # 静かな時の差し込み 21 が内筒の一辺 22 より短く、傾く
+# 2 つは文を分ける（台が筒の下に出る寸法で「差し込みが負」と言わない）
+msg = lambda **extra: [f.message for f in sf.check_physics({**V12, **extra})][0]
+assert "台が筒の下に出る" in msg(push_amount=103) and "差し込まれず" not in msg(push_amount=103)
+assert "21mm しか差し込まれず" in msg(push_amount=81)
 assert floors(push_amount=80) == []                                       # 差し込み 22 なら通る（境）
 assert floors(pusher_side=25, base_side=25) == ["F5.slide_clearance"]    # 内筒が外筒の一辺−1 より小さくない（蓋の行は重ねない）
 assert floors(base_side=21) == ["F5.base_size"]                          # 台が内筒より小さく、糊代を内筒の外の面に貼れない
