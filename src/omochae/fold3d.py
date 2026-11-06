@@ -610,7 +610,7 @@ def check(parts, p):
     """
     by = {q.key: q for q in parts}
     if OUTER not in by or INNER not in by:
-        raise ToolMissing("外筒と内筒が無い（最小の 1 本は、御来迎 つまみの形だけを組む）")
+        raise ToolMissing("外筒と内筒が無い（組めるのは、御来迎 つまみの形と、内筒を下から押し上げる形だけ）")
     nums = _step_numbers(p)
     st = {"by": by, "p": p, "folded": {}}
     notes, failures = [], []
