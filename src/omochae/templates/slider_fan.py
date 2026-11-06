@@ -34,7 +34,7 @@ DEFAULTS = {
 RANGES = {
     "tube_side": (20, 50), "tube_height": (50, 130), "tube_glue": (5, 12),
     # 内筒の高さの上限も筒の高さと同じ 130 にした。内筒を下から押す形と柄の形は内筒が筒より短いと落とす（L < H）ので、
-    # 筒の上限だけを上げると、その形では 111〜130 の筒が書けなかった（検品の指摘）
+    # 筒の上限だけを上げると、その形では 111〜130 の筒が書けなかった（見直しの指摘）
     "pusher_side": (15, 48), "pusher_height": (10, 130), "pusher_glue": (5, 12),
     "push_amount": (10, 90),
     "pivot_above_rim": (0, 40),
@@ -51,7 +51,7 @@ RANGES = {
     # 上限を広く取るのは、厚さの検査が範囲の検査より先に落ちないようにするため。
     "paper_thickness": (0.05, 1.5),
     # 扇の長さ（書く時は折り数×折り幅と合う事を F5.fan_length で見る）の上限は、折り数と折り幅の上限の積（60 × 15）。
-    # 折り数の上限を上げた時に 300 のままだと、合っている長さ（52 枚 × 8.5mm＝442 など）を範囲の検査が先に落とした（検品の指摘）
+    # 折り数の上限を上げた時に 300 のままだと、合っている長さ（52 枚 × 8.5mm＝442 など）を範囲の検査が先に落とした（見直しの指摘）
     "fan_length": (50, 900),
 }
 PUSH_PARTS = ("tab", "tube", "stick", "lift", "rise")
@@ -220,7 +220,7 @@ def _check_lift(p):
     out = []
     H, A, h, g, b = p["tube_height"], p["tube_side"], p["fold_height"], p["base_glue"], p["base_side"]
     thick = p["fold_count"] * p["paper_thickness"]
-    # 台は糊代を下へ折った浅い箱で、高さは糊代の長さ。その上に、受けの底（紙 1 枚）と畳んだ扇が立つ（紙の厚さも足す。検品の指摘）
+    # 台は糊代を下へ折った浅い箱で、高さは糊代の長さ。その上に、受けの底（紙 1 枚）と畳んだ扇が立つ（紙の厚さも足す。見直しの指摘）
     t = p["paper_thickness"]
     if g + t + h > H - 2:
         out.append(Failure("F5.fan_height", "蛇腹の扇", f"台の高さ {g}＋受けの底の紙 {t:g}＋扇の高さ {h} が筒の高さ {H}−2 を超え、筒をかぶせられない"))
@@ -237,7 +237,7 @@ def _check_lift(p):
     foot = p["figure_w"] * (FOOT[1] - FOOT[0])
     if foot > b:
         out.append(Failure("F5.figure_base", "像", f"像の足の糊代 {foot:.1f} が扇の台 {b} より広く、台に貼れない"))
-    # 筒をかぶせるので、像の幅と畳んだ扇の幅も筒の内に入る（検品の指摘: 足の糊代だけ見ていて、幅 30 の像が一辺 20 の筒を通った）
+    # 筒をかぶせるので、像の幅と畳んだ扇の幅も筒の内に入る（見直しの指摘: 足の糊代だけ見ていて、幅 30 の像が一辺 20 の筒を通った）
     if p["figure_w"] > A - 2:
         out.append(Failure("F5.figure_base", "像", f"像の幅 {p['figure_w']} が筒の一辺 {A}−2 を超え、筒をかぶせられない"))
     if p["fold_width"] > A - 2:
@@ -437,7 +437,7 @@ def parts(p):
         art=_base_mark(p)))
     if _cradled(p):
         # 筒を外す形の台は、印のある上の面を上にし、糊代を下へ折って伏せて置く。下へ折るのは刷った面の裏へ折る向きなので山折り
-        # （今の組の形の台は谷折りのまま。凍結の場面の紙を変えないため。今の形の向きは次の組で見る、と統括の一覧にある）。
+        # （今の組の形の台は谷折りのまま。凍結の場面の紙を変えないため。今の形の向きは次の組で見る）。
         # 内筒を下から押し上げる形の台も、印のある上の面を上にして糊代を下へ折り、内筒の上の口に差し込んで蓋にするので同じ山折り
         # （山折りの糊代は斜線の面が外を向き、口に差し込むと斜線の面が内筒の壁に付く）
         out[-1].mountain, out[-1].valley = out[-1].valley, []
@@ -705,7 +705,7 @@ def place(by_key, page, top, gap):
             fig.x, fig.y = row_x + base.width + gap * 2, row_y
             c.x, c.y = fig.x + fig.width + gap * 2, row_y
             # 文字は左の列の筒の下から刷るが、文字の列は右の段の下まで横に伸びるので、段の下の端より下から始める
-            # （筒が短く扇が長い寸法で、文字が段に重なった。検品の指摘）
+            # （筒が短く扇が長い寸法で、文字が段に重なった。見直しの指摘）
             row_bottom = row_y + max(base.height, fig.height, c.height)
             return max(left_y, row_bottom + gap), fan.x - page.x0 - gap, page.x0
     base.x, base.y = page.x0, left_y

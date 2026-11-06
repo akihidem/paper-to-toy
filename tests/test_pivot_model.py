@@ -27,7 +27,7 @@ from omochae.compose import compose
 from omochae.floors import check_art
 from omochae.templates import pivot_counterweight as pc
 neck = dict(DEFAULTS, mount="neck")
-# 下の穴の境（LOWER_HOLE_MIN）の前後も見る。重りが後ろへずれない（weight_behind 0）と、浅い重りでも検査を通る（検品の指摘: 前の組は -20 の次が 5 だった）
+# 下の穴の境（LOWER_HOLE_MIN）の前後も見る。重りが後ろへずれない（weight_behind 0）と、浅い重りでも検査を通る（見直しの指摘: 前の組は -20 の次が 5 だった）
 seen = hangable = 0
 for wba in (pc.RANGES["weight_below_axle"][0], 0.5, 1, 2, 3, 3.6, 4, 5, 12, 20, DEFAULTS["weight_below_axle"], 40, pc.RANGES["weight_below_axle"][1]):
     for wg in (pc.RANGES["weight_g"][0], 1.0, DEFAULTS["weight_g"], pc.RANGES["weight_g"][1]):
@@ -62,15 +62,15 @@ for wba in (pc.RANGES["weight_below_axle"][0], 0.5, 1, 2, 3, 3.6, 4, 5, 12, 20, 
             assert any("下の穴（点の線）の所に粘土" in s and "仮に留め" in s for s in st), st
             assert any("頭の傾きを見て" in s and "貼る" in s for s in st), st
 assert seen >= 10 and hangable >= 1, (seen, hangable)
-# 重い玉の下が底に当たる寸法（検品の指摘の例）は、玉の下の端で落とす。玉の真ん中だけ見ると通っていた
+# 重い玉の下が底に当たる寸法（見直しの指摘の例）は、玉の下の端で落とす。玉の真ん中だけ見ると通っていた
 low = dict(neck, axle_height=30, weight_below_axle=15, weight_g=15, weight_behind=0)
 assert any("粘土の玉の下が底に当たる" in f.message for f in check_physics(low)), [f.line() for f in check_physics(low)]
 # 検査に通る首の形の寸法では、粘土の玉の下が底から 3mm 以上離れる（上の組で見た通る組の全部）
-# 玉が軸にかかり、底にも当たる寸法（4 回目の検品の指摘の例）は、玉の決まりの行を 1 つだけ出す
+# 玉が軸にかかり、底にも当たる寸法（見直しの指摘の例）は、玉の決まりの行を 1 つだけ出す
 both = dict(neck, axle_height=15, weight_below_axle=5, weight_g=15, weight_behind=0)
 ball_lines = [f for f in check_physics(both) if "粘土の玉" in f.message]
 assert len(ball_lines) == 1 and "軸の竹串にかかる" in ball_lines[0].message, [f.line() for f in check_physics(both)]
-# 浅い重りに重い玉（検品の指摘の例）は、玉が軸の竹串にかかるので検査で落とす
+# 浅い重りに重い玉（見直しの指摘の例）は、玉が軸の竹串にかかるので検査で落とす
 shallow = dict(neck, weight_below_axle=1, weight_g=15, weight_behind=0)
 assert any("軸の竹串にかかる" in f.message for f in check_physics(shallow)), [f.line() for f in check_physics(shallow)]
 # 下の穴の無い寸法（検査では落ちる）でも、組み方の文は無い穴を言わず、粘土の位置を上の穴からの深さで言う
@@ -114,10 +114,10 @@ for mount in ("neck", "hang"):
 labels = {x.key: x.label for x in pc.parts(neck)}
 assert labels == {"body": "1 胴", "head": "2 頭", "strip": "3 首の帯", "tail": "4 尾", "drop": "5 腕"}, labels
 # 3 首の帯の札: 真ん中の谷折りの線（x = sw）が、字の「3」と「首」の間の空きを通る（字が折り線にかからない）。細い帯は「3 帯」で、
-# どの帯の幅でも札が帯の枠に収まる（範囲の下限 5mm で「3 首の帯」が枠からはみ出し、配置の検査で落ちていた。検品の指摘）
+# どの帯の幅でも札が帯の枠に収まる（範囲の下限 5mm で「3 首の帯」が枠からはみ出し、配置の検査で落ちていた。見直しの指摘）
 from omochae.compose import LABEL_SIZE
 from omochae.textfit import text_width
-# 雛形が写した札の字の大きさは、描く所（compose）と同じ（違うと、置き場の計算が刷る字の幅とずれる。検品の指摘）
+# 雛形が写した札の字の大きさは、描く所（compose）と同じ（違うと、置き場の計算が刷る字の幅とずれる。見直しの指摘）
 assert pc.LABEL_SIZE == LABEL_SIZE, (pc.LABEL_SIZE, LABEL_SIZE)
 for sw in range(pc.RANGES["strip_width"][0], pc.RANGES["strip_width"][1] + 1):
     q = dict(neck, strip_width=sw)
