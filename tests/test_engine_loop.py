@@ -462,4 +462,17 @@ assert ver["proposals"][0]["finding"] == "軸の穴は、羽の幅に合わせ�
 out = cli("compare").stdout
 assert "版 1" in row_of(out, "pinwheel") and "版 1" not in row_of(out, "top") and "版 1" in row_of(out, "tab") and "版 1" in row_of(out, "tube"), out
 
+# 14. 案の番号は、置き場（git の外）だけでなく台帳（git の中）の番号とも重ねない。新しい機械や空の置き場で束を受けると、
+# 番号が EP-0001 から振り直され、台帳にある案と同じ番号になって台帳が読めなくなる（README の手順の試験で見つけた）
+os.environ["OMOCHAE_ENGINE_LOOP"] = str(tmp / "local4")
+os.environ["OMOCHAE_ENGINE_LEDGER"] = str(tmp / "versions4.json")
+row = lambda pid: {"id": pid, "target": {"kind": "template", "name": "spinner"}, "title": "前の案", "numbers": {}}
+(tmp / "versions4.json").write_text(json.dumps({"versions": [{"version": 1, "commit": "abc1234", "at": "2026-11-05", "proposals": [row("EP-0002")], "sheet_sets": {}, "note": ""}],
+                                                "next": [row("EP-0005")]}, ensure_ascii=False), encoding="utf-8")
+assert cli("take", str(tmp / "toys.json")).returncode == 0
+fresh = sorted(p["id"] for p in el.proposals())
+assert fresh and fresh[0] == "EP-0006", fresh
+assert cli("adopt", fresh[0], "--by", "作る人").returncode == 0
+assert [p["id"] for p in el.ledger()["next"]] == ["EP-0005", "EP-0006"]
+
 print("OK test_engine_loop")
