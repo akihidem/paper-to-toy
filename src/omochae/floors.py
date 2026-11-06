@@ -1,6 +1,4 @@
 """雛形の族によらない描く前の検査（印字域・重なり・文字）。"""
-import math
-
 from shapely.geometry import LineString, Point, Polygon, box
 
 from .model import Failure
@@ -134,13 +132,13 @@ def check_holes(parts):
                 out.append(Failure("F5.hole", p.name, f"穴 ({x:.1f}, {y:.1f}) が部品の外に出ている"))
         # 丸い切り抜きも、寸法から置くので紙の外に出うる。穴と同じ床で見る（外に出た丸は、紙の縁を切り欠いてしまう）
         for x, y, r in p.round_cuts:
-            # 円を外から包む多角形で見る（buffer の多角形は円の内に入るので、弧だけが縁や折り線にかかる寸法を見逃す）。
-            # 64 辺の多角形の頂点を r / cos(π/64) に置くと、辺が円に接する
-            circle = Point(x, y).buffer(r / math.cos(math.pi / 64), quad_segs=16)
-            if not poly.buffer(EPS).contains(circle):
+            # 円と外形・折り線・糊代は、中心からの距離を半径と直に比べる。円を多角形で近づけると、円の内に入れれば弧のはみ出しを
+            # 見逃し、外から包めば離れている縁まで落とす（どちらも境の寸法で取り違える）
+            c = Point(x, y)
+            if not (poly.contains(c) and poly.exterior.distance(c) >= r - EPS):
                 out.append(Failure("F5.hole", p.name, f"丸い切り抜き ({x:.1f}, {y:.1f}) が部品の外に出ている"))
             # 外形の内かだけでは、折り線や糊代を切り取る丸も通る（折る所・貼る所が無くなる）。どちらにかかっても落とす
-            elif (any(circle.intersects(LineString([a, b])) for a, b in p.valley + p.mountain)
-                  or any(circle.intersection(Polygon(gl)).area > EPS for gl in p.glue)):
+            elif (any(LineString([a, b]).distance(c) < r - EPS for a, b in p.valley + p.mountain)
+                  or any(Polygon(gl).distance(c) < r - EPS for gl in p.glue)):
                 out.append(Failure("F5.hole", p.name, f"丸い切り抜き ({x:.1f}, {y:.1f}) が折り線か糊代にかかる"))
     return out

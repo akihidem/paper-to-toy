@@ -288,6 +288,9 @@ _ux, _uy = _m.cos(_a), _m.sin(_a)
 _p = ((20 + _d * _ux + 8 * _uy, 20 + _d * _uy - 8 * _ux), (20 + _d * _ux - 8 * _uy, 20 + _d * _uy + 8 * _ux))
 assert Point(20, 20).buffer(5, quad_segs=16).intersects(LineString(_p)) is False  # 内の多角形にはかからない（試験の前提）
 assert [f.floor for f in check_holes([Part(1, "plate", "板", sq, mountain=[_p], round_cuts=[(20, 20, 5)])])] == ["F5.hole"]
+# 逆に、円から 0.003mm 離れた折り線（頂点の向き）は円にかからないので通す（円を外から包む多角形で見ると、落としていた）
+assert check_holes([Part(1, "plate", "板", sq, mountain=[((25.003, 0), (25.003, 40))], round_cuts=[(20, 20, 5)])]) == []
+assert check_holes([Part(1, "plate", "板", sq, glue=[[(25.003, 0), (40, 0), (40, 40), (25.003, 40)]], round_cuts=[(20, 20, 5)])]) == []
 # 丸い切り抜きが折り線か糊代にかかる時も落とす（外形の内でも、折る所・貼る所を切り取る）
 assert [f.floor for f in check_holes([Part(1, "plate", "板", sq, mountain=[((0, 22), (40, 22))], round_cuts=[(20, 20, 5)])])] == ["F5.hole"]
 assert [f.floor for f in check_holes([Part(1, "plate", "板", sq, glue=[[(0, 30), (40, 30), (40, 40), (0, 40)]], round_cuts=[(20, 27, 5)])])] == ["F5.hole"]
