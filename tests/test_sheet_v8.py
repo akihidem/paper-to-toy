@@ -104,14 +104,19 @@ for p in (tab, stick, {**tab, "push_part": "tube", "pusher_height": 84}):
 b = by_key(tab)["band"]
 assert abs(b.width - (2 * (tab["fold_width"] + tab["paper_thickness"]) + sf.BAND_GLUE)) < 1e-9 and b.mountain and not b.valley, (b.width, b.mountain, b.valley)
 assert "band" not in by_key(rim) and not any("8 帯" in x for x in steps(rim))
-# 短い足（pivot_above_rim が 7 以下）は帯を足さず、部品表と手順 10 にも書かない。検査には通る（短い足は曲がりにくい）
+# 短い足（pivot_above_rim が 7 以下）は帯を足さず、部品表と手順 10 にも書かない。既定の扇（28 枚・高さ 48）では、短い足は
+# 扇の開く角の検査（F5.fan_clearance）で落ちるので、検査に通る小さな扇（6 枚・幅 5・高さ 30）で見る（検品の指摘: 既定の扇では
+# どの組も検査で飛ばされ、下の決まりが 1 度も回っていなかった）
+short = {**tab, "fold_count": 6, "fold_width": 5, "fold_height": 30}
+checked = 0
 for piv in (2, 4, 7):
-    q = {**tab, "pivot_above_rim": piv}
-    if sf.check_range(q) or sf.check_physics(q):
-        continue
+    q = {**short, "pivot_above_rim": piv}
+    assert not sf.check_range(q) and not sf.check_physics(q), (piv, [f.line() for f in sf.check_physics(q)])
+    checked += 1
     assert sf.band_width(q) is None and "band" not in by_key(q), piv
     assert not any(r["key"] == "band" for r in sf.bom(q)) and not any("8 帯" in x for x in steps(q)), piv
     assert any(x.startswith("4 扇の真ん中の足を、糊代の境の破線で折り") for x in steps(q)), steps(q)
+assert checked == 3, checked
 assert sf.band_width({**tab, "pivot_above_rim": 8}) == 4  # 8 から 4mm の帯（糊代より上 6mm から 2mm 残す）
 # 溝の矢印: つまみの形だけ。範囲の端のつまみの幅でも、部品の内にあり、穴・折り線・糊代にかからない
 seen = 0
