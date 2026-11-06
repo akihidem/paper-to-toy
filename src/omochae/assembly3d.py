@@ -209,8 +209,11 @@ class Scene:
         changed_place = sorted(k for k, st in out["parts"].items() if prev and k in prev["parts"] and st["place"] != prev["parts"][k]["place"])
         changed_fold = sorted(k for k, st in out["parts"].items() if prev and k in prev["parts"] and st["turns"] != prev["parts"][k]["turns"])
         new_rods = sorted(k for k in out["rods"] if not prev or k not in prev["rods"])
+        # 動く物には、部品のほかに、出た・動いた棒と、動いた粘土の玉も入れる（竹串を通す手・揺れる時の粘土を、サイトが名で引けるように）
+        moved = {k for k, r in out["rods"].items() if prev and k in prev["rods"] and r != prev["rods"][k]}
+        moved |= {k for k, b in out["balls"].items() if not prev or prev["balls"].get(k) != b}
         if moving is None:
-            moving = sorted(set(changed_place) | set(changed_fold) | set(custom))
+            moving = sorted(set(changed_place) | set(changed_fold) | set(custom) | set(new_rods) | moved)
         if act is None:
             act = ("cut" if tool and tool.get("kind") in ("scissors", "knife") else "open" if custom else "fold" if changed_fold
                    else "thread" if new_rods else "move" if changed_place else "place")

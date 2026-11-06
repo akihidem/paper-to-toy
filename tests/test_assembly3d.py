@@ -213,6 +213,7 @@ def check_acts_structure(d, pk):
 check_acts_structure(data, parts)
 assert data["structure"]["inside"]["strip"] == "body" and data["structure"]["cutaway"] == {"body": ["3"]}
 assert [q["act"] for q in data["steps"][6]["poses"]] == ["move", "thread", "thread"]  # 帯を穴に入れて竹串を通す
+assert data["steps"][6]["poses"][2]["moving"] == ["skewer"] and "clay" in data["finale"]["poses"][0]["moving"]  # 棒と粘土の玉も動く物
 
 # 8. 御来迎 v14
 from omochae.templates import slider_fan as sf  # noqa: E402
