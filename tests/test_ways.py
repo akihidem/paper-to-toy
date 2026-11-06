@@ -23,6 +23,7 @@ assert ways.fold_only([sheet]) is True
 assert ways.fold_only([Part(1, "sheet", "紙", RECT, mountain=[FOLD])]) is True  # 山折りだけでも折り線がある
 assert ways.fold_only([Part(1, "sheet", "紙", RECT, valley=[FOLD], cuts=[(10, 10, 5, 5)])]) is False
 assert ways.fold_only([Part(1, "sheet", "紙", RECT, valley=[FOLD], holes=[(10, 10, 1)])]) is False
+assert ways.fold_only([Part(1, "sheet", "紙", RECT, valley=[FOLD], round_cuts=[(10, 10, 5)])]) is False  # 丸い切り抜きも切る所
 assert ways.fold_only([Part(1, "sheet", "紙", RECT, valley=[FOLD], glue=[[(0, 0), (10, 0), (10, 260), (0, 260)]])]) is False  # 糊代付きの長方形
 assert ways.fold_only([Part(1, "sheet", "紙", RECT)]) is False  # 折り線の無い長方形
 assert ways.fold_only([sheet, sheet]) is False
