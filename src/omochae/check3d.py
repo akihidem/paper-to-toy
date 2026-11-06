@@ -13,8 +13,10 @@ omochae.assembly3d.build が作る段ごとの形（JSON と同じ物）を読�
 - 面と面は「辺が相手の面を刺す」で見る。辺の両端が相手の面の平らな所の両側へ EPS 超離れ、刺す点が相手の面の中（外形の縁と穴から EPS 超内）
   なら当たり。辺が面に乗るだけ（折り線・糊代の縁・T の字に突き当たる所）は、両側に出ないので当たりにしない。折り線でつながる隣の面も
   この決まりで刺さないので、別に外さない（折りすぎて相手を突き抜けた面は当たりになる。虎 v7・御来迎 v14・虎 v6 で外す時と同じ結果を確かめた）。
+- ほぼ平ら（PARALLEL_DEG 未満）の 2 面は、貼る・重ねる・筒の中に入れる所（糊代と相手の面、両面の頭、内筒と外筒の壁）と見て、
+  刺す深さの決まりを EPS_PAR にする（糊代は相手の面から 0.6mm 内に寝る。見直しの指摘: 前は一律に外していて、関わりの無い部品が
+  浅い角で深く刺さっても見なかった）。
 - 見ない組（理由つき）:
-  - ほぼ平ら（PARALLEL_DEG 未満）の 2 面: 貼る・重ねる・筒の中に入れる所（糊代と相手の面、両面の頭、内筒と外筒の壁）。刺す向きが無い。
   - 隠した部品（hidden）と、中身の分解の形（structure。わざと離した形）。
   - レシピが言う「動きを見せるための近い形」（custom。御来迎の扇の開く途中）の板どうし: 隣の折り線が合わない近い形で、
     板どうしの交わりは本当の形でない（#136 の限り）。扇とほかの部品の交わりは、落ちにせず所見（NOTE）として記録に残す
@@ -26,15 +28,16 @@ omochae.assembly3d.build が作る段ごとの形（JSON と同じ物）を読�
 import math
 
 EPS = 0.1  # 刺すと見る深さ mm（行列は 5 桁に丸めるので、点は 0.01mm まで合う。紙の厚み 0.15mm より小さく取る）
-PARALLEL_DEG = 10.0  # これより平らな 2 面は、貼る・重ねる所と見て刺す向きを見ない
+PARALLEL_DEG = 10.0  # これより平らな 2 面は、貼る・重ねる所と見る
+EPS_PAR = 1.0  # ほぼ平らな 2 面で刺すと見る深さ mm（糊代が相手の面から寝る 0.6mm の外）
 DESK_TOL = 0.5  # 机の下へ出たと見る深さ mm
 
 
 class Hit:
     """検品の落ち 1 つ。floor・所（where）・文と、絵に赤で描く物（面・点・玉）。"""
 
-    def __init__(self, floor, where, msg, pose_label, panels=(), points=(), balls=(), note=False):
-        self.floor, self.where, self.msg, self.pose_label = floor, where, msg, pose_label
+    def __init__(self, floor, where, msg, pose_label, panels=(), points=(), balls=(), note=False, depth=0.0):
+        self.floor, self.where, self.msg, self.pose_label, self.depth = floor, where, msg, pose_label, depth
         self.panels, self.points, self.balls = list(panels), list(points), list(balls)
         self.note = note  # 所見（落ちにしない。近い形の部品の当たり）
         self.pose = None  # 当たった姿（記録の絵に使う）
@@ -152,12 +155,12 @@ def _near(a, b, pad):
     return all(a.lo[k] - pad <= b.hi[k] and b.lo[k] - pad <= a.hi[k] for k in range(3))
 
 
-def _pierce(a, b):
-    """面 a の辺が面 b を刺す所（世界の点）と深さ（辺が b の両側へ出る短い方）。無ければ None。"""
+def _pierce(a, b, eps=EPS):
+    """面 a の辺が面 b を刺す所（世界の点）と深さ（辺が b の両側へ出る短い方）。両側へ eps 超出る辺だけを見る。無ければ None。"""
     best = None
     for p, q in a.edges():
         dp, dq = b.dist(p), b.dist(q)
-        if not ((dp > EPS and dq < -EPS) or (dp < -EPS and dq > EPS)):
+        if not ((dp > eps and dq < -eps) or (dp < -eps and dq > eps)):
             continue
         t = dp / (dp - dq)
         x = (p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t)
@@ -179,22 +182,27 @@ def check_pose(data, pose, label, rules):
         for b in pans[i + 1:]:
             if a.key == b.key and a.key in custom:
                 continue  # 動きを見せる近い形（扇の開く途中）の板どうし
-            if abs(_dot(a.n, b.n)) > cos_par or not _near(a, b, EPS):
+            if not _near(a, b, EPS):
                 continue
-            got = _pierce(a, b) or _pierce(b, a)
+            eps = EPS_PAR if abs(_dot(a.n, b.n)) > cos_par else EPS
+            got = _pierce(a, b, eps) or _pierce(b, a, eps)
             if got is None:
                 continue
-            pair = tuple(sorted((a.key, b.key)))
-            if pair in seen:
+            where = "と".join(sorted((a.key, b.key))) if a.key != b.key else a.key
+            if where in seen:
+                # 同じ部品の組の 2 つ目からの交わりは、前の落ちに面と点を足す（記録の絵で全部を赤にする。見直しの指摘: 同じ部品の中の
+                # 交わりは名の作り方が違い、足せていなかった）
                 for h in hits:
-                    if h.floor == "3D.hit" and tuple(sorted(h.where.split("と"))) == pair:
+                    if h.floor == "3D.hit" and h.where == where:
                         h.panels += [(a.key, a.pid), (b.key, b.pid)]
                         h.points.append(got[0])
+                        if got[1] > h.depth:
+                            h.depth, h.msg = got[1], f"{h.msg.split('の紙が交わる')[0]}の紙が交わる（深さ {got[1]:.1f}mm）"
                 continue
-            seen.add(pair)
+            seen.add(where)
             what = a.name if a.key == b.key else f"{a.name}と{b.name}"
-            hits.append(Hit("3D.hit", "と".join(pair) if a.key != b.key else a.key, f"{what}の紙が交わる（深さ {got[1]:.1f}mm）", label,
-                            panels=[(a.key, a.pid), (b.key, b.pid)], points=[got[0]], note=bool(custom & {a.key, b.key})))
+            hits.append(Hit("3D.hit", where, f"{what}の紙が交わる（深さ {got[1]:.1f}mm）", label,
+                            panels=[(a.key, a.pid), (b.key, b.pid)], points=[got[0]], note=bool(custom & {a.key, b.key}), depth=got[1]))
     radius = {k: v["r"] for k, v in data.get("balls", {}).items()}
     for name, ball in pose.get("balls", {}).items():
         c, r = tuple(ball["at"]), radius.get(name, 0.0)
@@ -208,7 +216,7 @@ def check_pose(data, pose, label, rules):
             gap = d if depth >= 0 else math.hypot(d, depth)
             if gap < r - EPS:
                 hits.append(Hit("3D.hit", f"{name}と{pn.key}", f"玉（半径 {r:.1f}mm）が{pn.name}の紙に {r - gap:.1f}mm 食い込む", label,
-                                panels=[(pn.key, pn.pid)], balls=[name], note=pn.key in custom))
+                                panels=[(pn.key, pn.pid)], balls=[name], note=pn.key in custom, depth=r - gap))
                 break
     for name, rod in pose.get("rods", {}).items():
         p0, p1 = tuple(rod["from"]), tuple(rod["to"])
@@ -221,14 +229,19 @@ def check_pose(data, pose, label, rules):
             depth = pn.solid_depth(pn.local(x))
             if depth > EPS:
                 hits.append(Hit("3D.hit", f"{name}と{pn.key}", f"棒が{pn.name}の紙を穴の無い所で通る（穴の縁から {depth:.1f}mm 内）", label,
-                                panels=[(pn.key, pn.pid)], points=[x], note=pn.key in custom))
+                                panels=[(pn.key, pn.pid)], points=[x], note=pn.key in custom, depth=depth))
     if rules.get("desk"):
         low = max((q[1] for pn in pans for q in pn.pts), default=-math.inf)
         for name, ball in pose.get("balls", {}).items():
             low = max(low, ball["at"][1] + radius.get(name, 0.0))
-        if low > DESK_TOL:
-            worst = max(pans, key=lambda pn: max(q[1] for q in pn.pts))
-            hits.append(Hit("3D.out", worst.key, f"{worst.name}が机の下へ {low:.1f}mm 出る", label, panels=[(worst.key, worst.pid)]))
+        rod_low = max((max(rod["from"][1], rod["to"][1]) for rod in pose.get("rods", {}).values()), default=-math.inf)
+        if max(low, rod_low) > DESK_TOL:
+            if rod_low >= low:  # 棒の端が一番下（見直しの指摘: 前は棒を見ず、竹串が机の下へ出ても通った）
+                name = max(pose["rods"], key=lambda k: max(pose["rods"][k]["from"][1], pose["rods"][k]["to"][1]))
+                hits.append(Hit("3D.out", name, f"棒の端が机の下へ {rod_low:.1f}mm 出る", label, depth=rod_low))
+            else:
+                worst = max(pans, key=lambda pn: max(q[1] for q in pn.pts))
+                hits.append(Hit("3D.out", worst.key, f"{worst.name}が机の下へ {low:.1f}mm 出る", label, panels=[(worst.key, worst.pid)], depth=low))
     return hits
 
 
@@ -236,11 +249,16 @@ def check_below(data, pose, label, below):
     """静かな時に口の下に隠れる部品（レシピの below: 部品・口のある部品 of・空き clear）が、口から出ない。口は of の一番上（y が一番小さい所）。"""
     hits = []
     pans = panels_of(data, pose)
+    names = {q["key"]: q["name"] for q in data["parts"]}
+    # 決めた部品が姿に無い（隠した・入れ忘れた）時は落とす（見直しの指摘: 前は黙って通した）
+    for key in [below["of"]] + list(below["parts"]):
+        if not any(pn.key == key for pn in pans):
+            hits.append(Hit("3D.out", key, f"静かな時の姿に{names.get(key, key)}が無く、口の下に隠れるかを確かめられない", label))
+    if hits:
+        return hits
     below = dict(below, mouth=min(q[1] for pn in pans if pn.key == below["of"] for q in pn.pts))
     for key in below["parts"]:
         mine = [pn for pn in pans if pn.key == key]
-        if not mine:
-            continue
         top = min(q[1] for pn in mine for q in pn.pts)  # y は下が正なので、一番上は一番小さい y
         if top < below["mouth"] + below["clear"] - 0.01:
             hits.append(Hit("3D.out", key, f"静かな時に{mine[0].name}の上の端が口の {below['clear']:g}mm 下より上に出る（口から {below['mouth'] - top:+.1f}mm）",
@@ -253,9 +271,12 @@ def check_faces(data, pose, label, faces):
     out・in は部品の面の真ん中の重心から見た向き（筒・箱）、up は上（y が小さい向き）、both は 0 番と 1 番の面が逆（両面の頭）。"""
     hits = []
     pans = panels_of(data, pose)
+    names = {q["key"]: q["name"] for q in data["parts"]}
     for key, want in faces.items():
         mine = [pn for pn in pans if pn.key == key]
         if not mine:
+            # 決めた部品が組み終わりの姿に無い時は落とす（見直しの指摘: 前は黙って通した）
+            hits.append(Hit("3D.face", key, f"組み終わりの姿に{names.get(key, key)}が無く、刷った面の向きを確かめられない", label))
             continue
         cen = tuple(sum(c) / len(c) for c in zip(*[q for pn in mine for q in pn.pts]))
         bad = []
@@ -313,21 +334,24 @@ def inspect(data, rules):
 
 
 def summary(hits):
-    """落ちと所見を、床・所・落ちか所見かごとに 1 行にまとめる（同じ当たりが続く姿で何度も出るので）。最初の姿の文に、ほかの姿の数を添える。"""
+    """落ちと所見を、床・所・落ちか所見かごとに 1 行にまとめる（同じ当たりが続く姿で何度も出るので）。一番深い姿の文に、ほかの姿の数を添える
+    （前は最初の姿の文で、浅い当たりの数だけが出て、深さが読めなかった）。"""
     groups = {}
     for h in hits:
         groups.setdefault((h.note, h.floor, h.where), []).append(h)
     out = []
     for (note, floor, where), hs in groups.items():
+        deep = max(hs, key=lambda h: h.depth)
         more = f"（ほか {len(hs) - 1} の姿）" if len(hs) > 1 else ""
-        out.append(f"{'NOTE' if note else 'FAIL'} {floor} [{where}] {hs[0].pose_label}{more}: {hs[0].msg}")
+        out.append(f"{'NOTE' if note else 'FAIL'} {floor} [{where}] {deep.pose_label}{more}: {deep.msg}")
     return out
 
 
 # ---- 検品の記録（決める側の決定 (b): 段ごとの絵か短い動画、当たった所は赤）----
 # 記録はサイトの頁の代わりではない（頁は JSON から組み立ての動きを描く）。エンジンが検品した姿をそのまま描き、落ちた所を赤、
 # 所見を橙で示す。紙の面は刷った面が見える時は部品の色、裏は紙の白。見る向きはどの姿も同じ。重なりの順は面の真ん中の奥行きで決めるので、
-# 入れ子の筒（御来迎の内筒）は外筒から透けて見える事がある（中を見る記録としてはそのままにした）。
+# 入れ子の筒（御来迎の内筒）は外筒から透けて見える事がある（中を見る記録としてはそのままにした）。粘土の玉と棒は紙の上に重ねて描く
+# （胴の中の玉と竹串も見えるように。当たった玉は赤い縁）。
 VIEW = (-20.0, -35.0)  # 見る向き（x のまわりに rx・y のまわりに ry 度）。前の左の上から見る（虎の頭と前の壁、御来迎の口が見える）
 TILE = 300  # 一覧の 1 枚の大きさ px
 BACK = (243, 239, 230)  # 紙の裏

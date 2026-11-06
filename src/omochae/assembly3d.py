@@ -833,6 +833,10 @@ def main(argv=None):
             print(path, file=sys.stderr)
     if any(not h.note for h in hits):
         print("3D の組み立て検品に落ちた。JSON は書かない", file=sys.stderr)
+        if args.out and pathlib.Path(args.out).exists():
+            # 前に書いた JSON を残すと、落ちた後も古い形が読まれる（見直しの指摘）。同じ置き場の前の JSON は消す
+            pathlib.Path(args.out).unlink()
+            print(f"前の JSON を消した（古い形を読ませない）: {args.out}", file=sys.stderr)
         return 3
     text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     if args.out:
