@@ -166,10 +166,13 @@ def check_physics(p):
             out.append(Failure("F5.pivot", "首", f"首の帯（幅 {p['strip_width']}）が穴（{p['opening']}）の縁に当たるまで {MIN_SWING}° 揺れない"))
         if p["head_h"] / 2 > ax - 3:
             out.append(Failure("F5.pivot", "頭", "頭の下端が床に近すぎる"))
-    if p["mount"] == "neck" and p["weight_below_axle"] < clay_r(p["weight_g"]) + AXLE_CLEAR:
+    # 粘土の玉の 2 つの決まり（軸の竹串・底）は、重りの別の落ち（重心が軸より上・傾き）が無い時だけ言う。1 つの崩れに別の行が続くと
+    # 狙いが読めなくなり、凍結の負の場面（neg_pivot_tilt・neg_pivot_weight_above）が 1 行で落ちる決まりも崩れた（run.sh で見つけた）
+    ball_ok = not any(f.where == "重り" for f in out)
+    if ball_ok and p["mount"] == "neck" and p["weight_below_axle"] < clay_r(p["weight_g"]) + AXLE_CLEAR:
         r = clay_r(p["weight_g"])
         out.append(Failure("F5.pivot", "重り", f"粘土の玉（半径 {r:.1f}mm）が軸の竹串にかかる（玉の真ん中は軸の下 {p['weight_below_axle']}mm。{r + AXLE_CLEAR:.1f}mm 以上下に）"))
-    if p["mount"] == "neck" and p["weight_below_axle"] <= ax - 3 < p["weight_below_axle"] + clay_r(p["weight_g"]):
+    if ball_ok and p["mount"] == "neck" and p["weight_below_axle"] <= ax - 3 < p["weight_below_axle"] + clay_r(p["weight_g"]):
         # 首の形の粘土の玉は腕に付くので、静かな時（一番低い）の玉の下の端で見る（検品の指摘: 真ん中だけ見ると、重い玉の下が底に当たっても通った）。
         # 真ん中が底に近すぎる時は、下の今の決まりが落とすので、ここでは重ねて言わない
         out.append(Failure("F5.pivot", "重り", f"粘土の玉の下が底に当たる（玉の下は軸の下 {p['weight_below_axle'] + clay_r(p['weight_g']):.1f}mm、軸の高さ {ax}mm）"))
