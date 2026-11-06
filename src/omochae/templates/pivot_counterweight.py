@@ -567,14 +567,21 @@ def _drop_label(p):
     並べるのは軸の穴の下から粘土の高さの点の線の上まで（下の穴の半径と 1mm の空きを残す）で、4 行がその間に入る時だけ
     （粘土が軸の約 17.2mm より下。v5・v6 の見本は 20mm、既定は 28mm）。入らない寸法（粘土が軸に近い・下の穴が無い）は、
     前と同じ「5 腕」の 1 行にする（3 首の帯の細い時の「3 帯」と同じ限り。用意する物と組み方の文は、どの寸法でも「5 重りの腕」と呼ぶ）。
-    返り値は (札の字, 行の並び)。行の並びが空なら、札の字を 1 行で刷る。
+    「5 腕」の 1 行は前と同じ所（軸の穴の 4mm 下）に置くが、粘土が軸に近くて下の穴と点の線が札の高さに来る時は、その下へ置く
+    （見直しの指摘: 前は所が決まっていて、軽い粘土で軸の約 9mm より上の寸法では、札が下の穴と点の線に重なった。型紙の検査は
+    字と穴・印の重なりを見ないので、試験で見る）。
+    返り値は (札の字, 行の並び)。行の並びは 1 行でも、字と所を持つ。
     """
     head, rest = "5 重", ("り", "の", "腕")
     pitch = LABEL_SIZE * LABEL_LINE
     bottom = DROP_LABEL_TOP + (1 + len(rest)) * pitch
     wb = p["weight_below_axle"]
-    if wb < LOWER_HOLE_MIN or bottom > 4 + wb - (THREAD_R + 1.0):
-        return "5 腕", []
+    band = THREAD_R + 1.0  # 下の穴の半径と、点の線との空き
+    if wb < LOWER_HOLE_MIN or bottom > 4 + wb - band:
+        y = 8
+        if wb >= LOWER_HOLE_MIN and y + pitch >= 4 + wb - band - 1e-9:  # 境（ちょうど触れる所）も下へ
+            y = 4 + wb + band
+        return "5 腕", [("5 腕", 1, y)]
     x0 = (DROP_W - text_width(head, LABEL_SIZE)) / 2
     xc = x0 + text_width("5 ", LABEL_SIZE)  # 下の字は「重」の列にそろえる
     return "5 重りの腕", [(head, x0, DROP_LABEL_TOP)] + [(c, xc, DROP_LABEL_TOP + (i + 1) * pitch) for i, c in enumerate(rest)]
