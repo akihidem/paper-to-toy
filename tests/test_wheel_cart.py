@@ -114,7 +114,8 @@ for p in (STICK, MALLET):
     cut = next(i for i, x in enumerate(st) if "実線で切る" in x)
     assert "中の四角い穴はまだ切らない" in st[cut], st[cut]
     knife = next(i for i, x in enumerate(st) if "カッターは大人がする" in x)
-    fold = next(i for i, x in enumerate(st) if "谷折り" in x)
+    # 折る行は谷折りか山折り（ぶりぶりの頭と蓋は、色の面を外にする山折りに直した。本人の決定 2026-11-06）
+    fold = next(i for i, x in enumerate(st) if "谷折り" in x or "山折り" in x)
     assert cut < knife < fold, (cut, knife, fold)
 assert "中の四角い穴" not in w.steps(RAT)[1]  # 鼠車に中の穴は無い
 
