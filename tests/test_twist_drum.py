@@ -431,7 +431,7 @@ far = {**P, "radius": 28, "depth": 10, "bead_d": 4, "cord_length": 34}
 assert t.check_physics(far) == [] and t.strike_offset(far) < 0
 #     柄に絡まない上限の手前は通り、四捨五入の 31.3mm は落ちる
 assert t.check_physics({**P, "cord_length": 31.2}) == [] and t.check_physics({**P, "cord_length": 31.3}) != []
-# 40. 組み方の文は、サイトの手順の紙の左の列（144mm・字 3.6mm・「番号. 文」）で数えて、でんでん太鼓は STEP_LINES_MAX 行まで（紙に収まる行数）。
+# 40. 組み方の文は、前のサイトの手順の紙の左の列（144mm・字 3.6mm・「番号. 文」）で数えて、でんでん太鼓は STEP_LINES_MAX 行まで（紙に収まった行数。手順の紙は廃止したが、上限は残す）。
 #     糸を留める手順と直しの幅を足した版は 22〜23 行で、紙の下へはみ出していた。諫鼓は前から収まらないので、今の行数を上限にして増やさない
 from omochae.textfit import wrap
 
@@ -447,7 +447,7 @@ assert step_lines(K) <= t.STEP_LINES_KANKO and t.STEP_LINES_MAX == 16
 pull_i = next(i for i, s_ in enumerate(t.steps(K), 1) if "すばやく引きます" in s_)
 assert "旗が南の壁に当たるまで" in t.steps(K)[pull_i - 1] and nums(t.steps(K)[pull_i - 1], r"当たるまで（(\d+(?:\.\d+)?)mm）") == [t.pull_travel(K)]
 assert len(t.steps({**P, "face": "tori"})) == len(t.steps(P)) + 1
-#     サイトの手順の紙の見取り図の言葉を持つ（持たないと、御来迎の筒の言葉が鼓の図に刷られる）
+#     サイトの見取り図の言葉を持つ（持たないと、御来迎の筒の言葉が鼓の図に出る。前は手順の紙に刷った）
 assert "糸" in t.DIAGRAM_CAPTION and "筒" not in t.DIAGRAM_CAPTION
 # 42. 利用者に見せる文はやさしい言葉（2026-11-06 の本人の決定で書き直した。書き方の決めは雛形の CUT_POINTS の上の注）。
 #     組み方は 1 文ずつ「です・ます」で終わる（文の終わりの（…）の添え書きは除いて見る）。

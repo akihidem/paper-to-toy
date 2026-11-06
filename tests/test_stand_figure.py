@@ -345,7 +345,7 @@ assert box_step.index("通し") < box_step.index("押し込まず") < box_step.i
 assert any("舌の先までのりを塗って" in x and "角で止める" in x for x in st_b)
 assert any("角で止める" in x and "部品 2 は無い" in x for x in t.steps({**B, "back": 0}))
 assert not any("舌" in x for x in t.steps(P))
-# 組み方の文は、サイトの手順の紙の左の列で float と同じ行数まで（サイトは「番号. 文」の形で、同じ折り返しで刷る）
+# 組み方の文は、float と同じ行数まで（前のサイトの手順の紙の左の列で、「番号. 文」の形の同じ折り返しで数えた。手順の紙は廃止）
 from omochae.templates.float import STEP_COL_W, STEP_LINES_MAX, STEP_SIZE
 from omochae.textfit import wrap
 for fig in t.FIGURES:
