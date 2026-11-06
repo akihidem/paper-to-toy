@@ -83,8 +83,6 @@ print("ok v9")
 # 2. つまみの形の溝の下の口に、下の端から上へ切り込む向きの矢印（位置の印）を 2 本刷る（溝の左右。下の茶色の帯から地の色の所まで）。
 #    「ここから切る」の字は刷れない（部品に置ける字は札の 1 つだけ。エンジンの共有の所を変えるのは提出の後）
 # 3. 扇の足の帯（8 帯）を足し、足の付け根に巻いて足を強くする。部品表と手順 10 に入れる。足のある軸の形だけ
-import math
-
 from omochae.__main__ import load_source
 from omochae.compose import compose
 from omochae.floors import check_art
@@ -106,6 +104,15 @@ for p in (tab, stick, {**tab, "push_part": "tube", "pusher_height": 84}):
 b = by_key(tab)["band"]
 assert abs(b.width - (2 * (tab["fold_width"] + tab["paper_thickness"]) + sf.BAND_GLUE)) < 1e-9 and b.mountain and not b.valley, (b.width, b.mountain, b.valley)
 assert "band" not in by_key(rim) and not any("8 帯" in x for x in steps(rim))
+# 短い足（pivot_above_rim が 7 以下）は帯を足さず、部品表と手順 10 にも書かない。検査には通る（短い足は曲がりにくい）
+for piv in (2, 4, 7):
+    q = {**tab, "pivot_above_rim": piv}
+    if sf.check_range(q) or sf.check_physics(q):
+        continue
+    assert sf.band_width(q) is None and "band" not in by_key(q), piv
+    assert not any(r["key"] == "band" for r in sf.bom(q)) and not any("8 帯" in x for x in steps(q)), piv
+    assert any(x.startswith("4 扇の真ん中の足を、糊代の境の破線で折り") for x in steps(q)), steps(q)
+assert sf.band_width({**tab, "pivot_above_rim": 8}) == 4  # 8 から 4mm の帯（糊代より上 6mm から 2mm 残す）
 # 溝の矢印: つまみの形だけ。範囲の端のつまみの幅でも、部品の内にあり、穴・折り線・糊代にかからない
 seen = 0
 for kw in (sf.RANGES["knob_width"][0], tab["knob_width"], sf.RANGES["knob_width"][1]):
