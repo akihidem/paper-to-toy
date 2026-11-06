@@ -7,11 +7,11 @@
   1 つだけを型紙（sheet）にし、ほかは試行錯誤のヒント（reading_of で型紙の形を指す）に回す。
   同じ出典でも描かれた物が違う形（stand_figure の凧 2 つ・土人形 3 つ）は、別の玩具なので、どれも型紙のまま。
 - 型紙の 1 枚は、本人が決めた物（御来迎は内筒を下から押し上げる形 rise（2026-11-06）、首振り虎は元の repo の先頭の仮説 H-A）、
-  無ければ雛形の今の既定の形。必須 2 種の紙も、この型紙の 1 枚で刷る（御来迎 examples/goraigo_v12.json・首振り虎 pos_tiger_neck）。
+  無ければ雛形の今の既定の形。必須 2 種の紙も、この型紙の 1 枚で刷る（御来迎 examples/goraigo_v13.json・首振り虎 pos_tiger_neck）。
   どれも「答え」ではなく、たたき台。
 - 御来迎は、型紙の 1 枚（rise）が雛形の既定の形（tab）と違う。既定を替えると、tab を既定で刷る凍結の場面（pos_tab ほか）の紙が
   変わるので、既定は tab のままにし、型紙の 1 枚はこの表だけで決める。rise には凍結の場面が無い（凍結の置き場は足さない）ので、
-  必須の紙は examples の場面（次の組 goraigo-v12 の寸法）で刷る。rise は寸法ごと書く形で、既定の寸法（つまみの形の物）に形だけ rise を
+  必須の紙は examples の場面（次の組 goraigo-v13 の寸法）で刷る。rise は寸法ごと書く形で、既定の寸法（つまみの形の物）に形だけ rise を
   入れると床に落ちる。一覧（omochae.ways）は形の名だけを出すので、サイトは型紙の 1 枚を刷る時、この場面の寸法を使う（次の組の記録に写す）。
 - 別の読みの形は消さない（凍結の場面と試験が使い、作る人が試行錯誤する時のヒントになる）。一覧（omochae.ways）で印を付け、
   サイトは型紙の 1 枚だけを出す。
@@ -21,7 +21,7 @@ from .compose import TEMPLATES
 
 # 必須 2 種の紙を刷る場面（repo の根からの道）。どちらも、その玩具の型紙の 1 枚で刷る。試験（tests/test_sheets.py の 3・
 # tests/test_pdf_repeatable.py）は、この表を 1 か所の正として使う（2 つの試験に同じ表を書くと、片方だけ直し忘れたため。見直しの指摘）
-REQUIRED = {"slider_fan": "examples/goraigo_v12.json", "pivot_counterweight": "tests/frozen/scenarios/pos_tiger_neck.json"}
+REQUIRED = {"slider_fan": "examples/goraigo_v13.json", "pivot_counterweight": "tests/frozen/scenarios/pos_tiger_neck.json"}
 
 # 雛形 → {別の読みの形: 型紙の形}。ここに無い形は、どれも型紙（その玩具の 1 枚）。
 READINGS = {
