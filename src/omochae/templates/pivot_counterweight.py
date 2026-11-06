@@ -86,6 +86,38 @@ def axle_to_head_top(p):
     return 8
 
 
+# 5 重りの腕の下の穴（EP-0011、作成動画の札から採った案。2026-11-06）。穴は軸の穴から weight_below_axle 下（釣り合いの式の重りの位置）で、
+# 粘土はこの穴の所に付けるか、穴に糸を通して玉を下げる。糸で下げた玉の重さは、糸を通した穴にかかる（糸は引く力しか伝えないので、
+# 玉が穴の真下に下がっても、頭を傾ける力の腕は穴までの深さ）。なので釣り合いの式は変えず、糸の長さは玉が胴の底に当たるかだけに効く。
+# 案の「穴＋糸＋玉の半径を weight_below_axle にする」は、戻る力を大きく見すぎるので採らなかった
+THREAD_R = 0.6  # 糸の穴の半径（御来迎の開く糸の穴と同じ）
+CLAY_DENSITY = 1.8e-3  # 油粘土の密度 g/mm³（弥次郎兵衛と同じ見込み）
+HANG_MIN = 3  # 糸で下げる長さの下限 mm。これより短いと結べないので、下げる形を出さない
+LOWER_HOLE_MIN = 1.0 + THREAD_R + 2  # 下の穴を開ける weight_below_axle の下限（軸の穴との間に紙を 2mm 残す）
+
+
+def clay_r(g):
+    """粘土の玉の半径 mm。"""
+    return (3 * g / (4 * math.pi * CLAY_DENSITY)) ** (1 / 3)
+
+
+def hang_thread_mm(p):
+    """首の形で、下の穴から粘土の玉を糸で下げる時の糸の長さの上限（整数 mm）。玉の下が胴の底から 3mm 以上離れる長さ。
+
+    下げられない（上限が HANG_MIN より短い・下の穴が無い・吊る形）時は None。既定の寸法（重り 3g・穴は軸の 28mm 下・軸の高さ 42mm）では、
+    直径約 15mm の玉が底に当たるので None になる。
+    """
+    if p["mount"] != "neck" or p["weight_below_axle"] < LOWER_HOLE_MIN:
+        return None
+    room = axle_z(p) - 3 - p["weight_below_axle"] - 2 * clay_r(p["weight_g"])
+    return math.floor(room) if room >= HANG_MIN else None
+
+
+def _ring(cx, cy, r, n=24):
+    """位置の印の丸（閉じた点の線）の頂点。"""
+    return [(cx + r * math.cos(2 * math.pi * i / n), cy + r * math.sin(2 * math.pi * i / n)) for i in range(n)]
+
+
 def axle_z(p):
     """刷る穴の高さ（胴の底から）。吊る形では耳の穴が胴の上の縁から HOLE_MARGIN 下に決まり、axle_height は部品に効かない。"""
     return p["body_height"] - HOLE_MARGIN if p["mount"] == "hang" else p["axle_height"]
@@ -235,7 +267,14 @@ def parts(p):
     if not hang:
         # 紙の頭は軽いので、重りは軸の真下に下げる。下げる腕が無いと寸法どおりに作れない。
         drop_len = max(p["weight_below_axle"] + 8, 20)
-        out.append(Part(5, "drop", "重りの腕", [(0, 0), (8, 0), (8, drop_len), (0, drop_len)], label_xy=(1, 8), label="5", holes=[(4, 4, 1.0)]))
+        drop = Part(5, "drop", "重りの腕", [(0, 0), (8, 0), (8, drop_len), (0, drop_len)], label_xy=(1, 8), label="5", holes=[(4, 4, 1.0)])
+        if p["weight_below_axle"] >= LOWER_HOLE_MIN:
+            # 下の穴（重りの位置）と、それを囲む点の丸（EP-0011）。丸は穴の縁から 1.2mm 離す（印が穴にかかると、切った時に消える）。
+            # 前は「下の端に粘土を付ける」だけで、腕が 20mm の下限で長い寸法では、式の位置（軸から weight_below_axle）より下に付いた
+            wy = 4 + p["weight_below_axle"]
+            drop.holes.append((4, wy, THREAD_R))
+            drop.art.append({"kind": "mark", "pts": _ring(4, wy, THREAD_R + 1.2), "closed": True, "mark": "weight"})
+        out.append(drop)
     return out
 
 
@@ -267,12 +306,18 @@ def bom(p):
         {"number": 3, "key": "strip", "name": "首の帯", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明", "reason": why},
         {"number": 4, "key": "tail", "name": "尾", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明", "reason": why},
         {"number": 7, "key": "axle", "name": "軸", "qty": 1, "material": f"竹串（長さ約 {p['body_width'] + 20}mm に切り、先を落とす）", "substituted": True, "original_guess": "不明", "reason": "家にあり、穴に通しやすいため"},
-        {"number": 8, "key": "weight", "name": "重り", "qty": 1, "material": f"油粘土 {p['weight_g']:g}g", "substituted": True, "original_guess": "不明", "reason": "量を変えて試しやすいため"},
+        {"number": 8, "key": "weight", "name": "重り", "qty": 1, "material": _weight_material(p), "substituted": True, "original_guess": "不明", "reason": "量を変えて試しやすいため"},
     ]
     if p["mount"] == "neck":
         # 首の形だけが刷る部品 5。部品表に無いと、型紙と部品表が食い違ったまま検査を通った。
         rows.insert(4, {"number": 5, "key": "drop", "name": "重りの腕", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明", "reason": "紙の頭は軽いので、重りを軸の真下に下げる腕が要るため"})
     return rows
+
+
+def _weight_material(p):
+    """重りの素材。糸で下げられる寸法の時だけ、糸の長さの上限を添える（EP-0011）。"""
+    L = hang_thread_mm(p)
+    return f"油粘土 {p['weight_g']:g}g" + (f"（糸で下げる時は、たこ糸を {L}mm まで）" if L is not None else "")
 
 
 def materials(p):
@@ -290,7 +335,12 @@ def steps(p):
         out.append("1 胴の前の壁の四角い穴を切る（カッターは大人がする）")
     out += ["1 胴を破線で山折りし、糊代で貼って箱にする。上の面は後で閉じる", "3 首の帯を半分に折って貼る。穴は重ねたまま通す"]
     if p["mount"] == "neck":
-        out += ["3 首の帯の前の端に 2 頭を貼る", "帯を前の壁の穴に入れ、竹串を胴の穴と帯の穴に通す", "5 重りの腕の穴にも竹串を通し、下の端に粘土を付ける。腕は 3 首の帯に貼る", "頭の傾きを見て、腕を貼る位置を決める"]
+        # 腕は仮に留めて、頭の傾きを見てから貼る（EP-0011: 作った人が帯と頭を胴の穴から何度も出し入れしていた）。手順の数と番号は変えない
+        L = hang_thread_mm(p)
+        hang = f"か、下の穴に糸を通して粘土の玉を {L}mm まで下げる" if L is not None else ""
+        out += ["3 首の帯の前の端に 2 頭を貼る", "帯を前の壁の穴に入れ、竹串を胴の穴と帯の穴に通す",
+                f"5 重りの腕の上の穴にも竹串を通す。下の穴（点の丸）の所に粘土を付ける{hang}。腕は 3 首の帯に添えて、テープで仮に留める（まだ貼らない）",
+                "頭の傾きを見て腕の位置を決めてから、腕を 3 首の帯に貼る"]
     else:
         # 式の「軸から頭の上の端まで」と重りの位置を文に書く。「下の端に貼る」「あごの近く」だけでは、式の寸法を実現できない。
         arm = axle_to_head_top(p)
