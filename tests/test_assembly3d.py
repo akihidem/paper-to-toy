@@ -16,6 +16,10 @@
 8. 御来迎 v14（内筒を下から押し上げる）: 18 段。静かな時は内筒が外筒の中（隙間 0.75mm）、台の上の面は外筒の底から 70mm、扇と像は口の下。
    押し上げると台の上の面が口の高さで、扇は開く角の見込み（約 176°）の半円に開く（custom）。割り箸は開いた時も外筒の下へ 77mm 出る。
    外筒の刷った面は外、内筒の刷った面は内、台の刷った面は上、像は両側に顔。
+   扇の開く所（custom）: 開き始め（と畳み終わり）は折りの形の畳んだ束と同じ（飛ばない）。開き切ると隣の板の上の端の角が合い、
+   刷った面は見る人の方。途中も、どの板の上の端の真ん中も要から扇の高さの所（弧の上）にある。（見直しの指摘: 前は束と開きがつながらず、
+   開き切っても板の間の折り線が合っていなかった）
+9. 動く物: 消えた棒と、出た部品も動く物に入る（取り外す手・出す手を空の moving に読み違えない）。
 紙は折り線で分けた硬い面（fold3d と同じ）。紙の厚み・糊・たわみは入れない。
 """
 import json
@@ -273,4 +277,33 @@ for pn in gp["pusher"]["panels"][:4]:  # 内筒の 4 面は刷った面が内
     assert w[0] * norm_of("pusher", pn["id"])[0] + w[2] * norm_of("pusher", pn["id"])[2] < 0, pn["id"]
 assert norm_of("base", 1)[1] < -0.999 and norm_of("figure", 0)[2] > 0.999 and norm_of("figure", 1)[2] < -0.999
 assert g["structure"]["inside"]["pusher"] == "tube" and g["structure"]["cutaway"] == {"tube": ["0"], "pusher": ["2"]}
+fan = gp["fan"]
+nf, Rf = len(fan["panels"]), max(x for x, _ in fan["outline"])
+wf = max(y for _, y in fan["outline"]) / nf
+s17, s18 = g["steps"][16]["poses"], g["steps"][17]["poses"]
+fp = lambda pose, k: M(pose["parts"]["fan"]["panels"][str(k)])
+assert not s17[0]["parts"]["fan"].get("custom") and all(q["parts"]["fan"].get("custom") for q in s17[1:] + s18[:-1])
+assert max(math.dist(ap(fp(s18[-2], k), q), ap(fp(s17[0], k), q)) for k in range(nf) for q in fan["panels"][k]["poly"]) < TOL  # 畳み終わり = 束
+first_open = max(math.dist(ap(fp(s17[1], k), q), ap(fp(s17[0], k), q)) for k in range(nf) for q in fan["panels"][k]["poly"])
+assert 0 < first_open < 0.25 * Rf * math.radians(180), first_open  # 開き始めは束から少しだけ動く（飛ばない）
+opened_f = s17[-1]
+assert max(math.dist(ap(fp(opened_f, k), (Rf, (k + 1) * wf)), ap(fp(opened_f, k + 1), (Rf, (k + 1) * wf))) for k in range(nf - 1)) < 0.05
+assert min(fp(opened_f, k)[2][2] for k in range(nf)) > 0.999  # 開き切ると刷った面は見る人の方
+piv = ap(fp(opened_f, 0), (0.0, wf / 2))
+assert max(abs(math.dist(ap(fp(q, k), (Rf, k * wf + wf / 2)), piv) - Rf) for q in s17[1:] for k in range(nf)) < TOL  # 上の端の真ん中は弧の上
+
+# 9. 動く物: 消えた棒・出た部品
+from omochae.assembly3d import Scene  # noqa: E402
+from omochae.compose import compose as _compose  # noqa: E402
+from omochae.__main__ import load_source as _ls  # noqa: E402
+
+_, lay, _ = _compose("pivot_counterweight", v6, _ls(pc.SOURCE))
+sc = Scene(lay)
+states = {k: ({}, sc.on_paper(k)) for k in sc.parts}
+sc.pose(states, rods={"skewer": {"from": [0, 0, 0], "to": [0, 0, 1]}})
+gone = sc.pose(states)
+assert gone["moving"] == ["skewer"] and gone["act"] == "move", (gone["moving"], gone["act"])
+hid = sc.pose(states, hidden=("tail",))
+shown = sc.pose(states)
+assert shown["moving"] == ["tail"] and shown["act"] == "move" and hid["moving"] == ["tail"], (shown["moving"], hid["moving"])
 print(f"ok 作り方の 3D の JSON（虎 v6・{len(data['steps'])} 段・形のずれ {worst:.1e}mm／御来迎 v14・{len(g['steps'])} 段・形のずれ {gworst:.1e}mm）")

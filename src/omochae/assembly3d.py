@@ -212,11 +212,14 @@ class Scene:
         # 動く物には、部品のほかに、出た・動いた棒と、動いた粘土の玉も入れる（竹串を通す手・揺れる時の粘土を、サイトが名で引けるように）
         moved = {k for k, r in out["rods"].items() if prev and k in prev["rods"] and r != prev["rods"][k]}
         moved |= {k for k, b in out["balls"].items() if not prev or prev["balls"].get(k) != b}
+        # 消えた棒・玉と、出た・隠れた部品も動く物（取り外す手・出す手を、空の moving と place に読み違えないため。見直しの指摘）
+        gone = {k for k in (prev["rods"] if prev else {}) if k not in out["rods"]} | {k for k in (prev["balls"] if prev else {}) if k not in out["balls"]}
+        shown = {k for k in out["parts"] if prev and k not in prev["parts"]} | {k for k in (prev["parts"] if prev else {}) if k not in out["parts"]}
         if moving is None:
-            moving = sorted(set(changed_place) | set(changed_fold) | set(custom) | set(new_rods) | moved)
+            moving = sorted(set(changed_place) | set(changed_fold) | set(custom) | set(new_rods) | moved | gone | shown)
         if act is None:
             act = ("cut" if tool and tool.get("kind") in ("scissors", "knife") else "open" if custom else "fold" if changed_fold
-                   else "thread" if new_rods else "move" if changed_place else "place")
+                   else "thread" if new_rods else "move" if (changed_place or gone or shown) else "place")
         out["act"], out["moving"] = act, sorted(moving)
         self._prev = out
         return out
@@ -471,21 +474,63 @@ def _tiger(scene, p):
     return steps_text, steps, finale, rods, balls, structure
 
 
-def _fan_open(scene, fan_key, pivot, opening_deg, spread):
-    """扇（蛇腹の帯）が、受けの所を要に開いた形の、面ごとの行列（custom。折り線の角では表せないので面を直に置く）。
+def _axis_angle(R):
+    """回転の行列（3×3）の軸と角（ラジアン）。角が π の近くは、対称の部分（R + I）/ 2 = u uᵀ から軸を読む。"""
+    c = max(-1.0, min(1.0, (R[0][0] + R[1][1] + R[2][2] - 1) / 2))
+    th = math.acos(c)
+    vee = (R[2][1] - R[1][2], R[0][2] - R[2][0], R[1][0] - R[0][1])
+    sn = math.sin(th)
+    if sn > 1e-6:
+        return tuple(v / (2 * sn) for v in vee), th
+    if th < 1e-6:
+        return (0.0, 0.0, 1.0), 0.0
+    B = [[(R[i][j] + (1.0 if i == j else 0.0)) / 2 for j in range(3)] for i in range(3)]
+    i = max(range(3), key=lambda k: B[k][k])
+    return tuple(B[i][j] / math.sqrt(B[i][i]) for j in range(3)), th
 
-    板 k（帯の y が 4k〜4k+4、x が高さ）を、下の端の真ん中が要に来るように立て、要のまわりに φ_k 回す。φ_k は開く角を板の数で
-    等分した所に spread（0〜1）を掛けた角（左が 1 枚目）。刷った面は見る人の方。山と谷の重なりは、板ごとに前後へ 0.15mm ずらして見せる。
+
+def _rot_axis(u, th):
+    x, y, z = u
+    c, sn = math.cos(th), math.sin(th)
+    C = 1 - c
+    return [[c + x * x * C, x * y * C - z * sn, x * z * C + y * sn], [y * x * C + z * sn, c + y * y * C, y * z * C - x * sn],
+            [z * x * C - y * sn, z * y * C + x * sn, c + z * z * C]]
+
+
+def _fan_open(scene, fan_key, stack, pivot, opening_deg, spread):
+    """扇（蛇腹の帯）が、受けの所を要に開く途中の、面ごとの行列（custom）。
+
+    紙の扇は、要の所で紙が縮んで開くので、折り線で分けた硬い面のつながり（tree と turns）では正しく表せない。そこで両方の端を合わせる:
+    - spread 0 は、折りの形の畳んだ束（stack。面ごとの世界の行列）と同じ（谷と山で 1 枚ごとに裏返った束。畳んだ扇からつながる）。
+    - spread 1 は、開いた半円。板 k（帯の y が k·w〜(k+1)·w、x が高さ）を、真ん中の線が要からの向き φ_k になるように立てる。
+      φ_k は開く角（帯の長さ ÷ 高さ）を板の数で等分した所なので、上の端の弧の長さは板の幅と同じになり、隣の板の上の端の角が合う。
+      刷った面は見る人の方。
+    - 途中は、板ごとに、束の向きから開いた向きへ同じ軸のまわりに spread の割合だけ回し、上の端の真ん中を要のまわりの弧に沿って動かす。
+      途中の形では、隣の板の折り線は合わない（見せるための近い形。サイトは custom の面を行列の間で補わない）。
     """
     q = scene.parts[fan_key]
     n = len(scene.sheets[fan_key].panels)
     w = (max(y for _, y in q.outline) - min(y for _, y in q.outline)) / n
+    h = max(x for x, _ in q.outline) - min(x for x, _ in q.outline)
     out = {}
     for k in range(n):
-        phi = spread * (-opening_deg / 2 + (k + 0.5) * opening_deg / n)
+        phi = -opening_deg / 2 + (k + 0.5) * opening_deg / n
         A = [[0.0, 1.0, 0.0, -(k * w + w / 2)], [-1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
-        m = mul(translate(pivot[0], pivot[1], pivot[2] + (0.15 if k % 2 else -0.15)), mul(rot_z(phi), A))
-        out[str(k)] = css(m)
+        M1 = mul(translate(*pivot), mul(rot_z(phi), A))
+        M0 = stack[k]
+        R0 = [row[:3] for row in M0[:3]]
+        R1 = [row[:3] for row in M1[:3]]
+        Rrel = [[sum(R1[i][m] * R0[j][m] for m in range(3)) for j in range(3)] for i in range(3)]  # R1 · R0ᵀ
+        u, th = _axis_angle(Rrel)
+        Rs = _rot_axis(u, spread * th)
+        Rs = [[sum(Rs[i][m] * R0[m][j] for m in range(3)) for j in range(3)] for i in range(3)]
+        top = (h, k * w + w / 2, 0.0)  # 板の上の端の真ん中（部品の座標）
+        p0 = apply(M0, top)
+        rz = rot_z(spread * phi)
+        rel = _sub(p0, pivot)
+        ps = tuple(pivot[i] + sum(rz[i][j] * rel[j] for j in range(3)) for i in range(3))
+        t = _sub(ps, tuple(sum(Rs[i][j] * top[j] for j in range(3)) for i in range(3)))
+        out[str(k)] = css([Rs[0] + [t[0]], Rs[1] + [t[1]], Rs[2] + [t[2]], [0.0, 0.0, 0.0, 1.0]])
     return out
 
 
@@ -641,17 +686,18 @@ def _goraigo_rise(scene, p):
     pivot = apply(G_open, (0.0, 0.0, zc))
     r17 = group_at(G_open)
     rise = snap(view={"rx": -10, "ry": 25}, rods=r17)
+    stack = scene.state("fan", *cur["fan"])[1]  # 押し上げた所の、畳んだ束の面ごとの世界の行列（開く所はここから始まる）
     opening_poses = []
     for i in range(1, 11):
         pose_ = snap(view={"rx": -5, "ry": 15}, rods=r17, custom=("fan",))
-        pose_["parts"]["fan"]["panels"] = _fan_open(scene, "fan", pivot, opening, i / 10)
+        pose_["parts"]["fan"]["panels"] = _fan_open(scene, "fan", stack, pivot, opening, i / 10)
         opening_poses.append(pose_)
     steps.append([rise] + opening_poses)
     # 18. 引き下げると畳まれて筒に入る
     closing = []
     for i in range(9, -1, -1):
         pose_ = snap(view={"rx": -5, "ry": 15}, rods=r17, custom=("fan",))
-        pose_["parts"]["fan"]["panels"] = _fan_open(scene, "fan", pivot, opening, i / 10)
+        pose_["parts"]["fan"]["panels"] = _fan_open(scene, "fan", stack, pivot, opening, i / 10)
         closing.append(pose_)
     r18 = group_at(G_rest)
     steps.append(closing + [snap(view={"rx": -10, "ry": 25}, rods=r18)])
