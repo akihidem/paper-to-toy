@@ -87,13 +87,12 @@ assert any("角の面に来る" in m for m in fails(dict(q5, axle_height=48)))
 assert any("尾の糊代の四角" in m for m in fails(dict(q5, body_width=20, body_round=10, strip_width=10)))
 low = dict(neck, axle_height=15, head_h=26, weight_below_axle=5, weight_behind=0)
 assert any("床に近すぎる" in m for m in fails(low)) and not any("床に近すぎる" in m for m in fails(dict(low, leg_height=10)))
-# 吊る形の頭の裏には粘土の玉（直径 約 15mm）を貼るので、頭は左右の前の脚の間を通らない。脚の分を足すのは、揺れても頭の後ろの端が
-# 前の脚の角筒より前にある寸法（耳 25・頭 15）だけ。頭が胴の前の面より後ろまでかかる寸法（耳 12・頭 26）は足さない
-assert 2 * pc.clay_r(pc.DEFAULTS["weight_g"]) > pc.DEFAULTS["body_width"] - 2 * (pc.LEG_SIDE_GAP + pc.LEG_SIDE)  # 玉は脚の間より太い
-for ear, hw, credited in ((12, 26, False), (25, 15, True)):
+# 吊る形は、脚がある時も床までは胴の底で見る（保守側）。頭の裏の粘土の玉が前の脚に当たるかは、玉の大きさ・位置・傾きで変わるので、
+# 胴の底より下へ頭を出さない形だけを通す（頭が脚の前にある寸法・玉が脚の間を通る寸法も落とす。限り）
+for ear, hw in ((12, 26), (25, 15)):
     hang_low = dict(pc.DEFAULTS, mount="hang", body_height=30, axle_height=26, ear_length=ear, head_w=hw, head_h=20, weight_below_axle=20)
     assert any("床に近すぎる" in m for m in fails(hang_low)), (ear, fails(hang_low))
-    assert any("床に近すぎる" in m for m in fails(dict(hang_low, leg_height=10))) is not credited, (ear, fails(dict(hang_low, leg_height=10)))
+    assert any("床に近すぎる" in m for m in fails(dict(hang_low, leg_height=10))), (ear, fails(dict(hang_low, leg_height=10)))
 # 低すぎる脚は落とし、形は壊さない（横の糊代の頂点の順と指の線）
 assert any("脚が低すぎ" in m for m in fails(dict(q5, leg_height=3))) and not any("脚が低すぎ" in m for m in fails(q5))
 for hh in (0.5, 1, 2, 3, pc.LEG_MIN):

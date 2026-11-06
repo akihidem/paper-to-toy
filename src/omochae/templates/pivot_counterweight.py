@@ -171,16 +171,11 @@ def check_physics(p):
         room = p["ear_length"] - HOLE_MARGIN
         if room < reach and math.degrees(math.asin(room / reach)) < MIN_SWING:
             out.append(Failure("F5.pivot", "頭", f"頭が胴に当たるまで {MIN_SWING}° 揺れない"))
-        # 吊る形の頭の裏には粘土の玉（3g で直径 約 15mm）を貼るので、頭は左右の前の脚の間を通らない物として見る。
-        # 脚の分だけ床が遠いと見てよいのは、揺れても頭の後ろの端が、前の脚の角筒の前の面より前にある時だけ。
-        # 頭は耳の穴（胴の前の面から ear_length − HOLE_MARGIN 前）の真下で、前後に head_w の幅。揺れると後ろの端は
-        # 軸から頭の下の端までの長さ·sin(MIN_SWING) だけ後ろへ寄る。前の脚の角筒は、胴の前の面から LEG_INSET＋LEG_TAB 後ろから始まる
-        lift = 0
-        if p["leg_height"] > 0:
-            back = (p["ear_length"] - HOLE_MARGIN) - p["head_w"] / 2 - reach * math.sin(math.radians(MIN_SWING))
-            if back > -(LEG_INSET + LEG_TAB):
-                lift = p["leg_height"]
-        if H + lift - HOLE_MARGIN - reach < 3:
+        # 吊る形は、脚がある時も、床までは胴の底で見る（脚の分を足さない。保守側）。頭の裏の粘土の玉（3g で直径 約 15mm）が、
+        # 揺れや静止の傾き（MAX_TILT まで）で前の脚に当たるかは、玉の大きさ・位置・傾きで変わり、頭の紙の位置だけでは決まらない。
+        # 吊る形は型紙の 1 枚でない読みなので、当たりの式は入れず、胴の底より下へ頭を出さない形だけを通す
+        # （玉が脚に当たらない低い頭の寸法も落とす。限りとして README に書いた）
+        if H - HOLE_MARGIN - reach < 3:
             out.append(Failure("F5.pivot", "頭", "頭の下端が床に近すぎる"))
     else:
         # 首の帯が穴の縁に当たらずに MIN_SWING まで揺れるか。帯の面は軸に直交する（軸は帯の面の穴を貫く）ので、
