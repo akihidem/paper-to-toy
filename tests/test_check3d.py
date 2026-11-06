@@ -82,10 +82,23 @@ assert c3.inspect(d, {}) == []
 d = scene([part("wall", [(SQ, None)])], {"wall": [mat((-10.0, -15.0, 0.0), X, Y)]})  # 下の端は y = 5（机の 5mm 下）
 assert floors(c3.inspect(d, {"desk": True})) == [("3D.out", "wall", False)] and c3.inspect(d, {}) == []
 d = scene([part("wall", [(SQ, None)])], {"wall": [mat((-10.0, -30.0, 0.0), X, Y)]}, rods={"stick": {"from": [15.0, -5.0, 0.0], "to": [15.0, 3.0, 0.0]}})
-assert floors(c3.inspect(d, {"desk": True})) == [("3D.out", "stick", False)]  # 棒の端が机の 3mm 下
+got = c3.inspect(d, {"desk": True})
+assert floors(got) == [("3D.out", "stick", False)] and got[0].rods == ["stick"] and got[0].points == [(15.0, 3.0, 0.0)]  # 棒の端が机の 3mm 下
+x0, y0, k = c3._fit(d, [d["steps"][0]["poses"][0]])
+for q in ((15.0, -5.0, 0.0), (15.0, 3.0, 0.0)):  # 記録の絵は、紙の外へ出た棒の端も入れる大きさ
+    p = c3._rot(q)
+    assert 0 <= c3.TILE / 2 + (p[0] - x0) * k <= c3.TILE and 0 <= c3.TILE / 2 + (p[1] - y0) * k <= c3.TILE, p
 d = scene([part("z", [(SQ, None), (PL, None), (PL, None)])], {"z": [wall, stick, mat((4.0, 0.0, -10.0), X, Z)]})
 got = c3.inspect(d, {})
 assert floors(got) == [("3D.hit", "z", False)] and {("z", 1), ("z", 2)} <= set(got[0].panels) and len(got[0].points) == 2, (c3.summary(got), got[0].panels)
+# 2 つの面が互いを刺す時は、深い方の向きで言う（壁の辺が板を 10mm、板の辺が壁を 1mm 刺す）
+w_ = c3.Panel("w", "w", 0, [tuple(q) for q in SQ], [], [], c3.M(wall))
+b_ = c3.Panel("b", "b", 0, [(0, 0), (10, 0), (10, 9), (0, 9)], [], [], c3.M(mat((0.0, -15.0, -1.0), Y, Z)))
+assert abs(c3._deepest(w_, b_, c3.EPS)[1] - 10) < 1e-9 and abs(c3._deepest(b_, w_, c3.EPS)[1] - 10) < 1e-9
+# 棒が同じ姿で同じ部品の 2 つの面を穴の無い所で通っても、落ちは 1 つで、まとめの行は「ほか」を言わない
+d = scene([part("box", [(SQ, None), (SQ, None)])], {"box": [wall, mat((-10.0, -10.0, 5.0), X, Y)]}, rods=rod)
+got = c3.inspect(d, {})
+assert floors(got) == [("3D.hit", "skewerとbox", False)] and len(got[0].panels) == 2 and "ほか" not in c3.summary(got)[0], c3.summary(got)
 lid = mat((-10.0, -40.0, 0.0), X, Y)  # 口（tube の一番上）は y = −40
 d = scene([part("tube", [(SQ, None)]), part("fan", [(PL, None)])], {"tube": [lid], "fan": [mat((-2.0, -41.0, 5.0), X, Y)]})
 rule = {"below": {"parts": ["fan"], "of": "tube", "clear": 2.0, "pose": (1, -1)}}

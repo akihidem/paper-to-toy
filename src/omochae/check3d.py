@@ -36,9 +36,9 @@ DESK_TOL = 0.5  # 机の下へ出たと見る深さ mm
 class Hit:
     """検品の落ち 1 つ。floor・所（where）・文と、絵に赤で描く物（面・点・玉）。"""
 
-    def __init__(self, floor, where, msg, pose_label, panels=(), points=(), balls=(), note=False, depth=0.0):
+    def __init__(self, floor, where, msg, pose_label, panels=(), points=(), balls=(), note=False, depth=0.0, rods=()):
         self.floor, self.where, self.msg, self.pose_label, self.depth = floor, where, msg, pose_label, depth
-        self.panels, self.points, self.balls = list(panels), list(points), list(balls)
+        self.panels, self.points, self.balls, self.rods = list(panels), list(points), list(balls), list(rods)
         self.note = note  # 所見（落ちにしない。近い形の部品の当たり）
         self.pose = None  # 当たった姿（記録の絵に使う）
 
@@ -172,6 +172,12 @@ def _pierce(a, b, eps=EPS):
     return best
 
 
+def _deepest(a, b, eps):
+    """a の辺が b を刺す所と、b の辺が a を刺す所のうち、深い方（見直しの指摘: 前は先に見つけた向きだけで、深さを小さく言う事があった）。"""
+    got = [g for g in (_pierce(a, b, eps), _pierce(b, a, eps)) if g is not None]
+    return max(got, key=lambda g: g[1]) if got else None
+
+
 def check_pose(data, pose, label, rules):
     """姿 1 つの 3D.hit と 3D.out。rules はレシピの決め（attach・desk）。"""
     pans = panels_of(data, pose)
@@ -185,7 +191,7 @@ def check_pose(data, pose, label, rules):
             if not _near(a, b, EPS):
                 continue
             eps = EPS_PAR if abs(_dot(a.n, b.n)) > cos_par else EPS
-            got = _pierce(a, b, eps) or _pierce(b, a, eps)
+            got = _deepest(a, b, eps)
             if got is None:
                 continue
             where = "と".join(sorted((a.key, b.key))) if a.key != b.key else a.key
@@ -220,6 +226,7 @@ def check_pose(data, pose, label, rules):
                 break
     for name, rod in pose.get("rods", {}).items():
         p0, p1 = tuple(rod["from"]), tuple(rod["to"])
+        mine = {}  # 部品ごとの落ち（同じ姿で同じ部品の面をいくつ通っても 1 つ。見直しの指摘: 姿の数を多く数えた）
         for pn in pans:
             d0, d1 = pn.dist(p0), pn.dist(p1)
             if not ((d0 > EPS and d1 < -EPS) or (d0 < -EPS and d1 > EPS)):
@@ -228,8 +235,16 @@ def check_pose(data, pose, label, rules):
             x = tuple(p0[k] + (p1[k] - p0[k]) * t for k in range(3))
             depth = pn.solid_depth(pn.local(x))
             if depth > EPS:
-                hits.append(Hit("3D.hit", f"{name}と{pn.key}", f"棒が{pn.name}の紙を穴の無い所で通る（穴の縁から {depth:.1f}mm 内）", label,
-                                panels=[(pn.key, pn.pid)], points=[x], note=pn.key in custom, depth=depth))
+                h = mine.get(pn.key)
+                if h is None:
+                    mine[pn.key] = Hit("3D.hit", f"{name}と{pn.key}", f"棒が{pn.name}の紙を穴の無い所で通る（穴の縁から {depth:.1f}mm 内）", label,
+                                       panels=[(pn.key, pn.pid)], points=[x], note=pn.key in custom, depth=depth, rods=[name])
+                    hits.append(mine[pn.key])
+                else:
+                    h.panels.append((pn.key, pn.pid))
+                    h.points.append(x)
+                    if depth > h.depth:
+                        h.depth, h.msg = depth, f"棒が{pn.name}の紙を穴の無い所で通る（穴の縁から {depth:.1f}mm 内）"
     if rules.get("desk"):
         low = max((q[1] for pn in pans for q in pn.pts), default=-math.inf)
         for name, ball in pose.get("balls", {}).items():
@@ -238,7 +253,8 @@ def check_pose(data, pose, label, rules):
         if max(low, rod_low) > DESK_TOL:
             if rod_low >= low:  # 棒の端が一番下（見直しの指摘: 前は棒を見ず、竹串が机の下へ出ても通った）
                 name = max(pose["rods"], key=lambda k: max(pose["rods"][k]["from"][1], pose["rods"][k]["to"][1]))
-                hits.append(Hit("3D.out", name, f"棒の端が机の下へ {rod_low:.1f}mm 出る", label, depth=rod_low))
+                end = max((pose["rods"][name]["from"], pose["rods"][name]["to"]), key=lambda q: q[1])
+                hits.append(Hit("3D.out", name, f"棒の端が机の下へ {rod_low:.1f}mm 出る", label, depth=rod_low, rods=[name], points=[tuple(end)]))
             else:
                 worst = max(pans, key=lambda pn: max(q[1] for q in pn.pts))
                 hits.append(Hit("3D.out", worst.key, f"{worst.name}が机の下へ {low:.1f}mm 出る", label, panels=[(worst.key, worst.pid)], depth=low))
@@ -342,7 +358,8 @@ def summary(hits):
     out = []
     for (note, floor, where), hs in groups.items():
         deep = max(hs, key=lambda h: h.depth)
-        more = f"（ほか {len(hs) - 1} の姿）" if len(hs) > 1 else ""
+        n = len({id(h.pose) if h.pose is not None else h.pose_label for h in hs})  # 違う姿の数（落ちの数でない）
+        more = f"（ほか {n - 1} の姿）" if n > 1 else ""
         out.append(f"{'NOTE' if note else 'FAIL'} {floor} [{where}] {deep.pose_label}{more}: {deep.msg}")
     return out
 
@@ -409,10 +426,13 @@ def _frame(data, pose, hits, fit):
         d.polygon([to(p) for p in pts], fill=col, outline=line, width=3 if line != (90, 90, 90) else 1)
     radius = {k_: v["r"] for k_, v in data.get("balls", {}).items()}
     hit_balls = {b for h in hits for b in h.balls}
+    red_rods = {r for h in hits if not h.note for r in h.rods}
+    org_rods = {r for h in hits if h.note for r in h.rods}
     for name, rod in pose.get("rods", {}).items():
         a, b = _rot(rod["from"]), _rot(rod["to"])
         w = max(2, int(2 * data["rods"].get(name, {}).get("r", 1.0) * k))
-        d.line([to(a), to(b)], fill=(170, 130, 70), width=w)
+        col = RED if name in red_rods else ORANGE if name in org_rods else (170, 130, 70)
+        d.line([to(a), to(b)], fill=col, width=w + (2 if col != (170, 130, 70) else 0))
     for name, ball in pose.get("balls", {}).items():
         c, r = to(_rot(ball["at"])), radius.get(name, 1.0) * k
         d.ellipse([c[0] - r, c[1] - r, c[0] + r, c[1] + r], fill=(138, 111, 85), outline=RED if name in hit_balls else (60, 60, 60),
@@ -425,7 +445,14 @@ def _frame(data, pose, hits, fit):
 
 
 def _fit(data, poses):
+    """絵の真ん中と倍率。紙の面の点に、棒の端と玉の上下左右も入れる（見直しの指摘: 紙の外へ出た棒が絵から切れる事があった）。"""
     pts = [_rot(q) for pose in poses for pn in panels_of(data, pose) for q in pn.pts]
+    pts += [_rot(rod[k]) for pose in poses for rod in pose.get("rods", {}).values() for k in ("from", "to")]
+    radius = {k: v["r"] for k, v in data.get("balls", {}).items()}
+    for pose in poses:
+        for name, ball in pose.get("balls", {}).items():
+            c, r = _rot(ball["at"]), radius.get(name, 0.0)
+            pts += [(c[0] - r, c[1] - r, c[2]), (c[0] + r, c[1] + r, c[2])]
     xs, ys = [p[0] for p in pts], [p[1] for p in pts]
     span = max(max(xs) - min(xs), max(ys) - min(ys), 1.0)
     return ((max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2, (TILE - 40) / span)
