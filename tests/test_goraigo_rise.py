@@ -48,7 +48,8 @@ assert by_place["base"].y > by_place["fan"].y + by_place["fan"].height and by_pl
 assert sorted((q.number, q.key, q.label) for q in by.values()) == [
     (1, "tube", "1 外筒"), (2, "pusher", "2 内筒"), (3, "base", "3 台"), (4, "fan", "4 扇"), (5, "figure", "5"), (6, "cradle", "6 受け")]
 assert all(not q.holes and not q.cuts for q in by.values()), [(q.key, q.holes, q.cuts) for q in by.values() if q.holes or q.cuts]
-assert not hasattr(sf, "LABEL_FRAME") and not hasattr(sf, "label_box")  # 札は外した（指示 ①）
+# 札は外した（指示 ①）: 外筒の絵は白木の帯と地と角の 2 本線だけ（tests/test_slider_fan_colors.py が全部の形で見る）
+assert {a.get("fill") for a in by["tube"].art if a["kind"] == "poly"} == {sf.WOOD, sf.WOOD_ALT, sf.WOOD_TOP, sf.WOOD_BOTTOM}
 # 外形は 4 つの角と糊代の 2 つの角の 6 点（つまみの形は溝の切り込みで 4 点増える）
 assert len(by["tube"].outline) == 6 and by["tube"].hide_folds and len(by["tube"].mountain) == 4 and not by["tube"].valley
 assert len(by["pusher"].valley) == 4 and not by["pusher"].mountain and by["pusher"].height == L  # 内筒は破線の谷折り

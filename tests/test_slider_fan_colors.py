@@ -37,14 +37,16 @@ for c in (sf.FAN_A, sf.FAN_B):
 for c in (sf.WOOD, sf.WOOD_ALT):
     assert sum(rgb(c)) / 3 >= 0.75, c
 
-# 2. 筒の紫の枠の札は無い（指示 ①）: どの形も、外筒の絵は上と下の帯・面の地・角の 2 本線だけ（紫も白い札の紙も無い）
+# 2. 筒の紫の枠の札は無い（指示 ①）: どの形も、外筒の絵は上と下の帯・面の地（白木の 4 つの色が全部ある）と、角の 2 本線（線の色）だけ。
+#    塗りも線も、ほかの色（紫の枠・白い札の紙）を持たない
 for form in sf.PUSH_PARTS:
     p = {**sf.DEFAULTS, "push_part": form, **({"pusher_height": 84} if form in ("tube", "stick") else {})}
     tube = {q.key: q for q in sf.parts(p)}["tube"]
     fills = {a.get("fill") for a in tube.art if a["kind"] == "poly"}
-    assert fills <= {sf.WOOD, sf.WOOD_ALT, sf.WOOD_TOP, sf.WOOD_BOTTOM}, (form, fills)
+    strokes = {a.get("stroke") for a in tube.art if a["kind"] == "line"}
+    assert fills == {sf.WOOD, sf.WOOD_ALT, sf.WOOD_TOP, sf.WOOD_BOTTOM}, (form, fills)
+    assert strokes == {sf.LINE} and sum(1 for a in tube.art if a["kind"] == "line") == 2, (form, strokes)
     assert all(a["kind"] in ("poly", "line") for a in tube.art), form
-assert not hasattr(sf, "LABEL_FRAME") and not hasattr(sf, "label_box")
 
 # 3. 範囲の上限: 筒の高さを 130 まで書ける形は、内筒も同じ高さまで書ける（内筒を下から押す形と柄の形は、内筒が筒より短いと落とす）
 assert sf.RANGES["pusher_height"][1] >= sf.RANGES["tube_height"][1]

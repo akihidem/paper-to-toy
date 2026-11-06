@@ -59,8 +59,11 @@ assert floors(parts(pusher_side=25.5)) == []         # すき間 0.5 なら入�
 assert floors(parts(), push_amount=28) == ["3D.stroke"]
 # 静かな時に外筒に入る長さが内筒の一辺より短い（押し上げる量 79: 21 が一辺 22 より短い）
 assert floors(parts(push_amount=79), push_amount=79) == ["3D.stroke"]
-# 内筒そのものが一辺より短い（折った内筒 20 が一辺 22 より短い）
-assert floors(parts(pusher_height=20)) == ["3D.stroke"]
+# 内筒そのものが一辺より短い（折った内筒 20 が一辺 22 より短い。割り箸を貼れる長さ 13 も 20 に足りないので 2 行）
+assert floors(parts(pusher_height=20)) == ["3D.stroke", "3D.stroke"]
+# 割り箸を内筒に貼れる長さが足りない（内筒 26: 台の糊代の下から 19mm）。型紙の床と同じ判定（見直しの指摘）
+assert floors(parts(pusher_height=26)) == ["3D.stroke"]
+assert floors(parts(pusher_height=27)) == []
 # 割り箸の見込みが短いと、開いた位置で外筒の下に残らない（範囲の寸法では 200mm で落ちないので、見込みを替えて見る）
 sf.CHOPSTICK_LEN, keep = 120, sf.CHOPSTICK_LEN
 try:
