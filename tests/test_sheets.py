@@ -41,11 +41,13 @@ assert set(DIFFERENT_TOYS) <= set(groups)  # 名指しした組が、雛形の�
 assert sheets.is_sheet("slider_fan", "rise") and sheets.is_sheet("pivot_counterweight", "neck")
 assert not any(sheets.is_sheet("slider_fan", f) for f in ("tab", "tube", "stick", "lift"))
 assert not sheets.is_sheet("pivot_counterweight", "hang")
-for path in (ROOT / "examples/goraigo_v12.json", ROOT / "tests/frozen/scenarios/pos_tiger_neck.json"):
+# 場面ごとに、どの玩具のどの形かまで決めて見る（場面が別の玩具の型紙に書き替わっても通らないように。検品の指摘）
+for path, want in ((ROOT / "examples/goraigo_v12.json", ("slider_fan", "rise")),
+                   (ROOT / "tests/frozen/scenarios/pos_tiger_neck.json", ("pivot_counterweight", "neck"))):
     sc = json.loads(path.read_text(encoding="utf-8"))
     tpl = TEMPLATES[sc["template"]]
     form = sc["params"].get(tpl.FORM, tpl.DEFAULTS[tpl.FORM])
-    assert sheets.is_sheet(sc["template"], form), (path.name, form)
+    assert (sc["template"], form) == want and sheets.is_sheet(sc["template"], form), (path.name, sc["template"], form)
 
 # 4. 一覧（サイトが使う）: 行は全部の形のまま。sheet と reading_of と source_id が付き、sheet の行は玩具ごとに 1 つ
 table = ways.table()

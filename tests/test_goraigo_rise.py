@@ -69,6 +69,7 @@ assert sf.title(V12) == "内筒を下から押し上げる"
 st = sf.steps(V12)
 assert len(st) == 11 and st[0].startswith("刷った物差し"), st
 assert "押し上げる" in st[-1] and "開く" in st[-1] and "引き下げる" in st[-1] and "筒に入る" in st[-1], st[-1]
+assert "一緒に持つ" in st[-1] and "抜ける" in st[-1], st[-1]  # 止めは無いので、静かな時は外筒と内筒を一緒に持つ
 assert any("2 内筒の上にかぶせ" in x for x in st) and any("6 受け" in x for x in st)
 
 # 4. 3D の確かめはつまみの形だけを組むので、この形は確かめられない（4）

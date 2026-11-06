@@ -27,6 +27,12 @@ def printed(scenario, d, name, tz):
     return out.with_suffix(".pdf").read_bytes()
 
 
+# 必須 2 種の場面が、御来迎の rise と虎の neck を刷る物である事を先に見る（場面が別の形に書き替わっても、この試験が黙って通らないように）
+import json  # noqa: E402
+for scenario, want in (("examples/goraigo_v12.json", ("slider_fan", "push_part", "rise")),
+                       ("tests/frozen/scenarios/pos_tiger_neck.json", ("pivot_counterweight", "mount", "neck"))):
+    sc = json.loads((ROOT / scenario).read_text(encoding="utf-8"))
+    assert sc["template"] == want[0] and sc["params"].get(want[1]) == want[2], (scenario, sc["template"], sc["params"])
 # 時間帯と秒を変えて同じなら、作った機械の時計は PDF に入っていない
 with tempfile.TemporaryDirectory() as d:
     for scenario in ("examples/goraigo_v12.json", "tests/frozen/scenarios/pos_tiger_neck.json"):
