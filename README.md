@@ -12,6 +12,8 @@ A papercraft template engine: generates printable PDF patterns from dimensions a
 
 型紙は正解ではなく、AI が考えた仮説です（どの紙にもそう刷る）。作って、動きを確かめて、直していきます。作り方を決めた制作者の言葉は [docs/philosophy.md](docs/philosophy.md) にそのまま残しています。
 
+制作者 = この repo の作り方を決めた人／作った人 = 型紙で玩具を作った人
+
 
 ```
 寸法（JSON） → 配置 → 描く前の検査 → SVG / PDF → 刷った後の検査 → PNG
