@@ -174,9 +174,10 @@ def _check_lift(p):
     out = []
     H, A, h, g, b = p["tube_height"], p["tube_side"], p["fold_height"], p["base_glue"], p["base_side"]
     thick = p["fold_count"] * p["paper_thickness"]
-    # 台は糊代を下へ折った浅い箱で、高さは糊代の長さ。その上に、受けの底（紙 1 枚）と畳んだ扇が立つ
-    if g + h > H - 2:
-        out.append(Failure("F5.fan_height", "蛇腹の扇", f"台の高さ {g}＋扇の高さ {h} が筒の高さ {H}−2 を超え、筒をかぶせられない"))
+    # 台は糊代を下へ折った浅い箱で、高さは糊代の長さ。その上に、受けの底（紙 1 枚）と畳んだ扇が立つ（紙の厚さも足す。検品の指摘）
+    t = p["paper_thickness"]
+    if g + t + h > H - 2:
+        out.append(Failure("F5.fan_height", "蛇腹の扇", f"台の高さ {g}＋受けの底の紙 {t:g}＋扇の高さ {h} が筒の高さ {H}−2 を超え、筒をかぶせられない"))
     if thick > A - 2 - 2 * CRADLE_ROOM:
         out.append(Failure("F5.fan_thickness", "蛇腹の扇", f"畳んだ厚さ {thick:.1f} が筒の一辺 {A} に収まらず、受けごと筒に入らない"))
     if b > A - 1:
@@ -190,6 +191,11 @@ def _check_lift(p):
     foot = p["figure_w"] * (FOOT[1] - FOOT[0])
     if foot > b:
         out.append(Failure("F5.figure_base", "像", f"像の足の糊代 {foot:.1f} が扇の台 {b} より広く、台に貼れない"))
+    # 筒をかぶせるので、像の幅と畳んだ扇の幅も筒の内に入る（検品の指摘: 足の糊代だけ見ていて、幅 30 の像が一辺 20 の筒を通った）
+    if p["figure_w"] > A - 2:
+        out.append(Failure("F5.figure_base", "像", f"像の幅 {p['figure_w']} が筒の一辺 {A}−2 を超え、筒をかぶせられない"))
+    if p["fold_width"] > A - 2:
+        out.append(Failure("F5.fan_thickness", "蛇腹の扇", f"畳んだ扇の幅 {p['fold_width']} が筒の一辺 {A}−2 を超え、筒をかぶせられない"))
     return out
 
 

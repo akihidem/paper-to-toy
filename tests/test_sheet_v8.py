@@ -117,5 +117,11 @@ for extra in ({"pusher_height": 50}, {"pusher_side": 29}, {"pivot_above_rim": 0,
     assert got <= lift_floors, (extra, got)
 # 筒がかぶさらない寸法は落とす（台の高さ＋扇の高さが筒の高さ − 2 を超える）
 short = {**lift, "fold_height": 60, "tube_height": 50, "base_glue": 10}  # 範囲の内: 台 10 + 扇 60 > 筒 50 − 2
+# 受けの底の紙の厚さも高さに入れる（境で、紙の厚さの分だけ足りない組を落とす。検品の指摘）
+edge = {**lift, "tube_height": 70, "base_glue": 10, "fold_height": 58, "paper_thickness": 1.5}  # 10 + 1.5 + 58 = 69.5 > 68
+assert any(f.floor == "F5.fan_height" for f in sf.check_physics(edge)), [f.line() for f in sf.check_physics(edge)]
+# 像の幅も筒の内に入る（検品の指摘の例: 筒 20・台 15・像の幅 30 は、足の糊代 12 で台には乗るが、筒をかぶせられない）
+wide = {**lift, "tube_side": 20, "base_side": 15, "figure_w": 30}
+assert any(f.floor == "F5.figure_base" and "筒をかぶせられない" in f.message for f in sf.check_physics(wide)), [f.line() for f in sf.check_physics(wide)]
 assert not sf.check_range(short) and any(f.floor == "F5.fan_height" for f in sf.check_physics(short)), "筒がかぶさらない寸法を通した"
 print("ok 御来迎の筒を外す形（糸なし・受け）")
