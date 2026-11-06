@@ -69,6 +69,35 @@
     ]
    },
    "note": "虎 tora-v4（#106・合体 173b8fa1）と御来迎 goraigo-v11（#107・合体 034ecbed）。この版の御来迎の紙は push_part lift の形（表の 1 枚は tab のまま）。EP-0012 は溝の印が残るので次の版の予定に残す"
+  },
+  {
+   "version": 3,
+   "commit": "5edeb4937c5aff9e7f1fb32a269dc6d398ae75ad",
+   "at": "2026-11-06",
+   "proposals": [
+    {
+     "id": "EP-0045",
+     "target": {
+      "kind": "template",
+      "name": "slider_fan"
+     },
+     "title": "slider_fan（紙 rise）: 作る前のレビューの指摘を、雛形に入れるか見る",
+     "numbers": {
+      "reviews": 2,
+      "reports": 0
+     },
+     "finding": "本人の決定で、御来迎の形を rise（内筒を下から押し上げる・糸なし）にし、型紙の 1 枚にする。lift と側面のつまみの形はやめる。実物の写真と照らした直し A・C・D（扇を細かく小さく・筒を細長く・白木と金と札）を入れる（paper-to-toy #117・#122）"
+    }
+   ],
+   "sheet_sets": {
+    "slider_fan": "goraigo-v12"
+   },
+   "sources": {
+    "slider_fan": [
+     "NDL-1187053-R0000005-L"
+    ]
+   },
+   "note": "御来迎 goraigo-v12（#117・合体 13479c0 と #122・合体 5edeb49）。形は rise（内筒を下から押し上げる）で、型紙の 1 枚も rise。虎の tora-v5 は 1 本目だけが入った所なので、この版に入れない"
   }
  ],
  "next": [
