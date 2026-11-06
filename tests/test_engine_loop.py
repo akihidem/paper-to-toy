@@ -475,4 +475,18 @@ assert fresh and fresh[0] == "EP-0006", fresh
 assert cli("adopt", fresh[0], "--by", "作る人").returncode == 0
 assert [p["id"] for p in el.ledger()["next"]] == ["EP-0005", "EP-0006"]
 
+# 15. 版に入れる案を選べる（--proposal）。直しが入った案だけを版にし、まだ直していない案は次の版の予定に残す。
+# 全部を入れると、直していない案を「この版で直した」と台帳に書く事になる（11-06、虎と御来迎の直しだけが先に入った）
+os.environ["OMOCHAE_ENGINE_LOOP"] = str(tmp / "local5")
+os.environ["OMOCHAE_ENGINE_LEDGER"] = str(tmp / "versions5.json")
+(tmp / "versions5.json").write_text(json.dumps({"versions": [], "next": [{**row(pid), "adopted_at": "2026-11-06"} for pid in ("EP-0001", "EP-0002", "EP-0003")]}, ensure_ascii=False), encoding="utf-8")
+assert cli("release", "--commit", "abc1234", "--by", "作る人", "--proposal", "EP-0009").returncode == 3, "次の版の予定に無い案は刻まない"
+assert cli("release", "--commit", "abc1234", "--by", "作る人", "--proposal", "x").returncode == 3, "案の番号の形でない"
+assert [p["id"] for p in el.ledger()["next"]] == ["EP-0001", "EP-0002", "EP-0003"] and not el.ledger()["versions"], "落ちた時は台帳に触らない"
+r = cli("release", "--commit", "abc1234", "--by", "作る人", "--proposal", "EP-0003", "--proposal", "EP-0001", "--sheet-set", "slider_fan=goraigo-v11")
+assert r.returncode == 0, r.stderr
+led5 = el.ledger()
+assert [p["id"] for p in led5["versions"][-1]["proposals"]] == ["EP-0001", "EP-0003"] and [p["id"] for p in led5["next"]] == ["EP-0002"]
+assert cli("release", "--commit", "abc1234", "--by", "作る人").returncode == 0 and [p["id"] for p in el.ledger()["versions"][-1]["proposals"]] == ["EP-0002"], "選ばなければ全部（前と同じ）"
+
 print("OK test_engine_loop")

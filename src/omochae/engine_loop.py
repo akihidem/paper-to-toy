@@ -625,8 +625,10 @@ def _sources_of(key):
     return [source_of(tid, form)] if form else sorted(set(getattr(TEMPLATES[tid], "SOURCES", {}).values()) or {TEMPLATES[tid].SOURCE})
 
 
-def release(commit, by, sheet_sets=None, note=""):
+def release(commit, by, sheet_sets=None, note="", only=None):
     """次の版を刻む。採った案（次の版の予定）を、直しの入った commit と、変わった刷った組と一緒に版にする。
+    only に案の番号を並べると、その案だけを版にし、ほかは次の版の予定に残す。直しは雛形ごとに別の時に入るので、
+    全部を入れると、まだ直していない案を「この版で直した」と台帳に書く事になる。only が無ければ全部（前と同じ）。
     Returns (版の番号か None, Failure の list)。人が、直しが main に入ったのを見てから呼ぶ。"""
     out = []
     if not (isinstance(commit, str) and COMMIT.fullmatch(commit)):
@@ -639,13 +641,21 @@ def release(commit, by, sheet_sets=None, note=""):
     led = ledger()
     if not led.get("next"):
         out.append(Failure("F13.version", "次の版の予定", "採った案が無い（案が無いまま版を刻まない）"))
+    only = list(only or [])
+    planned = {p["id"] for p in led.get("next", [])}
+    for pid in only:
+        if not (isinstance(pid, str) and PROPOSAL_ID.fullmatch(pid)):
+            out.append(Failure("F13.proposal", "案", "案の番号の形でない"))
+        elif pid not in planned:
+            out.append(Failure("F13.version", pid, "次の版の予定に無い案（採っていないか、もう版に刻んだ）"))
     if out:
         return None, out
     n = max((v["version"] for v in led["versions"]), default=0) + 1
-    ids = [p["id"] for p in led["next"]]
-    led["versions"].append({"version": n, "commit": commit, "at": _now()[:10], "proposals": [{k: v for k, v in p.items() if k != "adopted_at"} for p in led["next"]],
+    chosen = [p for p in led["next"] if not only or p["id"] in only]  # 並びは台帳の順（打った順に左右されない）
+    ids = [p["id"] for p in chosen]
+    led["versions"].append({"version": n, "commit": commit, "at": _now()[:10], "proposals": [{k: v for k, v in p.items() if k != "adopted_at"} for p in chosen],
                             "sheet_sets": sheet_sets, "sources": {k: _sources_of(k) for k in sheet_sets}, "note": str(note or "")[:MAX_TEXT]})
-    led["next"] = []
+    led["next"] = [p for p in led["next"] if p["id"] not in ids]
     _dump(ledger_path(), led)
     for pid in ids:
         path = _dirs()["proposals"] / f"{pid}.json"
@@ -717,6 +727,7 @@ def main(argv=None):
     rl.add_argument("--by", default="")
     rl.add_argument("--sheet-set", action="append", default=[], metavar="雛形=組", help="この版で変わった刷った組（何度でも）。玩具 1 つだけが変わった時は 雛形.形=組")
     rl.add_argument("--note", default="")
+    rl.add_argument("--proposal", action="append", default=[], metavar="EP-番号", help="この版に入れる案（何度でも）。書かなければ次の版の予定の全部。書かなかった案は次の版の予定に残る")
     sub.add_parser("compare", help="版ごとの数を並べる（判定はしない）")
     sub.add_parser("version", help="今のエンジンの版と、次の版の予定")
     try:
@@ -781,7 +792,7 @@ def main(argv=None):
             pairs = [s.split("=", 1) for s in args.sheet_set]
             if not all(len(p) == 2 for p in pairs):
                 return fail([Failure("F13.version", "sheet_sets", "刷った組は 雛形の id=組の名（玩具 1 つなら 雛形の id.形=組の名）")])
-            n, fails = release(args.commit, args.by, dict(pairs), args.note)
+            n, fails = release(args.commit, args.by, dict(pairs), args.note, args.proposal)
             if fails:
                 return fail(fails)
             print(f"エンジンの版 {n} を刻んだ")
