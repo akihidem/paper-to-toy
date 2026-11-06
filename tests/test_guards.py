@@ -279,6 +279,9 @@ from omochae.floors import check_holes
 sq = [(0, 0), (40, 0), (40, 40), (0, 40)]
 assert [f.floor for f in check_holes([Part(1, "plate", "板", sq, round_cuts=[(38, 20, 5)])])] == ["F5.hole"]
 assert check_holes([Part(1, "plate", "板", sq, round_cuts=[(20, 20, 5)])]) == []
+# 丸い切り抜きが折り線か糊代にかかる時も落とす（外形の内でも、折る所・貼る所を切り取る）
+assert [f.floor for f in check_holes([Part(1, "plate", "板", sq, mountain=[((0, 22), (40, 22))], round_cuts=[(20, 20, 5)])])] == ["F5.hole"]
+assert [f.floor for f in check_holes([Part(1, "plate", "板", sq, glue=[[(0, 30), (40, 30), (40, 40), (0, 40)]], round_cuts=[(20, 27, 5)])])] == ["F5.hole"]
 _, lay, _ = compose(pc.ID, {"mount": "neck"}, tiger)
 neck_r = pc.DEFAULTS["opening"] / 2
 assert re.search(rf'<circle [^>]*r="{neck_r:g}(\.0+)?"', render.to_svg(lay)), "丸い切り抜きを円で刷っていない"

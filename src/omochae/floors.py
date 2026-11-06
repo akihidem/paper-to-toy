@@ -132,6 +132,11 @@ def check_holes(parts):
                 out.append(Failure("F5.hole", p.name, f"穴 ({x:.1f}, {y:.1f}) が部品の外に出ている"))
         # 丸い切り抜きも、寸法から置くので紙の外に出うる。穴と同じ床で見る（外に出た丸は、紙の縁を切り欠いてしまう）
         for x, y, r in p.round_cuts:
-            if not poly.buffer(EPS).contains(Point(x, y).buffer(r)):
+            circle = Point(x, y).buffer(r)
+            if not poly.buffer(EPS).contains(circle):
                 out.append(Failure("F5.hole", p.name, f"丸い切り抜き ({x:.1f}, {y:.1f}) が部品の外に出ている"))
+            # 外形の内かだけでは、折り線や糊代を切り取る丸も通る（折る所・貼る所が無くなる）。どちらにかかっても落とす
+            elif (any(circle.intersects(LineString([a, b])) for a, b in p.valley + p.mountain)
+                  or any(circle.intersection(Polygon(gl)).area > EPS for gl in p.glue)):
+                out.append(Failure("F5.hole", p.name, f"丸い切り抜き ({x:.1f}, {y:.1f}) が折り線か糊代にかかる"))
     return out

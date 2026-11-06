@@ -27,7 +27,7 @@ ROUND_SEGMENTS = 48
 
 
 def part_svg(part):
-    """1 つの部品を SVG の文字列にする。座標は mm のまま。外形・中を切り抜く穴（cuts）・山折り・谷折りを書く。軸の穴と糊代は折りに関わらないので書かない。"""
+    """1 つの部品を SVG の文字列にする。座標は mm のまま。外形・中を切り抜く穴（cuts の矩形と round_cuts の丸）・山折り・谷折りを書く。軸の穴と糊代は折りに関わらないので書かない。"""
     xs = [x for x, _ in part.outline]
     ys = [y for _, y in part.outline]
     x0, y0 = min(xs), min(ys)
