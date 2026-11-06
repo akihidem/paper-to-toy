@@ -179,7 +179,7 @@ def check_physics(p):
         if H - HOLE_MARGIN - reach < 3:
             # 脚の分を足せば床に届かない寸法は、床の近さでなく「脚に当たらないかを確かめられない」と言う（物の決めつけでない文にする）
             if p["leg_height"] > 0 and H + p["leg_height"] - HOLE_MARGIN - reach >= 3:
-                out.append(Failure("F5.pivot", "頭", "頭が胴の底より下へ出て、前の脚に当たらないかを確かめられない（吊る形は、脚がある時も頭を胴の底より下へ出さない）"))
+                out.append(Failure("F5.pivot", "頭", "頭の下の端が胴の底から 3mm 未満で、前の脚に当たらないかを確かめられない（吊る形は、脚がある時も頭の下の端を胴の底から 3mm 以上離す）"))
             else:
                 out.append(Failure("F5.pivot", "頭", "頭の下端が床に近すぎる"))
     else:
