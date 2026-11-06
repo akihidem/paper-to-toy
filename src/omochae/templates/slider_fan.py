@@ -30,11 +30,14 @@ DEFAULTS = {
     "paper_thickness": 0.15,
 }
 RANGES = {
-    "tube_side": (20, 50), "tube_height": (50, 110), "tube_glue": (5, 12),
+    "tube_side": (20, 50), "tube_height": (50, 130), "tube_glue": (5, 12),
     "pusher_side": (15, 48), "pusher_height": (10, 110), "pusher_glue": (5, 12),
     "push_amount": (10, 90),
     "pivot_above_rim": (0, 40),
-    "fold_height": (20, 60), "fold_width": (5, 15), "fold_count": (6, 40),
+    # 折り数の上限 60 と筒の高さの上限 130 は、実物の写真（本人の決定 2026-11-06「実物の写真と照らした直しは…全部入れる」）の
+    # 扇の折り目 44〜52 枚・筒の長さ 一辺の約 4 倍（一辺 30 で 120）を、次の組（examples/goraigo_v12.json）で刷れるようにするため。
+    # 既定値は変えない（凍結の場面が既定の寸法で動くので、既定を替えると凍結の期待が崩れる）
+    "fold_height": (20, 60), "fold_width": (5, 15), "fold_count": (6, 60),
     "base_side": (10, 48), "base_glue": (4, 10),
     "stage_height": (8, 40),
     "figure_w": (8, 30), "figure_h": (15, 60),
@@ -213,13 +216,18 @@ def _tube(number, key, name, side, height, glue, label, notch=None):
                 glue=[[(w, 0), (w + glue, 2), (w + glue, height - 2), (w, height)]])
 
 
-# 色は NDL の図から測った値。図を貼らず、色と線を描き直す（拡大した図の粗さを避け、作る線を読みやすくするため）。
-PAPER, ORANGE, BROWN, LINE, FACE = "#a89365", "#a5632c", "#7a5e3b", "#55492c", "#b9a677"
+# 像の色は NDL の図から測った値。図を貼らず、色と線を描き直す（拡大した図の粗さを避け、作る線を読みやすくするため）。
+PAPER, LINE, FACE = "#a89365", "#55492c", "#b9a677"
 # 色の境で折る（v9）。見える面に谷折り・山折りの線があると見た目が安っぽく見えるので、絵の色の境で折り、線を引かない
-# （作り手の判断）。隣り合う面と板の色を変え、その境を折り目にする。
-# 筒は 1 面おきに少し明るい地、扇は 2 色の板を交互にする。色は原図の地の色の近くから選んだ（作る側の選び）。
-PAPER_ALT = "#bba982"
-FAN_A, FAN_B = "#f1e9d6", "#d9caa6"
+# （作り手の判断）。隣り合う面と板の色を変え、その境を折り目にする。1 色に塗ると折る所の目印が消えるので、近い 2 色を交互にする。
+# 筒と扇の色は、実物の写真に寄せた（本人の決定 2026-11-06。次の組 goraigo-v12）: 筒は白木の角柱で、扇は金の箔の紙。
+# 刷った紙では木目も箔の光も出ないので、白木と金に近い色にした。筒の上と下の帯は、角柱の端に見せる少し濃い木の色
+# （前は原図の橙と茶の帯）。筒は 1 面おきに少し濃い地、扇は 2 色の板を交互にする。
+WOOD, WOOD_ALT, WOOD_TOP, WOOD_BOTTOM = "#ece1c6", "#dfd1ae", "#cbb68b", "#bba476"
+FAN_A, FAN_B = "#e8c766", "#d4aa44"
+# 筒の札（実物は「御来迎」の字の札に紫の枠）。部品の絵に字は刷らない決まりなので、紫の枠の札の形だけを 1 面目に描く。
+# 1 面目は扇が開く面（扇は 1 面目に平行に開く）で、溝（つまみの形の 2 面目）と開く糸の穴（2 面目・4 面目）の無い面。
+LABEL_FRAME, LABEL_PAPER = "#6b3f8c", "#f6efdc"
 
 
 def _tube_art(A, H, notch=None):
@@ -233,17 +241,39 @@ def _tube_art(A, H, notch=None):
         cols = [(x0, x1)]
         if notch and x0 < notch[0] and notch[1] < x1:
             cols = [(x0, notch[0]), (notch[1], x1)]
-        art.append({"kind": "poly", "pts": [(x0, 0), (x1, 0), (x1, 4.5), (x0, 4.5)], "fill": ORANGE})
-        ground = PAPER if i % 2 == 0 else PAPER_ALT
+        art.append({"kind": "poly", "pts": [(x0, 0), (x1, 0), (x1, 4.5), (x0, 4.5)], "fill": WOOD_TOP})
+        ground = WOOD if i % 2 == 0 else WOOD_ALT
         for c0, c1 in cols:
             art.append({"kind": "poly", "pts": [(c0, 4.5), (c1, 4.5), (c1, H - 5), (c0, H - 5)], "fill": ground})
-            art.append({"kind": "poly", "pts": [(c0, H - 5), (c1, H - 5), (c1, H), (c0, H)], "fill": BROWN})
+            art.append({"kind": "poly", "pts": [(c0, H - 5), (c1, H - 5), (c1, H), (c0, H)], "fill": WOOD_BOTTOM})
         if len(cols) == 2:
             # 溝の上の端より上は 1 枚の面のまま塗る。
             art.append({"kind": "poly", "pts": [(notch[0], 4.5), (notch[1], 4.5), (notch[1], notch[2]), (notch[0], notch[2])], "fill": ground})
     art.append({"kind": "line", "pts": [(A - 1.2, 0), (A - 1.2, H)], "stroke": LINE, "sw": 0.5})
     art.append({"kind": "line", "pts": [(A + 1.2, 0), (A + 1.2, H)], "stroke": LINE, "sw": 0.5})
+    art += _label_art(A, H)
     return art
+
+
+def label_box(A, H):
+    """筒の札の外の枠 (x0, y0, x1, y1)。1 面目の真ん中に、縦長に置く。
+
+    幅は一辺の 0.45 倍で、折り線と角の 2 本線（一辺−1.2）から離れる。上の端は上の帯の下から筒の高さの 0.12 倍下げ、
+    部品の札「1 外筒」（上の帯の左の角）と重ねない。高さは筒の高さの 0.3 倍（実物の札の、柱に対する大きさの目測）。
+    """
+    w = 0.45 * A
+    x0 = (A - w) / 2
+    y0 = 4.5 + 0.12 * H
+    return x0, y0, x0 + w, y0 + 0.3 * H
+
+
+def _label_art(A, H):
+    """筒の札の絵。紫の枠と、内の白い紙。字は刷らない（部品の絵に字は刷らない決まり）。"""
+    x0, y0, x1, y1 = label_box(A, H)
+    f = max(1.0, 0.1 * (x1 - x0))  # 枠の太さ。細い筒でも枠に見える 1mm を下限にする
+    rect = lambda a, b, c, d: [(a, b), (c, b), (c, d), (a, d)]
+    return [{"kind": "poly", "pts": rect(x0, y0, x1, y1), "fill": LABEL_FRAME},
+            {"kind": "poly", "pts": rect(x0 + f, y0 + f, x1 - f, y1 - f), "fill": LABEL_PAPER}]
 
 
 # 像の線。絵を見て手で点を取り直した物で、絵の画素は使っていない。座標は輪郭と同じ 0〜1 に直す。
