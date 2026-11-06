@@ -28,6 +28,7 @@ import math
 
 from shapely.geometry import LineString, Polygon
 
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（本人の指示 2026-11-05）
 from ..model import Failure, Part
 
 ID = "popup_jar"
@@ -405,7 +406,7 @@ def place(by_key, page, top, gap):
 
 def bom(p):
     """部品表。元の素材は絵から読めないので、分からない物は「不明」と書き、歴史の事実として断定しない。紙のほかの材料は無い。"""
-    paper = f"紙（厚さ {p['paper_thickness']}mm 前後）"
+    paper = paper_name(thickness=p['paper_thickness'])
     why = "家庭のプリンタで刷って作るため"
     return [
         {"number": 1, "key": "jar", "name": "壺", "qty": 1, "material": paper, "substituted": True, "original_guess": "焼き物か張子に見える（黒い釉の垂れは絵から。素材は不明）", "reason": why},

@@ -77,6 +77,7 @@
 """
 import math
 
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（本人の指示 2026-11-05）
 from ..model import Failure, Part
 
 ID = "launcher"
@@ -539,7 +540,7 @@ def place(by_key, page, top, gap):
 
 
 def bom(p):
-    paper = f"紙（厚めの紙・{p['paper_gsm']}g/m² の見込み）"
+    paper = paper_name(gsm=p['paper_gsm'])
     why = "家庭のプリンタで刷って作るため"
     if p["form"] == "crossbow":
         string = 2 * p["arm_len"] + p["stock_w"] + 40
