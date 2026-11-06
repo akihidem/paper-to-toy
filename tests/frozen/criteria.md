@@ -24,7 +24,7 @@ exit code: 0 = 通る / 3 = 落ちる（検査の名前を出す）/ 4 = 検査�
 | F5.figure_height | 像の高さ ≦ 折りの高さ ＋ 6 | `neg_figure_height` | 3・F5.figure_height |
 | F5.base_size | 扇の台 ≦ 内筒の一辺 | `neg_base_size` | 3・F5.base_size |
 | F5.stroke | 下から押す形は 押す部品の長さ ≧ 筒の高さ。つまみの形は 内筒が筒に収まり、溝が筒の端から 5mm 以上離れる | `neg_stroke_tube`・`neg_stroke_tab` | 3・F5.stroke |
-| F5.pivot | 虎の雛形の族の床。重心が軸より下、静かな時の傾きが 15° まで、穴の余白、揺れの余裕、重りと頭が底に当たらない | `neg_pivot_weight_above`・`neg_pivot_tilt`・`neg_pivot_ear`・`neg_pivot_floor` | 3・F5.pivot |
+| F5.pivot | 虎の雛形の族の床。重心が軸より下、静かな時の傾きが 15° まで、穴の余白、揺れの余裕、重りと頭が底に当たらない。当たりの検査（首の形で `fit_check` 1 か、`clay_back`・`axle_back` を既定から変えた時）では、頭が静かな時の傾きから ±10° 揺れる間、粘土の玉・5 重りの腕・頭が前の壁から、首の帯が穴の縁から 0.5mm 以上離れ、揺れの式の粘土が刷る下の穴と同じ所 | `neg_pivot_weight_above`・`neg_pivot_tilt`・`neg_pivot_ear`・`neg_pivot_floor`・`neg_pivot_fit`・`neg_pivot_fit_swing` | 3・F5.pivot |
 | F5.fan_clearance | 帯の長さの開く上限が、筒の口の角に当たらない角度に収まる | `neg_fan_clearance` | 3・F5.fan_clearance |
 | F5.image_box | 描き直しの絵が部品の中にあり、折り線と糊代をまたがない | `neg_image_box` | 3・F5.image_box |
 | F5.image_count | PDF に貼られた画像が 0 枚（原図を貼らない） | `neg_image_count` | 3・F5.image_count |
@@ -43,7 +43,7 @@ F5.fan_height は、軸の形では「中心の高さ＋折りの高さ ≦ 押�
 
 ## 正の場面
 
-`pos_tab`・`pos_tube`・`pos_stick`・`pos_rim`・`pos_long_title`（長い見出しでも部品が下へ送られて通る）・`pos_tiger_hang`・`pos_tiger_neck` は exit 0。
+`pos_tab`・`pos_tube`・`pos_stick`・`pos_rim`・`pos_long_title`（長い見出しでも部品が下へ送られて通る）・`pos_tiger_hang`・`pos_tiger_neck`・`pos_tiger_v7`（虎 v7 の見本。当たりの検査を通る）は exit 0。
 3D の確かめ（`python -m omochae.fold3d`）は `examples/fan_tab.json` で exit 0（`tests/test_fold3d.py` の 1・4）。
 
 ## v8 で変えた所（元の repo の 2026-11-04 の変更を写した）
@@ -98,7 +98,7 @@ F5.fan_height は、軸の形では「中心の高さ＋折りの高さ ≦ 押�
 - **F1.marks**: 所蔵の頭の語・「改変」「仮説」の短い語だけでなく、出典の記録の所蔵の文（holding）と改変の注記（modification_note）、仮説の文を、空白を除いてそのまま探す。短い語だけだと、本文が欠けても化けても通った。試験は `tests/test_guards.py` の 4
 - **F2.bom**: 型紙に刷る部品の番号が全部、部品表にある。虎の首の形の部品 5（重りの腕）が部品表に無いまま通った。試験は `tests/test_guards.py` の 3
 - **F5.image_box**: 線の絵が糊代を横切るのも落とす（交わりの面積でなく長さで見る）。試験は `tests/test_guards.py` の 2
-- **F5.pivot**: 元の repo と同じ見方にした。首の形は、帯の幅が穴の中で縦に並ぶとして、10° 傾いても帯が穴の縁に当たらない（軸は壁の 6mm 後ろ）。前は帯の幅の 2 割しか引かず、穴より広い帯も通した。吊る形は、`axle_height` が刷る耳の穴の高さ（胴の高さ − 4）と同じで、重りの位置が頭の中にある。試験は `tests/test_pivot_neck_opening.py`・`tests/test_pivot_hang_model.py`
+- **F5.pivot**: 元の repo と同じ見方にした。首の形は、帯の幅が穴の中で縦に並ぶとして、10° 傾いても帯が穴の縁に当たらない（軸は壁の 6mm 後ろ）。前は帯の幅の 2 割しか引かず、穴より広い帯も通した。吊る形は、`axle_height` が刷る耳の穴の高さ（胴の高さ − 4）と同じで、重りの位置が頭の中にある。試験は `tests/test_pivot_neck_opening.py`・`tests/test_pivot_hang_model.py`。当たりの検査（`fit_check` 1。虎 v7 から）は、作り方の 3D をサイトで描いて見つかった 2 つの当たり（v6 の粘土の玉が前の壁・頭の後ろの端が腕）と、見直しで分かった揺れる時の当たり（5 重りの腕も前の壁）を、寸法から見る。制作者の言葉（2026-11-07）「エンジンは3D組み立て検品を自分でする」による。揺れの角は静かな時の傾きのまわり（静かな時は重心が軸の真下に来るので、水平のまわりで見ると、下の穴を後ろへ刷るだけの寸法が通る）。腕と頭は外形の角の点、粘土の玉は下の穴が真ん中の球で見る。首の帯は、揺れの両端のうち水平から遠い方で見る（水平から ±10° の一般の検査とは別）。既定（`fit_check` 0・`clay_back` 0・`axle_back` 6）では見ないので、凍結の正の場面の紙と結果は変わらない。`clay_back`・`axle_back` を変えた寸法は、`fit_check` 0 でも見る（新しい寸法で当たりを見ない抜け道を作らない）。`neg_pivot_fit` は v6 の寸法（4 行で落ちる）、`neg_pivot_fit_swing` は静かな時だけなら通り揺れると頭が当たる寸法。試験は `tests/test_tora_v7.py`（3D の形を軸のまわりに回しても同じ空きが出る事も見る）
 - **F5.stroke**: 元の repo と同じ見方にした。内筒を下から押す形は、押し上げる量 ≦ 筒の高さ（静かな時に内筒の上の端が筒の中にある）。試験は `tests/test_slider_tube_stroke.py`
 
 ## 元の repo にあって、ここに無い床

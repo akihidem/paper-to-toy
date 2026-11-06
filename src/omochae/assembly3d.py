@@ -273,6 +273,9 @@ def _tiger(scene, p):
     - 軸は胴の 2 つの穴の真ん中を通る（刷った穴の所から読む）。首の帯・頭・重りの腕・粘土は軸に対して置き、揺れる時は軸のまわりに回す。
     - 帯は穴の側の端が軸、反対の端（前）が頭の真ん中（揺れの式が頭の真ん中を帯の先に置くのと同じ）。頭は両面なら 180° 折る。
     - 脚の角筒の上の口は、胴の底の四角（位置の印）に、尾の糊代は上の面の後ろの四角に合わせる（印と貼った物がずれないため）。
+    - できあがりの動きは、静かな時の傾きのまわりに ±MIN_SWING の中で揺れて、静かな時の傾きで止まる。型紙の当たりの検査
+      （pivot_counterweight.swing_range・fit_gaps）が見る角と同じにする（見直しの指摘: 前は水平のまわりに 12° まで揺らし、
+      検査が見ない角で、粘土の玉と腕が前の壁に入って見えた）。
     """
     from .templates import pivot_counterweight as pc
     if p["mount"] != "neck":
@@ -330,7 +333,7 @@ def _tiger(scene, p):
                         [apply(G, (tip, 0.0, 0.0)), apply(G, (tip + 10, 0.0, 0.0)), apply(G, (tip, 10.0, 0.0))])
         drop = place_by(S["drop"], {}, [(4.0, 4.0), (4.0, 14.0), (14.0, 4.0)],
                         [apply(G, (0.0, 0.0, za)), apply(G, (0.0, 10.0, za)), apply(G, (10.0, 0.0, za))]) if "drop" in parts else None
-        clay = apply(G, (0.0, p["weight_below_axle"], za))
+        clay = apply(G, (p["clay_back"], p["weight_below_axle"], za))  # 粘土は 5 重りの腕の下の穴（v7 から軸の clay_back 後ろ）
         return strip, head, drop, clay
 
     cur = {k: ({}, scene.on_paper(k)) for k in parts}
@@ -440,10 +443,12 @@ def _tiger(scene, p):
             break
     cur["tail"] = (tail_ang, pl)
     steps.append([a, snap(view={"rx": -25, "ry": 35}, rods=skewer, balls=clay, act="place", moving=["tail"])])
-    # できあがりの動き: 頭が揺れて止まる（軸のまわりに回す）
+    # できあがりの動き: 頭が揺れて、静かな時の傾きで止まる（軸のまわりに回す。頭が上がる向きが正で、rot_z の正と同じ向き）。
+    # 揺れは静かな時の傾きのまわりに ±MIN_SWING の中（当たりの検査が見る角の中）
     finale = []
     base = {k: cur[k] for k in ("strip", "head", "drop")}
-    for deg in (12.0, -8.0, 4.0, 0.0):
+    rest = math.degrees(sum(pc.swing_range(p)) / 2)
+    for deg in (rest + pc.MIN_SWING, rest - 8.0, rest + 4.0, rest):
         swing = mul(translate(xa, ya, 0.0), mul(rot_z(deg), translate(-xa, -ya, 0.0)))
         for k, (ang, pl) in base.items():
             cur[k] = (ang, mul(swing, pl))

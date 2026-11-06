@@ -1,5 +1,5 @@
 {
- "criteria.md": "1441a06ee655961960e2cc2335d98a55c0435b731e2c9f28cd5c9fc63c710dbb",
+ "criteria.md": "2f7d48085b259e466e080814ef061b504c2993cf2f0531e0f73ee74445cc4d2f",
  "scenarios": {
   "balance_neg.json": {
    "floors": [
@@ -354,6 +354,20 @@
    "rc": 3,
    "sha256": "2162d5bca1e27ea2b66474f4d8d502a09ec4c7e4ed915cfdab607bf3bd680715"
   },
+  "neg_pivot_fit.json": {
+   "floors": [
+    "F5.pivot"
+   ],
+   "rc": 3,
+   "sha256": "1ab62f0caf14866fe4bd0af713d5f78780b116800583f21e1fdeea691b7c1180"
+  },
+  "neg_pivot_fit_swing.json": {
+   "floors": [
+    "F5.pivot"
+   ],
+   "rc": 3,
+   "sha256": "d0f9b50f55841a285c19b7c7915d5d885a8e7628382cc7187132d7d7ad6fdb20"
+  },
   "neg_pivot_floor.json": {
    "floors": [
     "F5.pivot"
@@ -498,6 +512,11 @@
    "floors": [],
    "rc": 0,
    "sha256": "8738d0b65c80385d67fc60aaab370afd4e3e82892f9ae215f531e9551edb5a49"
+  },
+  "pos_tiger_v7.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "a2520f62c332974035713b279b35561c834a0e53099e197a6611e43a8949d274"
   },
   "pos_tube.json": {
    "floors": [],
@@ -1133,6 +1152,7 @@
   }
  },
  "tests": [
+  "test_assembly3d",
   "test_balance",
   "test_color_out",
   "test_engine_loop",
@@ -1145,6 +1165,7 @@
   "test_frozen_manifest",
   "test_goraigo_rise",
   "test_goraigo_rise_3d",
+  "test_goraigo_v14",
   "test_guards",
   "test_init_python",
   "test_intake",
@@ -1155,8 +1176,10 @@
   "test_path_confine",
   "test_pdf_repeatable",
   "test_pivot_3d",
+  "test_pivot_arm_label",
   "test_pivot_fold3d",
   "test_pivot_hang_model",
+  "test_pivot_head_sides",
   "test_pivot_model",
   "test_pivot_neck_opening",
   "test_popup_jar",
@@ -1172,6 +1195,7 @@
   "test_stand_figure",
   "test_template_contract",
   "test_tool_timeouts",
+  "test_tora_v7",
   "test_twist_drum",
   "test_ways",
   "test_wheel_cart",

@@ -9,7 +9,8 @@
    - 脚の角筒の上の口は、胴の底の四角（位置の印）と同じ所で、脚の下の端は机（y = 0）。尾の糊代は上の面の後ろの四角に重なり、尾は上に立つ。
    - 竹串は胴の 2 つの穴を通り、前の壁の丸い穴の真ん中は竹串と同じ高さ。帯の穴は竹串の上。頭は両面で、帯の先が頭の真ん中。
    - 粘土の玉は 5 重りの腕の下の穴の所。
-4. できあがりの動き（finale）: 頭が揺れて止まる。最後は段の終わりの形と同じ。
+4. できあがりの動き（finale）: 頭が静かな時の傾き（刷る物の重さの所で見た傾き）のまわりに ±MIN_SWING の中で揺れて、静かな時の傾きで止まる
+   （型紙の当たりの検査が見る角と同じ。前は水平のまわりに 12° まで揺らし、段の終わりの水平で止めていた）。
 5. 入口: 書き出せる（終わりの値 0）。組み立ての書き方が無い形（御来迎のつまみの形）は 4。
 6. 紙の行列（paper.place）: 紙の座標を机の面（y = 0）へ写し、刷った面は上。段 1 の部品の置き場は、紙の行列と刷った所（paper.at）から出した物と同じ。
 7. 手の種類（act）と動く部品（moving）がどの POSE にもある。中身の分解（structure）: inside・exploded（できあがりから離した 1 枚）・cutaway（見る人の方の面）。
@@ -176,10 +177,21 @@ assert abs(mid[0] - tip_x) < TOL and abs(mid[1] - sk["from"][1]) < TOL, mid
 assert normal(world["head"]["0"])[2] > 0.999 and normal(world["head"]["1"])[2] < -0.999  # 両側に顔
 clay = last["balls"]["clay"]["at"]
 assert abs(clay[1] - (sk["from"][1] + v6["weight_below_axle"])) < TOL and abs(clay[0] - sk["from"][0]) < TOL, clay
-# 4. できあがりの動き
+# 4. できあがりの動き: 静かな時の傾きのまわりに ±MIN_SWING の中で揺れて、静かな時の傾きで止まる
+
+
+def turned(pose):
+    """段の終わりの形（水平）から、軸のまわりに回した角 rad（頭の真ん中の点の向きで読む。頭が上がる向きが正）。"""
+    m = ap(M(pose["parts"]["head"]["panels"]["0"]), (v6["head_w"] / 2, 1.5 * fy))
+    return math.atan2(-(m[1] - sk["from"][1]), -(m[0] - sk["from"][0]))
+
+
 fin = data["finale"]["poses"]
-assert len(fin) >= 3 and fin[-1]["parts"]["head"]["panels"] == last["parts"]["head"]["panels"]
-assert any(f["parts"]["head"]["panels"] != last["parts"]["head"]["panels"] for f in fin[:-1])
+rest = sum(pc.swing_range(v6)) / 2
+assert abs(turned(last)) < 1e-4 and abs(turned(fin[-1]) - rest) < 1e-4, (turned(last), turned(fin[-1]), rest)
+assert abs(math.degrees(rest) + 5.46) < 0.01, math.degrees(rest)  # v6 の刷った形（粘土は軸の真下）は、頭が約 5.5° 下がって止まる
+assert len(fin) >= 3 and all(abs(turned(f) - rest) <= math.radians(pc.MIN_SWING) + 1e-4 for f in fin)
+assert max(abs(turned(f) - rest) for f in fin) > math.radians(pc.MIN_SWING) - 1e-3  # 揺れの端まで見せる
 # 5. 入口
 env = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
 with tempfile.TemporaryDirectory() as d:
