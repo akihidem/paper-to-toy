@@ -29,7 +29,7 @@ from omochae.templates import pivot_counterweight as pc
 from shapely.geometry import Polygon
 neck = dict(DEFAULTS, mount="neck")
 # 下の穴の境（LOWER_HOLE_MIN）の前後も見る。重りが後ろへずれない（weight_behind 0）と、浅い重りでも検査を通る（検品の指摘: 前の組は -20 の次が 5 だった）
-seen = hangable = holeless = 0
+seen = hangable = 0
 for wba in (pc.RANGES["weight_below_axle"][0], 0.5, 1, 2, 3, 3.6, 4, 5, 12, 20, DEFAULTS["weight_below_axle"], 40, pc.RANGES["weight_below_axle"][1]):
     for wg in (pc.RANGES["weight_g"][0], 1.0, DEFAULTS["weight_g"], pc.RANGES["weight_g"][1]):
         for ax, wb in ((30, 1), (DEFAULTS["axle_height"], DEFAULTS["weight_behind"]), (50, 1), (DEFAULTS["axle_height"], 0)):
@@ -39,12 +39,8 @@ for wba in (pc.RANGES["weight_below_axle"][0], 0.5, 1, 2, 3, 3.6, 4, 5, 12, 20, 
             seen += 1
             drop = next(x for x in pc.parts(q) if x.key == "drop")
             st, mat = pc.steps(q), pc.materials(q)
-            if wba < pc.LOWER_HOLE_MIN:
-                # 下の穴が無い寸法: 手順は「下の穴」と言わず、粘土の位置を上の穴からの深さで言う
-                holeless += 1
-                assert len(drop.holes) == 1 and not any("下の穴" in s for s in st), (q, drop.holes, st)
-                assert any(f"上の穴の {wba:g}mm 下" in s for s in st), st
-                continue
+            # 検査に通る寸法では、粘土の玉は軸の竹串から離れ（玉の真ん中は軸の下 半径 + AXLE_CLEAR 以上）、下の穴はいつもある
+            assert wba >= pc.clay_r(wg) + pc.AXLE_CLEAR and wba >= pc.LOWER_HOLE_MIN, q
             (ax_x, ax_y, _), (hx, hy, hr) = drop.holes[0], drop.holes[1]
             assert hx == ax_x and abs((hy - ax_y) - wba) < 1e-9, (q, drop.holes)  # 軸の穴の真下、weight_below_axle の所
             ring = [a for a in drop.art if a["kind"] == "mark" and a.get("mark") == "weight"]
@@ -59,11 +55,19 @@ for wba in (pc.RANGES["weight_below_axle"][0], 0.5, 1, 2, 3, 3.6, 4, 5, 12, 20, 
                 r = pc.clay_r(wg)
                 assert wba + L + 2 * r <= q["axle_height"] - 3 + 1e-9, (q, L, r)  # 下げた玉の下が底から 3mm 以上
                 # L は穴から玉の上までの長さ（糸そのものの長さではない）と、文に書く
-                assert L >= pc.HANG_MIN and any("糸" in s and f"玉の上は穴から {L:.0f}mm まで" in s for s in st), (q, st)
-                assert any(f"玉の上は穴から {L:.0f}mm まで" in m for m in mat), (q, mat)
+                # 長さの幅（下限 HANG_MIN と上限）を書く。上限だけだと、結ぶ間の無い短さでも文に合ってしまう
+                assert L >= pc.HANG_MIN and any("糸" in s and f"玉の上は穴から {pc.HANG_MIN}〜{L}mm" in s for s in st), (q, st)
+                assert any(f"玉の上は穴から {pc.HANG_MIN}〜{L}mm" in m for m in mat), (q, mat)
             assert any("下の穴（点の丸）の所に粘土" in s and "仮に留め" in s for s in st), st
             assert any("頭の傾きを見て" in s and "貼る" in s for s in st), st
-assert seen >= 10 and hangable >= 1 and holeless >= 1, (seen, hangable, holeless)
+assert seen >= 10 and hangable >= 1, (seen, hangable)
+# 浅い重りに重い玉（検品の指摘の例）は、玉が軸の竹串にかかるので検査で落とす
+shallow = dict(neck, weight_below_axle=1, weight_g=15, weight_behind=0)
+assert any("軸の竹串にかかる" in f.message for f in check_physics(shallow)), [f.line() for f in check_physics(shallow)]
+# 下の穴の無い寸法（検査では落ちる）でも、組み方の文は無い穴を言わず、粘土の位置を上の穴からの深さで言う
+nohole = dict(neck, weight_below_axle=2, weight_g=0.2, weight_behind=0)
+assert len(next(x for x in pc.parts(nohole) if x.key == "drop").holes) == 1
+assert not any("下の穴" in s for s in pc.steps(nohole)) and any("上の穴の 2mm 下" in s for s in pc.steps(nohole)), pc.steps(nohole)
 # 腕を仮に留めるテープは、用意する物に書く（首の形）
 assert any("セロハンテープ" in m for m in pc.materials(neck)), pc.materials(neck)
 _, layout, fails = compose("pivot_counterweight", neck, load_source(pc.SOURCE))

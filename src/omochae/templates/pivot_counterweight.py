@@ -95,6 +95,9 @@ THREAD_R = 0.6  # 糸の穴の半径（御来迎の開く糸の穴と同じ）
 CLAY_DENSITY = 1.8e-3  # 油粘土の密度 g/mm³（弥次郎兵衛と同じ見込み）
 HANG_MIN = 5  # 糸で下げる時の、穴から玉の上までの長さの下限 mm。これより短いと糸を結ぶ間が無いので、下げる形を出さない
 LOWER_HOLE_MIN = 1.0 + THREAD_R + 2  # 下の穴を開ける weight_below_axle の下限（軸の穴との間に紙を 2mm 残す）
+# 粘土の玉の上の端と軸の穴（半径 1.0）の間に残す余り。玉の真ん中は軸の下 clay_r + AXLE_CLEAR 以上（検品の指摘: 浅い重りの寸法で、
+# 重い玉が軸の竹串にかかるのに検査が通っていた）。この決まりで、検査に通る寸法では下の穴がいつもある（玉の半径は 0.2g でも 3mm）
+AXLE_CLEAR = 2.0
 
 
 def clay_r(g):
@@ -103,7 +106,8 @@ def clay_r(g):
 
 
 def hang_thread_mm(p):
-    """首の形で、下の穴から粘土の玉を糸で下げる時の糸の長さの上限（整数 mm）。玉の下が胴の底から 3mm 以上離れる長さ。
+    """首の形で、下の穴から粘土の玉を糸で下げる時の、穴から玉の上までの長さの上限（整数 mm。糸そのものの長さではない。
+    穴に通して結ぶ分と玉に結ぶ分は別に要る）。玉の下が胴の底から 3mm 以上離れる長さ。
 
     下げられない（上限が HANG_MIN より短い・下の穴が無い・吊る形）時は None。既定の寸法（重り 3g・穴は軸の 28mm 下・軸の高さ 42mm）では、
     直径約 15mm の玉が底に当たるので None になる。
@@ -162,6 +166,9 @@ def check_physics(p):
             out.append(Failure("F5.pivot", "首", f"首の帯（幅 {p['strip_width']}）が穴（{p['opening']}）の縁に当たるまで {MIN_SWING}° 揺れない"))
         if p["head_h"] / 2 > ax - 3:
             out.append(Failure("F5.pivot", "頭", "頭の下端が床に近すぎる"))
+    if p["mount"] == "neck" and p["weight_below_axle"] < clay_r(p["weight_g"]) + AXLE_CLEAR:
+        r = clay_r(p["weight_g"])
+        out.append(Failure("F5.pivot", "重り", f"粘土の玉（半径 {r:.1f}mm）が軸の竹串にかかる（玉の真ん中は軸の下 {p['weight_below_axle']}mm。{r + AXLE_CLEAR:.1f}mm 以上下に）"))
     if p["weight_below_axle"] > ax - 3:
         out.append(Failure("F5.pivot", "重り", f"重りが底に当たる（軸の下 {p['weight_below_axle']}mm、軸の高さ {ax}mm）"))
     if p["strip_width"] > p["body_width"] - 6:
@@ -316,10 +323,10 @@ def bom(p):
 
 
 def _weight_material(p):
-    """重りの素材。糸で下げられる寸法の時だけ、糸の長さの上限を添える（EP-0011）。"""
+    """重りの素材。糸で下げられる寸法の時だけ、穴から玉の上までの長さの幅（HANG_MIN〜上限）を添える（EP-0011）。"""
     L = hang_thread_mm(p)
     # L は穴から玉の上までの長さで、糸そのものの長さではない（穴に通して結ぶ分と玉に結ぶ分は別に要る。検品の指摘）
-    return f"油粘土 {p['weight_g']:g}g" + (f"（糸で下げる時は、たこ糸も。玉の上は穴から {L}mm まで）" if L is not None else "")
+    return f"油粘土 {p['weight_g']:g}g" + (f"（糸で下げる時は、たこ糸も。玉の上は穴から {HANG_MIN}〜{L}mm）" if L is not None else "")
 
 
 def materials(p):
@@ -341,7 +348,8 @@ def steps(p):
     if p["mount"] == "neck":
         # 腕は仮に留めて、頭の傾きを見てから貼る（EP-0011: 作った人が帯と頭を胴の穴から何度も出し入れしていた）。手順の数と番号は変えない
         L = hang_thread_mm(p)
-        hang = f"か、下の穴に糸を通して粘土の玉を下げる（玉の上は穴から {L}mm まで）" if L is not None else ""
+        # 下限も書く（検品の指摘: 上限だけだと、結ぶ間の無い短さに下げても文に合ってしまう）
+        hang = f"か、下の穴に糸を通して粘土の玉を下げる（玉の上は穴から {HANG_MIN}〜{L}mm）" if L is not None else ""
         # 下の穴は weight_below_axle が LOWER_HOLE_MIN 以上の時だけある（軸の穴と近すぎる時は開けない）。無い時は、粘土の位置を軸の穴からの深さで言う
         # （検品の指摘: 穴の無い寸法でも「下の穴」と言っていた）
         clay = (f"下の穴（点の丸）の所に粘土を付ける{hang}" if p["weight_below_axle"] >= LOWER_HOLE_MIN
