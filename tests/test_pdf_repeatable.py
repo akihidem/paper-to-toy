@@ -27,15 +27,12 @@ def printed(scenario, d, name, tz):
     return out.with_suffix(".pdf").read_bytes()
 
 
-# 必須 2 種の場面が、御来迎の rise と虎の neck を刷る物である事を先に見る（場面が別の形に書き替わっても、この試験が黙って通らないように）
-import json  # noqa: E402
-for scenario, want in (("examples/goraigo_v12.json", ("slider_fan", "push_part", "rise")),
-                       ("tests/frozen/scenarios/pos_tiger_neck.json", ("pivot_counterweight", "mount", "neck"))):
-    sc = json.loads((ROOT / scenario).read_text(encoding="utf-8"))
-    assert sc["template"] == want[0] and sc["params"].get(want[1]) == want[2], (scenario, sc["template"], sc["params"])
+# 必須 2 種の場面は omochae.sheets の表（REQUIRED）から読む。どの玩具のどの形かは tests/test_sheets.py の 3 が見る
+sys.path.insert(0, str(ROOT / "src"))
+from omochae.sheets import REQUIRED  # noqa: E402
 # 時間帯と秒を変えて同じなら、作った機械の時計は PDF に入っていない
 with tempfile.TemporaryDirectory() as d:
-    for scenario in ("examples/goraigo_v12.json", "tests/frozen/scenarios/pos_tiger_neck.json"):
+    for scenario in REQUIRED.values():
         name = pathlib.Path(scenario).stem
         first = printed(scenario, d, f"{name}_a", "Asia/Tokyo")
         time.sleep(1.1)  # 時刻の欄は秒まで。同じ秒に刷ると、時刻が入っていても同じになる

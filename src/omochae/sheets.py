@@ -19,6 +19,10 @@
 """
 from .compose import TEMPLATES
 
+# 必須 2 種の紙を刷る場面（repo の根からの道）。どちらも、その玩具の型紙の 1 枚で刷る。試験（tests/test_sheets.py の 3・
+# tests/test_pdf_repeatable.py）は、この表を 1 か所の正として使う（2 つの試験に同じ表を書くと、片方だけ直し忘れたため。検品の指摘）
+REQUIRED = {"slider_fan": "examples/goraigo_v12.json", "pivot_counterweight": "tests/frozen/scenarios/pos_tiger_neck.json"}
+
 # 雛形 → {別の読みの形: 型紙の形}。ここに無い形は、どれも型紙（その玩具の 1 枚）。
 READINGS = {
     # 御来迎（R5-L・必須の 1 つ）: 押し方の読み。たたき台は rise（内筒を下から押し上げる。扇は糸を使わず受けで束ねる）。

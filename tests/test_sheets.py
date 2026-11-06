@@ -41,13 +41,14 @@ assert set(DIFFERENT_TOYS) <= set(groups)  # 名指しした組が、雛形の�
 assert sheets.is_sheet("slider_fan", "rise") and sheets.is_sheet("pivot_counterweight", "neck")
 assert not any(sheets.is_sheet("slider_fan", f) for f in ("tab", "tube", "stick", "lift"))
 assert not sheets.is_sheet("pivot_counterweight", "hang")
-# 場面ごとに、どの玩具のどの形かまで決めて見る（場面が別の玩具の型紙に書き替わっても通らないように。検品の指摘）
-for path, want in ((ROOT / "examples/goraigo_v12.json", ("slider_fan", "rise")),
-                   (ROOT / "tests/frozen/scenarios/pos_tiger_neck.json", ("pivot_counterweight", "neck"))):
-    sc = json.loads(path.read_text(encoding="utf-8"))
+# 必須 2 種の場面は sheets.REQUIRED の 1 つの表。場面ごとに、その玩具の場面で、形がその玩具の型紙の 1 枚である事を見る
+# （上の 2 行で、御来迎の型紙は rise、虎は neck と決まっているので、場面が別の形や別の玩具に書き替わると落ちる）
+assert set(sheets.REQUIRED) == {"slider_fan", "pivot_counterweight"}
+for tid, rel in sheets.REQUIRED.items():
+    sc = json.loads((ROOT / rel).read_text(encoding="utf-8"))
     tpl = TEMPLATES[sc["template"]]
     form = sc["params"].get(tpl.FORM, tpl.DEFAULTS[tpl.FORM])
-    assert (sc["template"], form) == want and sheets.is_sheet(sc["template"], form), (path.name, sc["template"], form)
+    assert sc["template"] == tid and sheets.is_sheet(tid, form), (rel, sc["template"], form)
 
 # 4. 一覧（サイトが使う）: 行は全部の形のまま。sheet と reading_of と source_id が付き、sheet の行は玩具ごとに 1 つ
 table = ways.table()

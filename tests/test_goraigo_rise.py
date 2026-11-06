@@ -42,7 +42,7 @@ with tempfile.TemporaryDirectory() as d:
 # 2. 部品: 1 外筒・2 内筒・3 台・4 扇・5 像・6 受け。糸・竹串・溝・つまみ・穴は無い
 by = {q.key: q for q in sf.parts(V12)}
 by_place = {q.key: q for q in compose("slider_fan", SC["params"], SRC)[1]["parts"]}
-# 内筒は外筒より RISE_GRIP 以上長い（押し切っても外筒の下へ出て、指で押し引きできる）
+# 内筒は外筒より RISE_GRIP 以上長い（台が口の高さに来た開いた位置でも外筒の下へ出て、指で押し引きできる）
 assert V12["pusher_height"] >= H + sf.RISE_GRIP
 # 台・像・受けの段は、右の列の扇の下に置く（左の列は外筒と内筒）
 assert by_place["base"].y > by_place["fan"].y + by_place["fan"].height and by_place["base"].x > by_place["tube"].x + by_place["tube"].width
@@ -90,7 +90,7 @@ def floors(**extra):
     return [f.floor for f in sf.check_physics({**V12, **extra})]
 assert floors(push_amount=30) == ["F5.fan_height"]                       # 受けの底＋扇の高さ 28.6＋2 に足りず、静かな時に扇が出る
 assert floors(figure_h=30) == ["F5.figure_height"]                       # 像 30＋2 が押し上げる量 31 を超え、静かな時に像が出る
-assert floors(pusher_height=111) == ["F5.stroke"]                        # 内筒が外筒＋10 に足りず、押し切ると下に出ない
+assert floors(pusher_height=111) == ["F5.stroke"]                        # 内筒が外筒＋10 に足りず、開いた位置で外筒の下に出ない
 assert floors(push_amount=103) == ["F5.stroke"]                          # 押し上げる量が筒の高さを超え、静かな時に台が筒の下に出る
 assert floors(push_amount=81) == ["F5.stroke"]                           # 静かな時の差し込み 21 が内筒の一辺 22 より短く、傾く
 # 2 つは文を分ける（台が筒の下に出る寸法で「差し込みが負」と言わない）
