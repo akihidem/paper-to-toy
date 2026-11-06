@@ -119,3 +119,42 @@ assert any(f.where == "左の玉" and "振れない" in f.message for f in fs), 
 shape = t.diagram(0, 0, 50, 80, O)[0]["pts"]
 assert Polygon(shape).is_valid, "図の外形が自分と交わる"
 print("ok")
+
+# EP-0001（作る前のレビューの指摘から採った案。2026-11-06）: 起き上がり小法師の紙で、粘土を詰める高さの線（濃い実線）を切る線と
+# 取り違えて切った人がいた（「直線なんて切ると判断して切った」）。2 番が底の部品だと分からず、帯の下の側をどうするか分からなかった。
+# - 粘土を詰める高さの線は、位置の印（赤茶の点の線。凡例に「切らない・折らない」）で刷る。切る線と同じ濃い実線では刷らない
+# - 札は「1 胴」「2 底」（どちらが底かを紙で分かるように。上下の字は、切れの細い寸法で札が切れに収まらないので入れない）
+# - 赤道の折り線は山折り。お椀は刷った面を外にし、帯を内へ折って円錐の底の内に差し込む（谷折りの破線では、帯が外へ開く向きだった）
+# - 組み方の文: 帯は刷った面を外にして輪にする・粘土は点の線まで詰める・帯は赤道の山折りの線で内へ折る
+from omochae.__main__ import load_source
+from omochae.compose import LABEL_SIZE, LINE, compose
+from omochae.floors import check_art
+from omochae.textfit import text_width
+from shapely.geometry import Polygon, box
+seen = 0
+for R in (t.RANGES["base_r"][0], O["base_r"], t.RANGES["base_r"][1]):
+    for n in (t.RANGES["gores"][0], O["gores"], t.RANGES["gores"][1]):
+        q = {**O, "base_r": R, "gores": n}
+        if t.check_range(q) or t.check_physics(q):
+            continue  # 検査で落ちる寸法は刷らない
+        seen += 1
+        shell, dome = (next(x for x in t.parts(q) if x.key == k) for k in ("shell", "dome"))
+        marks = [a for a in dome.art if a.get("role") == "clay"]
+        assert marks and all(a["kind"] == "mark" and a.get("mark") == "clay" for a in marks), (q, [a["kind"] for a in marks])
+        assert not any(a["kind"] == "line" and a.get("stroke") == t.INK and len(a["pts"]) == 2 and a["pts"][0][1] == a["pts"][1][1] for a in dome.art), "濃い実線の横線が残る"
+        assert dome.mountain == [((0, q["band"]), (2 * math.pi * R, q["band"]))] and not dome.valley, (dome.mountain, dome.valley)
+        assert check_art([dome]) == [], (q, [f.line() for f in check_art([dome])])
+        for part, want in ((shell, "1 胴"), (dome, "2 底")):
+            assert part.label == want, part.label
+            lx, ly = part.label_xy
+            tag = box(lx, ly, lx + text_width(part.label, LABEL_SIZE), ly + LABEL_SIZE * LINE)
+            assert Polygon(part.outline).contains(tag), (q, part.key, "札が部品の外に出る")
+assert seen >= 3, seen
+_, layout, fails = compose("balance", O, load_source(t.SOURCES["okiagari"]))
+assert not fails, [f.line() for f in fails]
+assert any("位置の印" in x.text for x in layout["texts"]), "凡例に位置の印の行が無い"
+st = t.steps(O)
+assert any("刷った面を外にして" in x and "輪" in x for x in st), st
+assert any("点の線" in x and "粘土" in x for x in st), st
+assert any("赤道の山折りの線" in x and "内へ折り" in x for x in st) and not any("赤道の破線" in x for x in st), st
+print("ok 起き上がり小法師の印と向き")
