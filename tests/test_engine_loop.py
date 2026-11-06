@@ -489,7 +489,7 @@ led5 = el.ledger()
 assert [p["id"] for p in led5["versions"][-1]["proposals"]] == ["EP-0001", "EP-0003"] and [p["id"] for p in led5["next"]] == ["EP-0002"]
 assert cli("release", "--commit", "abc1234", "--by", "作る人").returncode == 0 and [p["id"] for p in el.ledger()["versions"][-1]["proposals"]] == ["EP-0002"], "選ばなければ全部（前と同じ）"
 
-# 16. 雛形をまたぐ困り事の種類に、穴・足りない部品・手順と説明・接着を足した（11-06 のワークショップの感想 18 件で、本人が挙げた
+# 16. 雛形をまたぐ困り事の種類に、穴・足りない部品・手順と説明・接着を足した（11-06 のワークショップの感想 18 件で、制作者が挙げた
 # 「穴の位置と大きさ・部品・手順の少なさ・接着」が、前の語では 1 つも共有の案にならなかった）。2 つの雛形で出たら共有の案になる
 os.environ["OMOCHAE_ENGINE_LOOP"] = str(tmp / "local6")
 os.environ["OMOCHAE_ENGINE_LEDGER"] = str(tmp / "versions6.json")
