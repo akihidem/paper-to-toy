@@ -95,9 +95,10 @@ def check_range(p):
             if v not in MOUNTS:
                 out.append(Failure("F5.range", k, f"{v} は {MOUNTS} のどれでもない"))
         elif k == "head_sides":
-            # True は 1 と等しく読めるので、真偽の値は別に落とす
-            if isinstance(v, bool) or v not in HEAD_SIDES:
-                out.append(Failure("F5.range", k, f"{v} は {HEAD_SIDES} のどれでもない（顔の数）"))
+            # True は 1 と等しく読めるので、真偽の値は別に落とす。値の等しさだけで見ると Decimal("1") や 1+0j も通り、後の揺れの式
+            # （mass_points）で例外になる（見直しの指摘）ので、数の型も int と float に限る
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or v not in HEAD_SIDES:
+                out.append(Failure("F5.range", k, f"{v!r} は {HEAD_SIDES} のどれでもない（顔の数）"))
         elif k not in RANGES:
             out.append(Failure("F5.range", k, "知らない寸法の名前"))
         elif not isinstance(v, (int, float)) or isinstance(v, bool) or not RANGES[k][0] <= v <= RANGES[k][1]:

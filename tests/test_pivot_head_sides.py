@@ -16,6 +16,7 @@
 """
 import json
 import pathlib
+from decimal import Decimal
 
 from shapely import affinity
 from shapely.geometry import Polygon
@@ -105,7 +106,7 @@ assert pc.materials(v5) == pc.materials(v6) and pc.bom(v5) == pc.bom(v6)
 
 # 5. 寸法: 1 か 2 だけ。吊る形の両面の頭は落とす
 assert pc.check_range(v6) == [] and pc.check_range(dict(v6, head_sides=2.0)) == []
-for bad in (1.5, 3, 0, True, "2"):
+for bad in (1.5, 3, 0, True, "2", Decimal("1"), 1 + 0j):  # Decimal と複素数は、等しさでは 1 でも揺れの式で例外になる
     fails = pc.check_range(dict(v6, head_sides=bad))
     assert [f.where for f in fails] == ["head_sides"] and fails[0].floor == "F5.range", (bad, [f.line() for f in fails])
 assert pc.spec()["head_sides"] == pc.HEAD_SIDES == (1, 2) and "head_sides" not in pc.RANGES  # 連続の範囲でなく、選ぶ値
