@@ -290,11 +290,20 @@ for pp, want in ((P, {"台の細い溝と切れ込み", "玉の物差しの穴"}
     assert adult_cuts(t.materials(pp)) != adult_cuts([s.replace("玉の物差しの穴は", "穴は") for s in t.steps(pp)])
     # カッターの注記を別の行にすると、弩の紙が印字域の下の端に届く。行の数と、のりの行にある事を保つ
     assert any(m.startswith("のり、はさみ、定規（") and "カッター" in m for m in t.materials(pp)), t.materials(pp)
-assert len(t.materials(P)) == 6 and len(t.materials(B)) == 7, (len(t.materials(P)), len(t.materials(B)))
+# 弓は断りの 1 行（本人の決定 2026-11-06）を足して 8 行
+assert len(t.materials(P)) == 6 and len(t.materials(B)) == 8, (len(t.materials(P)), len(t.materials(B)))
 # 境の寸法: 通っていた寸法は通り、その上は同じ床で落ちる（文を長くして 1 行増えると、下の 3 つが落ちる）
 src = load_source(t.SOURCES["crossbow"])
 floors = lambda **over: [f.floor for f in compose("launcher", {"form": "crossbow", **over}, src)[2]]
 for over in ({"stock_w": 21}, {"arm_w": 10}, {"ball_paper": 62}):
     assert floors(**over) == [], (over, floors(**over))
 assert "F5.print_area" in floors(stock_w=21.05) and "F5.print_area" in floors(arm_w=10.05), "印字域の検査を緩めていない"
+# 弓と毛玉の断り（本人の決定 2026-11-06: 型紙に残し、断りを書く）: 刷る紙の「用意する物」の終わりに 1 行。弩には出さない
+assert t.materials(B)[-1] == t.BOW_CAVEAT, t.materials(B)[-1]
+assert "持つ所と握る手に当たる見込み" in t.BOW_CAVEAT and "図に弦は描かれておらず" in t.BOW_CAVEAT
+assert not any(m.startswith("断り") for m in t.materials(P)), t.materials(P)
+# 刷った紙で断りは折り返さず 1 行に載り、弓の紙は検査 0 件のまま
+_, layout, failures = compose("launcher", B, load_source(t.SOURCES["bow"]))
+assert not failures, [f.line() for f in failures]
+assert any(x.text == f"・{t.BOW_CAVEAT}" for x in layout["texts"]), "断りが 1 行で紙に載っていない"
 print("ok")
