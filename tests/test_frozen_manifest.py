@@ -75,6 +75,7 @@ for root, want in cases:
     assert len(wrong) == 1 and wrong[0].startswith(want), (want, wrong)
     rc, err = runs(root)
     assert rc == 4 and want in err and not (root / "out/RESULT.md").exists(), (want, rc, err)
+    assert ".venv/bin/python tests/run_floors.py --write-manifest" in err, ("案内の命令は README と同じ字（python の名前が無い機械でも打てる）", err)
 
 # 試験を足すだけなら落ちない（並んで動く線が、表でぶつからないため）。表を書き直すと、足した試験も在るはずの物になる
 root = copy()

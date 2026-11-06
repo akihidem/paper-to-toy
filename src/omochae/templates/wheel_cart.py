@@ -327,8 +327,11 @@ def _rat_body(p):
            (H + L + H - 2, b1 + g), (H + L, b1 + g), (H + L, bottom), (H, bottom), (H, b1 + g), (2, b1 + g), (0, b1), (0, b0),
            (2, b0 - g), (H, b0 - g), (H, g)]
     body = Part(1, "body", "胴（鼠）", pts, label_xy=(H + 2, top0 + 2), label="1 胴")
-    body.valley = [((H, top0), (H + L, top0)), ((H, top1), (H + L, top1)), ((H, b0), (H + L, b0)), ((H, b1), (H + L, b1)), ((H, b0), (H, b1)),
-                   ((H + L, b0), (H + L, b1)), ((0, b0), (H, b0)), ((0, b1), (H, b1)), ((H + L, b0), (H + L + H, b0)), ((H + L, b1), (H + L + H, b1))]
+    # 胴は色の面（鼠の絵・板の色・顔・人形を貼る印）を外にして箱にするので、刷った面から見て山折り（下の側面の絵も「外から見て」描いてある）。
+    # 谷折り（凡例の、刷った面がへこむ向き）のままだと色の面が箱の内に入った。本人の決定（2026-11-06「今のうちに4つ直す」）で、
+    # 同じ十字形の虎の胴と同じ線で直した。線は破線で刷るので、刷る線の形が山折りの形に変わる
+    body.mountain = [((H, top0), (H + L, top0)), ((H, top1), (H + L, top1)), ((H, b0), (H + L, b0)), ((H, b1), (H + L, b1)), ((H, b0), (H, b1)),
+                     ((H + L, b0), (H + L, b1)), ((0, b0), (H, b0)), ((0, b1), (H, b1)), ((H + L, b0), (H + L + H, b0)), ((H + L, b1), (H + L + H, b1))]
     body.glue = [[(H + 2, 0), (H + L - 2, 0), (H + L, g), (H, g)], [(2, b0 - g), (H, b0 - g), (H, b0), (0, b0)], [(0, b1), (H, b1), (H, b1 + g), (2, b1 + g)],
                  [(H + L, b0 - g), (H + L + H - 2, b0 - g), (H + L + H, b0), (H + L, b0)], [(H + L, b1), (H + L + H, b1), (H + L + H - 2, b1 + g), (H + L, b1 + g)]]
     e = 0.25  # 絵を折り線から離す幅。check_art は線の太さまで見るので、面の縁を少し内へ
@@ -370,7 +373,11 @@ def _rat_body(p):
 
 
 def _rider(p):
-    """人形。下に台へ貼る耳を付け、耳の付け根で谷折りして胴の上の面に立てる。"""
+    """人形。下に台へ貼る耳を付け、耳の付け根で山折りして胴の上の面に立てる。
+
+    山折り（刷った面の裏へ折る）なので、耳は人形の後ろへ折れ、耳に刷った糊の印が胴の上の面を向く。前の谷折りでは、耳が絵の面の前へ
+    出て、糊の印が上を向いた。本人の決定（2026-11-06「今のうちに4つ直す」）で、ほかの色の面の部品と一緒に直した。
+    """
     fw, fh, tab = p["figure_w"], p["figure_h"], 7
     bb = (236, 585, 505, 960)
     fit = lambda ps: _fit(ps, bb, 0, 0, fw, fh)
@@ -381,7 +388,7 @@ def _rider(p):
     region = Polygon(sil).buffer(-0.15).intersection(box(-1, -1, fw + 1, fh - 0.35))
     art = [_poly(fit(_LEGS), PINK), _poly(fit(_ROBE), ROBE), _poly(fit(_CAP), CAP), _poly(fit(_FACE), SKIN), _poly(fit(_FOOT), DARK)]
     art += [_line(fit(x), DARK, 0.3) for x in _RIDER_LINES]
-    return Part(2, "rider", "人形", outline, label_xy=(fw * 0.42, fh * 0.42), label="2", valley=[((t0, fh), (t1, fh))],
+    return Part(2, "rider", "人形", outline, label_xy=(fw * 0.42, fh * 0.42), label="2", mountain=[((t0, fh), (t1, fh))],
                 glue=[tab_pts], art=_art(art, region))
 
 
@@ -447,19 +454,26 @@ def _drum(p):
         for y0, y1 in ((0.12, 0.17), (0.21, 0.26)):
             art.append(_poly(_rect(x0, L * y0, x1, L * y1), DARK))
     st = p["stick_t"]
+    # 頭は色の面（木の色と黒い帯）を外にして八角の筒にするので、刷った面から見て山折り。谷折り（凡例の、刷った面がへこむ向き）のままだと
+    # 色の面が筒の内に入った。本人の決定（2026-11-06「今のうちに4つ直す」）で、御来迎の外筒・虎の胴と同じ線で直した。
+    # 線は破線で刷るので、刷る線の形が山折りの形に変わる
     return Part(1, "drum", "頭", outline, label_xy=(1, L * 0.4), label="1",
-                valley=[((i * s, 0), (i * s, L)) for i in range(1, 9)], glue=[[(W, 0), (W + g, 1), (W + g, L - 1), (W, L)]],
+                mountain=[((i * s, 0), (i * s, L)) for i in range(1, 9)], glue=[[(W, 0), (W + g, 1), (W + g, L - 1), (W, L)]],
                 cuts=[(3.5 * s - st / 2, L / 2 - st / 2, st, st)], art=art)
 
 
 def _cap(number, key, p):
-    """頭の端の蓋。八角の各辺に糊代を付け、谷折りして頭の内側に貼る。中心に軸の穴。絵の端の面の菊の模様を描く。"""
+    """頭の端の蓋。八角の各辺に糊代を付け、山折りして頭の内側に貼る。中心に軸の穴。絵の端の面の菊の模様を描く。
+
+    山折り（刷った面の裏へ折る）なので、糊代は頭の内へ入り、菊の絵の面が頭の外を向く。前の谷折りでは、絵の面が頭の内を向いた。
+    本人の決定（2026-11-06「今のうちに4つ直す」）で、頭の筒と一緒に直した。線は破線で刷るので、刷る線の形が山折りの形に変わる。
+    """
     r = p["head_r"]
     side, apo = octagon(p)
     tab = min(5.0, side * 0.6)
     c = r + tab
     v = [(c + r * math.cos(math.pi / 8 + k * math.pi / 4), c + r * math.sin(math.pi / 8 + k * math.pi / 4)) for k in range(8)]
-    outline, valley, glue = [], [], []
+    outline, folds, glue = [], [], []
     for k in range(8):
         a, b = v[k], v[(k + 1) % 8]
         dx, dy = (b[0] - a[0]) / side, (b[1] - a[1]) / side
@@ -470,14 +484,14 @@ def _cap(number, key, p):
         ta = (a[0] + nx * tab + dx * k_in, a[1] + ny * tab + dy * k_in)
         tb = (b[0] + nx * tab - dx * k_in, b[1] + ny * tab - dy * k_in)
         outline += [a, ta, tb]
-        valley.append((a, b))
+        folds.append((a, b))
         glue.append([a, ta, tb, b])
     region = Polygon(v).buffer(-0.3)
     art = [_poly(list(region.exterior.coords)[:-1], WOOD)]
     art += [_line([(c + apo * 0.3 * math.cos(t), c + apo * 0.3 * math.sin(t)), (c + apo * 0.85 * math.cos(t), c + apo * 0.85 * math.sin(t))], PAPER, 0.5)
             for t in (2 * math.pi * i / 16 for i in range(16))]
     art.append(_poly(_circle(c, c, apo * 0.25, 16), CAP))
-    return Part(number, key, "頭の蓋", outline, label_xy=(c - 0.8, c - apo * 0.95), label=str(number), valley=valley, glue=glue,
+    return Part(number, key, "頭の蓋", outline, label_xy=(c - 0.8, c - apo * 0.95), label=str(number), mountain=folds, glue=glue,
                 holes=[(c, c, AXLE_HOLE_R)], art=_art(art, region))
 
 
@@ -610,15 +624,15 @@ def steps(p):
         # 芯の紙の名前は、用意する物と同じく計算の厚さから選ぶ（決め打ちだと、薄い芯で用意する物と手順の名前が食い違った）
         out.append(f"車輪を型にして、{paper_name(thickness=p['card_thickness'])}から車輪 1 つに {n} 枚ずつ芯を切り、刷った車輪の裏に重ねて貼る。芯の真ん中にも穴をあける")
     if p["ride"] == "rat":
-        out += ["1 胴を破線で谷折りし、糊代で貼って箱にする",
+        out += ["1 胴を破線で山折りし、糊代で貼って箱にする",
                 "竹串を 1 胴の前の 2 つの穴に通し、後ろの 2 つの穴にもう 1 本通す",
                 f"車輪を竹串の両端に差し、胴との間を {p['wheel_gap']}mm あけて貼る（厚紙を挟んで測る）。軸ごと回る事を確かめる",
-                f"2 人形の耳を谷折りし、1 胴の上の面の四角い印（赤茶の点の線。切らない）に貼る（印の真ん中は前の端から {p['rider_at'] * p['body_length']:g}mm）", "3 尾を丸くして、後ろの壁に貼る",
+                f"2 人形の耳を山折りし、1 胴の上の面の四角い印（赤茶の点の線。切らない）に貼る（印の真ん中は前の端から {p['rider_at'] * p['body_length']:g}mm）", "3 尾を丸くして、後ろの壁に貼る",
                 "机の上で押して、まっすぐ転がるか見る"]
     elif p["ride"] == "mallet":
         out += ["1 頭の真ん中の面の四角い穴を切る（カッターは大人がする）",
-                "1 頭を破線で谷折りして八角の筒にし、糊代で貼る",
-                "2・3 頭の蓋の糊代を谷折りし、頭の両端の内側に貼って蓋をする",
+                "1 頭を破線で山折りして八角の筒にし、糊代で貼る",
+                "2・3 頭の蓋の糊代を山折りし、頭の両端の内側に貼って蓋をする",
                 f"割り箸の先から {p['handle_in']:g}mm に鉛筆で印を付け、1 頭の四角い穴に印まで差し込んで貼る（深く入れると奥の軸に当たる）",
                 "竹串を 2 つの蓋の穴に通し、両端に 4・5 車輪を差す",
                 f"車輪と蓋の間を {p['wheel_gap']}mm あけて貼る（厚紙を挟んで測る）。軸ごと回る事を確かめる",

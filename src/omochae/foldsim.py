@@ -7,9 +7,10 @@
 - 書き出す前に型紙と同じ検査（描く前の検査）を通す。落ちる寸法の部品を「折れる形」として渡さないため。落ちれば 3
 - Origami Simulator の色の約束: 外形（切る線）は黒、山折りは赤、谷折りは青。紙の厚みと摩擦は模擬しないので、実物と動きは違う
 - 色の境で折る部品（hide_folds）も、折り線のデータは持っているので書き出す（型紙に線を刷らないだけ）
-終了: 0 = 書き出した / 3 = 検査に落ちた / 4 = 書き出せない。
+終了: 0 = 書き出した（折りの無い形は、書く物が無いまま 0）/ 3 = 検査に落ちた / 4 = 書き出せない。
 """
 import argparse
+import math
 import pathlib
 import re
 import shutil
@@ -21,10 +22,12 @@ from .model import ToolMissing, check_name
 from .tools import work_dir
 
 COLORS = {"outline": "#000000", "mountain": "#ff0000", "valley": "#0000ff"}
+# 丸い切り抜きを近づける多角形の辺の数。半径 15mm でも辺の中ほどのずれは 0.05mm 未満で、紙の切り口の幅より小さい
+ROUND_SEGMENTS = 48
 
 
 def part_svg(part):
-    """1 つの部品を SVG の文字列にする。座標は mm のまま。外形・中を切り抜く穴（cuts）・山折り・谷折りを書く。軸の穴と糊代は折りに関わらないので書かない。"""
+    """1 つの部品を SVG の文字列にする。座標は mm のまま。外形・中を切り抜く穴（cuts の矩形と round_cuts の丸）・山折り・谷折りを書く。軸の穴と糊代は折りに関わらないので書かない。"""
     xs = [x for x, _ in part.outline]
     ys = [y for _, y in part.outline]
     x0, y0 = min(xs), min(ys)
@@ -38,6 +41,11 @@ def part_svg(part):
     for x, y, cw, ch in part.cuts:
         corners = [(x, y), (x + cw, y), (x + cw, y + ch), (x, y + ch), (x, y)]
         for (a, b), (c, d) in zip(corners, corners[1:]):
+            lines.append((a, b, c, d, COLORS["outline"]))
+    # 丸い切り抜きは、ROUND_SEGMENTS 本の辺の多角形にして黒で書く（Origami Simulator は線だけを読むので、円を線で近づける）
+    for cx, cy, r in part.round_cuts:
+        ring = [(cx + r * math.cos(2 * math.pi * i / ROUND_SEGMENTS), cy + r * math.sin(2 * math.pi * i / ROUND_SEGMENTS)) for i in range(ROUND_SEGMENTS + 1)]
+        for (a, b), (c, d) in zip(ring, ring[1:]):
             lines.append((a, b, c, d, COLORS["outline"]))
     for kind in ("mountain", "valley"):
         for (a, b), (c, d) in getattr(part, kind):
@@ -142,6 +150,10 @@ def main(argv=None):
             print(f.line(), file=sys.stderr)
         return 3
     if not written:
+        # --parts を書かずに書く物が無いのは、折りの無い形（風車・独楽など）で、誤りではない。前の回の SVG は export が消してある。
+        if parts is None:
+            print("折りのある部品が無い", file=sys.stderr)
+            return 0
         print("書き出せない: 折りのある部品が無い（--parts を確かめる）", file=sys.stderr)
         return 4
     for f in written:
