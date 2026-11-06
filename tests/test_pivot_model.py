@@ -151,7 +151,10 @@ q5 = dict(DEFAULTS, **v5["params"])
 for q in (neck, q5):
     body = next(x for x in pc.parts(q) if x.key == "body")
     H, W, g = q["body_height"], q["body_width"], q["glue"]
-    cy = g + W + H + W / 2
+    # 前の壁の幅の真ん中。胴の角を落とした形（body_round）では、上の面が 2d 細く、側面が d 低く、角の面 c が 2 つ入る
+    c = q["body_round"]
+    d = c / math.sqrt(2)
+    cy = g + (W - 2 * d) + c + (H - d) + W / 2
     assert body.cuts == [] and body.round_cuts == [(H - q["axle_height"], cy, q["opening"] / 2)], body.round_cuts
     rims = [a for a in body.art if a["kind"] == "poly" and a.get("fill") == pc.RIM]
     assert len(rims) == 1 and all(abs(math.hypot(x - (H - q["axle_height"]), y - cy) - (q["opening"] / 2 + pc.RIM_W)) < 1e-6 for x, y in rims[0]["pts"])

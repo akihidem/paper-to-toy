@@ -18,6 +18,9 @@ DEFAULTS = {
     "opening": 18, "neck_length": 14, "strip_width": 10,
     "head_w": 26, "head_h": 24,
     "weight_g": 3.0, "weight_below_axle": 28, "weight_behind": 1,
+    # 立体の脚の高さと、胴の上の角を落とす幅（本人の追加の指示 2026-11-06「虎の足と胴体を立体的にして、さらにリアリティを追求する」）。
+    # 既定は 0（脚なし・箱）。凍結の場面は既定の寸法で動くので、次の組の見本（examples/tora_v5.json）だけが使う
+    "leg_height": 0, "body_round": 0,
     # 紙の面密度は見込み。実物の紙を量ったら置き換える。
     "paper_gsm": 150,
 }
@@ -27,6 +30,7 @@ RANGES = {
     "opening": (10, 30), "neck_length": (5, 30), "strip_width": (5, 20),
     "head_w": (15, 45), "head_h": (15, 45),
     "weight_g": (0.2, 15), "weight_below_axle": (-20, 60), "weight_behind": (-10, 40),
+    "leg_height": (0, 15), "body_round": (0, 10),
     "paper_gsm": (40, 400),
 }
 MOUNTS = ("neck", "hang")
@@ -55,6 +59,10 @@ STRIPE_STEP = 8  # 縞の間 mm
 # 尾（4）: 幅・長さと、根元の糊代の長さ。尾は胴の上の面の後ろの端に糊代を貼って立て、上へ反らせる（実物の写真の直し E。前は後ろの壁に貼った）
 TAIL_W, TAIL_LEN, TAIL_TAB = 8, 56, 8
 TAIL_BACK = 3  # 尾の糊代を貼る四角の、上の面の後ろの端からの間 mm
+# 立体の脚（leg_height > 0）: 白い角筒の一辺・上の糊代の長さ・横の糊代の幅と、胴の底の四隅から脚を貼る四角までの間 mm（LEG_INSET。
+# 描いた脚の LEG_IN は胴の長さの割合で、別の物）。
+# 一辺は、胴の幅の下限（20mm）でも底に 2 本が並ぶ太さ（2·7＋2·3 = 20）
+LEG_SIDE, LEG_TAB, LEG_GLUE, LEG_INSET = 7, 5, 5, 3
 TITLES = {"neck": "首を胴の穴に入れる", "hang": "頭を前に吊る"}
 
 
@@ -159,7 +167,7 @@ def check_physics(p):
         room = p["ear_length"] - HOLE_MARGIN
         if room < reach and math.degrees(math.asin(room / reach)) < MIN_SWING:
             out.append(Failure("F5.pivot", "頭", f"頭が胴に当たるまで {MIN_SWING}° 揺れない"))
-        if H - HOLE_MARGIN - reach < 3:
+        if H + p["leg_height"] - HOLE_MARGIN - reach < 3:
             out.append(Failure("F5.pivot", "頭", "頭の下端が床に近すぎる"))
     else:
         # 首の帯が穴の縁に当たらずに MIN_SWING まで揺れるか。帯の面は軸に直交する（軸は帯の面の穴を貫く）ので、
@@ -169,7 +177,8 @@ def check_physics(p):
         need = NECK_BACK * math.tan(t) + p["strip_width"] / (2 * math.cos(t))
         if need > p["opening"] / 2:
             out.append(Failure("F5.pivot", "首", f"首の帯（幅 {p['strip_width']}）が穴（{p['opening']}）の縁に当たるまで {MIN_SWING}° 揺れない"))
-        if p["head_h"] / 2 > ax - 3:
+        # 脚がある時は、床までが脚の高さだけ遠い
+        if p["head_h"] / 2 > ax + p["leg_height"] - 3:
             out.append(Failure("F5.pivot", "頭", "頭の下端が床に近すぎる"))
     # 粘土の玉の 2 つの決まり（軸の竹串・底）は、重りの別の落ち（重心が軸より上・傾き）が無い時だけ言う。1 つの崩れに別の行が続くと
     # 狙いが読めなくなり、凍結の負の場面（neg_pivot_tilt・neg_pivot_weight_above）が 1 行で落ちる決まりも崩れた（run.sh で見つけた）
@@ -187,6 +196,17 @@ def check_physics(p):
         out.append(Failure("F5.pivot", "重り", f"重りが底に当たる（軸の下 {p['weight_below_axle']}mm、軸の高さ {ax}mm）"))
     if p["strip_width"] > p["body_width"] - 6:
         out.append(Failure("F5.pivot", "帯", "帯が胴の内幅に入らない"))
+    # 角を落とした胴（body_round）: 吊る形は耳が角の面に来るので落とせない。首の形は、軸の穴が側面の縦の所に要る。
+    # 上の面は角の分だけ細くなるので、尾を貼る四角（TAIL_W）が入る幅が要る
+    c = p["body_round"]
+    if c:
+        d = c / math.sqrt(2)
+        if p["mount"] == "hang":
+            out.append(Failure("F5.pivot", "胴", "吊る形の胴は角を落とせない（耳が角の面に来る）"))
+        elif ax + HOLE_MARGIN > p["body_height"] - d:
+            out.append(Failure("F5.pivot", "軸の高さ", f"軸の穴が胴の角の面に来る（軸の高さ {ax}mm、側面の縦の所は {p['body_height'] - d:.1f}mm まで）"))
+        if p["body_width"] - 2 * d < TAIL_W + 1.2:
+            out.append(Failure("F5.pivot", "胴", f"胴の上の面（幅 {p['body_width'] - 2 * d:.1f}mm）に尾の糊代の四角（幅 {TAIL_W}mm）が入らない"))
     return out
 
 
@@ -236,13 +256,14 @@ def _stripe(a, b, w0, w1):
                                     (bx - nx * w1 / 2, by - ny * w1 / 2), (ax - nx * w0 / 2, ay - ny * w0 / 2)], "fill": STRIPE}
 
 
-def _side_art(x, y, L, H, foot_at_top):
+def _side_art(x, y, L, H, foot_at_top, legs=True):
     """側面の絵: 黄の地に、背（上の辺）から下りる紺の縞と、下の白い帯と白い脚 2 本（実物の写真の直し C・F。前は横向きの虎 1 匹の絵で、
     実物は胴そのものが虎で、側面は縞と白い脚だった）。
 
     u は前の端（x。前の壁の側＝軸の穴の側）からの長さ、v は床の辺からの高さで描き、頁の座標に移す。2 枚目の側面は箱の中で上が頁の下に
     なるので、床の辺が頁の上に来る（foot_at_top）。x は裏返さない（本人のレビューから採った案 EP-0016: 前は 180° 回していて、2 枚目の
     側面の向きが逆になっていた）。どちらの側面も、外から見て脚が下、前の脚が前の端に来る。
+    立体の脚（leg_height > 0）がある時は、描いた脚を描かず、下の白い帯だけを残す（legs=False）。
     """
     def at(u, v):
         return (x + u, y + v) if foot_at_top else (x + u, y + H - v)
@@ -258,7 +279,7 @@ def _side_art(x, y, L, H, foot_at_top):
         art.append(_stripe(at(u, H - 1.6), at(u + 2.5, low), 2.6, 0.6))
     art.append(poly([(m, 0), (L - m, 0), (L - m, band), (m, band)], WHITE))
     leg_w, leg_h = LEG_W * L, LEG_TOP * H
-    for u0 in (LEG_IN * L, L - LEG_IN * L - leg_w):
+    for u0 in ((LEG_IN * L, L - LEG_IN * L - leg_w) if legs else ()):
         art.append(poly([(u0, 0.3), (u0 + leg_w, 0.3), (u0 + leg_w, leg_h), (u0, leg_h)], WHITE, stroke=STRIPE, sw=0.3))
         # 指の線（脚に見せるため）
         art += [{"kind": "line", "pts": [at(u0 + leg_w * k / 3, 0.6), at(u0 + leg_w * k / 3, 3.0)], "stroke": STRIPE, "sw": 0.3} for k in (1, 2)]
@@ -274,12 +295,39 @@ def _top_art(x, y, L, W):
     return art
 
 
-def _wall_art(x_floor, y, H, W, up):
+def _bevel_art(x, y, L, C):
+    """角の面（body_round）の絵: 上の面と側面の間の細い面。縞は側面の縞と同じ所から、面の幅をまたぐ。"""
+    art = [_panel(x + 0.2, y, x + L - 0.2, y + C, TIGER)]
+    art += [_stripe((x + u, y + 0.6), (x + u + 1.2, y + C - 0.6), 2.6, 2.4) for u in range(NECK_BACK + 5, int(L) - 5, STRIPE_STEP)]
+    return art
+
+
+def _leg_part(n, h):
+    """立体の脚 1 本（n は部品の番号 6〜9）: 白い角筒。刷った面を外にして角筒にする（山折り）。上の 2 つの糊代を外へ折り（谷折り）、
+    刷った面（斜線）を上に向けて胴の底の四角に貼る。前は脚を側面に描いていた（実物の写真の直し F の繋ぎ）。"""
+    a, t, gl = LEG_SIDE, LEG_TAB, LEG_GLUE
+    outline = [(0, t), (0.5, 0), (a - 0.5, 0), (a, t), (2 * a, t), (2 * a + 0.5, 0), (3 * a - 0.5, 0), (3 * a, t), (4 * a, t),
+               (4 * a + gl, t + 1), (4 * a + gl, t + h - 1), (4 * a, t + h), (0, t + h)]
+    leg = Part(n, f"leg{n - 5}", "脚", outline, label_xy=(0.6, t + 0.6), label=f"{n} 脚",
+               mountain=[((k * a, t), (k * a, t + h)) for k in (1, 2, 3, 4)], valley=[((0, t), (a, t)), ((2 * a, t), (3 * a, t))],
+               glue=[[(4 * a, t), (4 * a + gl, t + 1), (4 * a + gl, t + h - 1), (4 * a, t + h)],
+                     [(0.5, 0), (a - 0.5, 0), (a, t), (0, t)], [(2 * a + 0.5, 0), (3 * a - 0.5, 0), (3 * a, t), (2 * a, t)]])
+    leg.art = [_panel(k * a + 0.2, t + 0.2, (k + 1) * a - 0.2, t + h - 0.2, WHITE) for k in range(4)]
+    # 指の線（前の面の下の端）
+    leg.art += [{"kind": "line", "pts": [(a * j / 3, t + h - 0.6), (a * j / 3, t + h - 2.6)], "stroke": STRIPE, "sw": 0.3} for j in (1, 2)]
+    return leg
+
+
+def _wall_art(x_floor, y, H, W, up, cut=0):
     """前と後ろの壁の絵: 黄の地と、床の側の白い帯。壁は胴の底の面に x の向きでつながるので、x_floor が床の辺で、up（+1 か −1）の
-    向きに高くなる。後ろの壁には、幅をまたぐ紺の縞も描く（前の壁は首の穴と赤い縁を見せるので縞を描かない）。"""
+    向きに高くなる。後ろの壁には、幅をまたぐ紺の縞も描く（前の壁は首の穴と赤い縁を見せるので縞を描かない）。
+    cut は胴の角を落とした長さ（body_round の d）。壁の上の 2 つの角も同じだけ切った形なので、地の色も角を切る
+    （絵の枠は外形から 0.2 内なので、切る長さに 0.3 足して外形の外に出さない）。"""
     def at(h, w):
         return (x_floor + up * h, y + w)
-    art = [{"kind": "poly", "pts": [at(0, 0), at(H, 0), at(H, W), at(0, W)], "fill": TIGER},
+    k = cut + 0.3 if cut else 0
+    shape = [at(0, 0), at(H - k, 0), at(H, k), at(H, W - k), at(H - k, W), at(0, W)] if k else [at(0, 0), at(H, 0), at(H, W), at(0, W)]
+    art = [{"kind": "poly", "pts": shape, "fill": TIGER},
            {"kind": "poly", "pts": [at(0, 0), at(FOOT_BAND * H, 0), at(FOOT_BAND * H, W), at(0, W)], "fill": WHITE}]
     if up > 0:
         art += [_stripe(at(f * H, 1.6), at(f * H + 2, W - 1.6), 2.2, 0.8) for f in (0.45, 0.62, 0.79)]
@@ -311,13 +359,29 @@ def parts(p):
     L, W, H, g = p["body_length"], p["body_width"], p["body_height"], p["glue"]
     e, eh = p["ear_length"], p["ear_height"]
     hang = p["mount"] == "hang"
-    top0, top1 = g, g + W
-    b0, b1 = top1 + H, top1 + H + W
-    bottom = b1 + H
-    pts = [(H + 2, 0), (H + L - 2, 0), (H + L, g), (H + L, b0 - g), (H + L + H - 2, b0 - g), (H + L + H, b0), (H + L + H, b1), (H + L + H - 2, b1 + g), (H + L, b1 + g), (H + L, bottom), (H, bottom)]
+    # 胴の上の 2 つの角を、幅 c の面で 45° に落とす（本人の追加の指示「胴体を立体的に」。c = body_round）。d は角の面の横と縦の長さ
+    # （c·cos45°）。上の面は 2d 細く、側面の縦の所は d 低くなり、壁も上の 2 つの角を d 切る。帯は上・角の面・側面・底・側面・角の面の順。
+    # c = 0 の時は d も 0（int）にし、前と同じ数と並びにする（既定の寸法で刷る凍結の場面の紙を、1 バイトも変えない）
+    c = p["body_round"]
+    d = c / math.sqrt(2) if c else 0
+    Wt, Hs = W - 2 * d, H - d
+    top0, top1 = g, g + Wt
+    ch1 = top1 + c
+    b0 = ch1 + Hs
+    b1 = b0 + W
+    ch2 = b1 + Hs
+    bottom = ch2 + c
+    far = H + L + H
+    if d:
+        back_wall = [(far - d - 2, b0 - g), (far - d, b0), (far, b0 + d), (far, b1 - d), (far - d, b1), (far - d - 2, b1 + g)]
+        front_wall = [(d + 2, b1 + g), (d, b1), (0, b1 - d), (0, b0 + d), (d, b0), (d + 2, b0 - g)]
+    else:
+        back_wall = [(far - 2, b0 - g), (far, b0), (far, b1), (far - 2, b1 + g)]
+        front_wall = [(2, b1 + g), (0, b1), (0, b0), (2, b0 - g)]
+    pts = [(H + 2, 0), (H + L - 2, 0), (H + L, g), (H + L, b0 - g)] + back_wall + [(H + L, b1 + g), (H + L, bottom), (H, bottom)]
     if hang:
         pts += [(H - e, bottom), (H - e, bottom - eh), (H, bottom - eh)]
-    pts += [(H, b1 + g), (2, b1 + g), (0, b1), (0, b0), (2, b0 - g), (H, b0 - g)]
+    pts += [(H, b1 + g)] + front_wall + [(H, b0 - g)]
     if hang:
         pts += [(H, top1 + eh), (H - e, top1 + eh), (H - e, top1), (H, top1)]
     pts += [(H, g)]
@@ -325,14 +389,26 @@ def parts(p):
     # 胴は色の面（虎の地・縞・横の絵）を外にして箱にするので、刷った面から見て山折り。谷折り（凡例の、刷った面がへこむ向き）のままだと
     # 色の面が箱の内に入った。御来迎の外筒への本人の答え（2026-11-06「色がついている所が外を向くよう折った」）と同じ線で直した（次の版）。
     # 胴の線は破線で刷るので、刷る線の形が山折りの形に変わる
-    body.mountain = [((H, top0), (H + L, top0)), ((H, top1), (H + L, top1)), ((H, b0), (H + L, b0)), ((H, b1), (H + L, b1)), ((H, b0), (H, b1)), ((H + L, b0), (H + L, b1)),
-                     ((0, b0), (H, b0)), ((0, b1), (H, b1)), ((H + L, b0), (H + L + H, b0)), ((H + L, b1), (H + L + H, b1))]
-    body.glue = [[(H + 2, 0), (H + L - 2, 0), (H + L, g), (H, g)], [(2, b0 - g), (H, b0 - g), (H, b0), (0, b0)], [(0, b1), (H, b1), (H, b1 + g), (2, b1 + g)],
-                 [(H + L, b0 - g), (H + L + H - 2, b0 - g), (H + L + H, b0), (H + L, b0)], [(H + L, b1), (H + L + H, b1), (H + L + H - 2, b1 + g), (H + L, b1 + g)]]
-    # 胴の絵（実物の写真の直し B・C・F）: 上の面は縞と黒い斑、側面は縞と白い帯と脚、前と後ろの壁は白い帯、底の面は白（実物は下が白い）
-    body.art = _top_art(H, top0 + 0.2, L, W - 0.4) + [_panel(H + 0.2, b0 + 0.2, H + L - 0.2, b1 - 0.2, WHITE)]
-    body.art += _wall_art(H - 0.2, b0 + 0.2, H - 0.4, W - 0.4, -1) + _wall_art(H + L + 0.2, b0 + 0.2, H - 0.4, W - 0.4, +1)
-    body.art += _side_art(H, top1 + 0.2, L, H - 0.4, False) + _side_art(H, b1 + 0.2, L, H - 0.4, True)
+    body.mountain = [((H, top0), (H + L, top0)), ((H, top1), (H + L, top1))] + ([((H, ch1), (H + L, ch1))] if c else [])
+    body.mountain += [((H, b0), (H + L, b0)), ((H, b1), (H + L, b1))] + ([((H, ch2), (H + L, ch2))] if c else [])
+    body.mountain += [((H, b0), (H, b1)), ((H + L, b0), (H + L, b1)),
+                      ((d, b0), (H, b0)), ((d, b1), (H, b1)), ((H + L, b0), (far - d, b0)), ((H + L, b1), (far - d, b1))]
+    body.glue = [[(H + 2, 0), (H + L - 2, 0), (H + L, g), (H, g)], [(d + 2, b0 - g), (H, b0 - g), (H, b0), (d, b0)], [(d, b1), (H, b1), (H, b1 + g), (d + 2, b1 + g)],
+                 [(H + L, b0 - g), (far - d - 2, b0 - g), (far - d, b0), (H + L, b0)], [(H + L, b1), (far - d, b1), (far - d - 2, b1 + g), (H + L, b1 + g)]]
+    legs = p["leg_height"] > 0
+    # 胴の絵（実物の写真の直し B・C・F）: 上の面は縞と黒い斑、側面は縞と白い帯と脚、前と後ろの壁は白い帯、底の面は白（実物は下が白い）。
+    # 角の面にも縞を続ける。立体の脚がある時は、側面に脚を描かない
+    body.art = _top_art(H, top0 + 0.2, L, Wt - 0.4)
+    if c:
+        body.art += _bevel_art(H, top1 + 0.2, L, c - 0.4) + _bevel_art(H, ch2 + 0.2, L, c - 0.4)
+    body.art += [_panel(H + 0.2, b0 + 0.2, H + L - 0.2, b1 - 0.2, WHITE)]
+    body.art += _wall_art(H - 0.2, b0 + 0.2, H - 0.4, W - 0.4, -1, d) + _wall_art(H + L + 0.2, b0 + 0.2, H - 0.4, W - 0.4, +1, d)
+    body.art += _side_art(H, ch1 + 0.2, L, Hs - 0.4, False, not legs) + _side_art(H, b1 + 0.2, L, Hs - 0.4, True, not legs)
+    if legs:
+        # 脚を貼る四角（位置の印）: 胴の底の面（x が H〜H＋L・y が b0〜b1）の四隅から LEG_INSET 内。前の 2 本は前の壁の側（x = H）
+        a = LEG_SIDE
+        for x0, y0 in ((H + LEG_INSET, b0 + LEG_INSET), (H + LEG_INSET, b1 - LEG_INSET - a), (H + L - LEG_INSET - a, b0 + LEG_INSET), (H + L - LEG_INSET - a, b1 - LEG_INSET - a)):
+            body.art.append({"kind": "mark", "pts": [(x0, y0), (x0 + a, y0), (x0 + a, y0 + a), (x0, y0 + a)], "closed": True, "mark": "leg"})
     # 尾の糊代を貼る四角（位置の印）。上の面の後ろの端の近く、幅の真ん中（実物の尾は上の面の後ろ寄りから上へ反る。直し E）
     ty = (top0 + top1) / 2
     tx1 = H + L - TAIL_BACK
@@ -343,7 +419,8 @@ def parts(p):
         body.holes = [(H - e + HOLE_MARGIN, top1 + HOLE_MARGIN, 1.2), (H - e + HOLE_MARGIN, bottom - HOLE_MARGIN, 1.2)]
     else:
         back = NECK_BACK  # 前の壁の少し後ろに軸を通す。首の帯が壁に当たらないように
-        body.holes = [(H + back, top1 + H - ax, 1.2), (H + back, bottom - (H - ax), 1.2)]
+        # 軸の穴は側面の縦の所（床から Hs まで）。c = 0 の時は前と同じ式（top1 + H − ax・bottom − (H − ax)）になる
+        body.holes = [(H + back, ch1 + Hs - ax, 1.2), (H + back, ch2 - (Hs - ax), 1.2)]
         # 軸の竹串が胴を横切る所の線（EP-0016: 竹串を通す位置の線）。上の面の、2 つの穴と同じ x に横切る点の線（位置の印）
         body.art.append({"kind": "mark", "pts": [(H + back, top0 + 0.6), (H + back, top1 - 0.6)], "mark": "axle"})
         op = p["opening"]
@@ -368,6 +445,8 @@ def parts(p):
                 art=[_panel(0.1, 0.1, TAIL_W - 0.1, TAIL_LEN - 0.3, TIGER)]
                 + [_stripe((0.4, y), (TAIL_W - 0.4, y + 1.5), 1.6, 0.8) for y in range(10, TAIL_LEN - 4, 8)])
     out = [body, head, strip, tail]
+    # 立体の脚 4 本は、部品の最後に足す（脚が無い形の部品の並びと番号は変えない）
+    legs_parts = [_leg_part(6 + i, p["leg_height"]) for i in range(4)] if legs else []
     if not hang:
         # 紙の頭は軽いので、重りは軸の真下に下げる。下げる腕が無いと寸法どおりに作れない。
         drop_len = max(p["weight_below_axle"] + 8, 20)
@@ -384,7 +463,7 @@ def parts(p):
             drop.art += [{"kind": "mark", "pts": [(0.6, wy), (4 - gap, wy)], "mark": "weight"},
                          {"kind": "mark", "pts": [(4 + gap, wy), (7.4, wy)], "mark": "weight"}]
         out.append(drop)
-    return out
+    return out + legs_parts
 
 
 def place(by_key, page, top, gap):
@@ -403,6 +482,15 @@ def place(by_key, page, top, gap):
         x += drop.width + gap
     tail.x, tail.y = x, y
     x += tail.width + gap
+    # 立体の脚は、胴の網の外形の外の空き（前の壁と後ろの壁の上、上の面の帯の左右）に 2 本ずつ縦に置く。下の段に足すと、
+    # 用意する物の字の幅が減り、紙の下へはみ出す。重なりの検査（F5.overlap）は外形の多角形で見るので、網の空きに置ける
+    legs = [by_key[k] for k in ("leg1", "leg2", "leg3", "leg4") if k in by_key]
+    if legs:
+        left = page.x0
+        right = page.x0 + body.width - legs[0].width
+        for i, leg in enumerate(legs):
+            leg.x = left if i < 2 else right
+            leg.y = top + (i % 2) * (leg.height + gap)
     return y, page.x1 - x, x
 
 
@@ -417,6 +505,11 @@ def bom(p):
         {"number": 7, "key": "axle", "name": "軸", "qty": 1, "material": f"竹串（長さ約 {p['body_width'] + 20}mm に切り、先を落とす）", "substituted": True, "original_guess": "不明", "reason": "家にあり、穴に通しやすいため"},
         {"number": 8, "key": "weight", "name": "重り", "qty": 1, "material": _weight_material(p), "substituted": True, "original_guess": "不明", "reason": "量を変えて試しやすいため"},
     ]
+    if p["leg_height"] > 0:
+        # 立体の脚 4 本は刷る部品 6〜9。刷る部品の番号は部品表の行と 1 対 1 で結ぶ（F2.bom）ので、刷らない竹串と粘土の番号を 10・11 に送る
+        rows[-2]["number"], rows[-1]["number"] = 10, 11
+        rows[4:4] = [{"number": 6 + i, "key": f"leg{i + 1}", "name": "脚", "qty": 1, "material": paper, "substituted": True,
+                      "original_guess": "張子（実物の写真の短い白い脚）", "reason": why} for i in range(4)]
     if p["mount"] == "neck":
         # 首の形だけが刷る部品 5。部品表に無いと、型紙と部品表が食い違ったまま検査を通った。
         rows.insert(4, {"number": 5, "key": "drop", "name": "重りの腕", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明", "reason": "紙の頭は軽いので、重りを軸の真下に下げる腕が要るため"})
@@ -472,6 +565,9 @@ def steps(p):
         arm = axle_to_head_top(p)
         out += [f"3 首の帯の下の端を、2 頭の上の端に {HEAD_OVERLAP}mm 重ねて貼る", "竹串を耳の穴と帯の穴に通す",
                 f"粘土を頭の裏の真ん中、頭の上の端から {p['weight_below_axle'] - arm:g}mm 下に貼る"]
+    if p["leg_height"] > 0:
+        # 立体の脚（本人の追加の指示）。上の面を閉じる前に貼る（底を内から押さえて貼れる）。脚が無い形の手順の数と番号は変えない
+        out.append("6〜9 脚を山折りの線で角筒にして糊代で貼り、上の 2 つの糊代を外へ谷折りして、1 胴の底の点の線の四角に 1 本ずつ貼る")
     # 尾は上の面の後ろの四角に立てて貼る（実物の写真の直し E。前は「丸くして、後ろに貼る」で、後ろの壁に貼っていた）
     out += ["1 胴の上の面を閉じる", "4 尾の糊代を山折りし、1 胴の上の面の後ろの点の線の四角に貼る。尾は上へ反らせる"]
     return out
