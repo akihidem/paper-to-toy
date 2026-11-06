@@ -161,6 +161,7 @@ assert "1 胴の前の壁の丸い穴を切る（カッターは大人がする�
 # 丸い印が 2 種ある（竹串であける小さい穴と、切り抜く大きな丸）ので、用意する物と組み方の文で言い分ける
 assert any("小さい丸い印は穴（竹串の先であける）" in m and "赤い縁の大きな丸は切り抜く" in m for m in pc.materials(neck)), pc.materials(neck)
 assert "部品を実線で切る。胴の小さい穴は竹串の先であける" in pc.steps(neck) and "部品を実線で切る。胴の小さい穴は竹串の先であける" in pc.steps(hang)
+assert not any("大きな丸" in m for m in pc.materials(hang)), pc.materials(hang)  # 吊る形に切り抜く丸は無い
 # E. 尾は根元の糊代を山折りし、上の面の後ろの端の近くの四角（位置の印）に貼って立てる。どちらの形も同じ
 for q in (neck, hang):
     ps = {x.key: x for x in pc.parts(q)}

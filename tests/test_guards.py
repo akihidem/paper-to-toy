@@ -276,9 +276,18 @@ rect = Part(1, "plate", "板", [(0, 0), (40, 0), (40, 40), (0, 40)], cuts=[(10, 
 assert any("切り込みにかかり" in f.message for f in check_art([rect])), "切り込みにかかる印を通した"
 # 丸い切り抜き（round_cuts）が部品の外に出たら、穴と同じ床（F5.hole）で落とす。刷る時は切る線と同じ実線の円で描く
 from omochae.floors import check_holes
+from shapely.geometry import LineString, Point
 sq = [(0, 0), (40, 0), (40, 40), (0, 40)]
 assert [f.floor for f in check_holes([Part(1, "plate", "板", sq, round_cuts=[(38, 20, 5)])])] == ["F5.hole"]
 assert check_holes([Part(1, "plate", "板", sq, round_cuts=[(20, 20, 5)])]) == []
+# 円の弧だけがわずかにかかる寸法も落とす。円の内に入る多角形（64 頂点）の 2 つの頂点の真ん中の向きで、円から 0.003mm 内に
+# 引いた折り線は、円にはかかるが内の多角形にはかからない（前の見方では通っていた）
+import math as _m
+_a, _d = _m.pi / 64, 4.997  # 頂点の間の真ん中の向きと、中心から線までの長さ（円の半径 5 より短く、内の多角形の 5·cos(π/64)≈4.994 より長い）
+_ux, _uy = _m.cos(_a), _m.sin(_a)
+_p = ((20 + _d * _ux + 8 * _uy, 20 + _d * _uy - 8 * _ux), (20 + _d * _ux - 8 * _uy, 20 + _d * _uy + 8 * _ux))
+assert Point(20, 20).buffer(5, quad_segs=16).intersects(LineString(_p)) is False  # 内の多角形にはかからない（試験の前提）
+assert [f.floor for f in check_holes([Part(1, "plate", "板", sq, mountain=[_p], round_cuts=[(20, 20, 5)])])] == ["F5.hole"]
 # 丸い切り抜きが折り線か糊代にかかる時も落とす（外形の内でも、折る所・貼る所を切り取る）
 assert [f.floor for f in check_holes([Part(1, "plate", "板", sq, mountain=[((0, 22), (40, 22))], round_cuts=[(20, 20, 5)])])] == ["F5.hole"]
 assert [f.floor for f in check_holes([Part(1, "plate", "板", sq, glue=[[(0, 30), (40, 30), (40, 40), (0, 40)]], round_cuts=[(20, 27, 5)])])] == ["F5.hole"]
