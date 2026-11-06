@@ -54,7 +54,7 @@ def to_svg(layout):
             else:
                 d.append(dw.Lines(*pts, close=False, fill="none", stroke=item["stroke"], stroke_width=item["sw"]))
     # 呼ぶ側が渡した画像（元の repo では手順の紙の完成のイメージ、v8）。型紙の部品には貼らない（刷った後の検査 F5.image_count が 0 枚を見る）。
-    # 手順の紙は廃止した（本人の決まり 2026-11-06「文章のプリントは廃止。組み立て用のページだけでいい。」）。この口と下の塗り・物差しの無い紙の口は、サイトが呼ばなくなったと確かめてから外す。
+    # 手順の紙は廃止した（制作者の決まり 2026-11-06「文章のプリントは廃止。組み立て用のページだけでいい。」）。この口と下の塗り・物差しの無い紙の口は、サイトが呼ばなくなったと確かめてから外す。
     for im in layout.get("images", []):
         d.append(dw.Image(im["x"], im["y"], im["w"], im["h"], data=im["data"], mime_type="image/jpeg"))
     if layout.get("paste_image"):

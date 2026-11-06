@@ -216,7 +216,7 @@ st = t.steps({**P, "kind": "karakuri"})
 assert any("机に立て" in x and "押さえ" in x for x in st), st
 assert any("机" in f.message for f in t.check_physics({**P, "kind": "karakuri", "crank": 12}))
 
-# 5 回目の見直し 4: 用意する物に、登る板を貼る厚紙が載る。紙の書き方の決まり（omochae.paper_words・本人の指示 2026-11-05）で
+# 5 回目の見直し 4: 用意する物に、登る板を貼る厚紙が載る。紙の書き方の決まり（omochae.paper_words・制作者の指示 2026-11-05）で
 # 厚さの mm は書かず「空き箱の厚紙」の名前で言う。板の厚さの範囲（plate_t）の下の端でも、その名前に当たる事を見る
 from omochae.paper_words import BOARD, paper_name  # noqa: E402
 m = t.materials({**P, "kind": "saru_take"})

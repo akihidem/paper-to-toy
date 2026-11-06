@@ -32,7 +32,7 @@ import math
 
 from shapely.geometry import LineString, Point, Polygon
 
-from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（本人の指示 2026-11-05）
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（制作者の指示 2026-11-05）
 from ..model import Failure, Part
 from ..pivot_model import center, paper_mass, rest_tilt_deg
 
