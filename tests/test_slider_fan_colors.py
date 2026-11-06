@@ -64,6 +64,11 @@ for form in sf.PUSH_PARTS:
     assert all(x >= p["tube_side"] or not (x0 < x < x1 and y0 < y < y1) for x, y in tube.outline), form
 # 3. 範囲の上限: 筒の高さを 130 まで書ける形は、内筒も同じ高さまで書ける（内筒を下から押す形と柄の形は、内筒が筒より短いと落とす）
 assert sf.RANGES["pusher_height"][1] >= sf.RANGES["tube_height"][1]
+# 折り数は写真の 44〜52 枚を書け、上限 60 まで受ける。扇の長さを書く時も、合っている長さを範囲の検査が先に落とさない
+assert sf.RANGES["fold_count"][1] == 60 and sf.RANGES["fan_length"][1] >= sf.RANGES["fold_count"][1] * sf.RANGES["fold_width"][1]
+for fc in (44, 52, 60):
+    assert sf.check_range({**sf.DEFAULTS, "fold_count": fc, "fan_length": fc * 8.5}) == [], fc
+assert sf.check_range({**sf.DEFAULTS, "fold_count": 61})[0].floor == "F5.range"
 for form in ("tube", "stick"):
     tall = {**sf.DEFAULTS, "push_part": form, "tube_height": 130, "pusher_height": 130}
     assert sf.check_range(tall) == [] and not [f for f in sf.check_physics(tall) if "押し切れない" in f.message], form
