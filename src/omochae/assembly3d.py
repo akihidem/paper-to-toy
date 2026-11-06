@@ -12,7 +12,6 @@
   行列は CSS の matrix3d と同じ列優先の 16 個で、部品の座標の点 (x, y, 0, 1) を世界の点へ写す。
 - 部品を置く所は、刷った位置の印（脚の四角・尾の四角・軸の穴）から決める（印と貼った物の所がずれないため）。
 """
-import argparse
 import json
 import math
 import pathlib
@@ -22,6 +21,7 @@ from .compose import TEMPLATES
 from .fold3d import FoldError, fold
 
 FORMAT = "omochae-assembly-3d/1"
+TAIL_HOLD = 30.0  # 尾を貼る前に、貼る四角の上に持つ高さ mm
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 # 4×4 の行列は行の並び（[[...], ...]）で持ち、JSON に出す時だけ列優先の 16 個にする
@@ -431,9 +431,6 @@ def _tiger(scene, p):
     xs, ys = [x for x, _ in mk["pts"]], [y for _, y in mk["pts"]]
     sq = {"f0": (min(xs), min(ys)), "f1": (min(xs), max(ys)), "b0": (max(xs), min(ys))}
     tl = pc.TAIL_LEN
-    cur["tail"] = (tail_ang, mul(translate(L + 30, -40.0, 0.0), place_by(S["tail"], tail_ang, [(0.0, tl), (pc.TAIL_W, tl), (0.0, tl + pc.TAIL_TAB)],
-                                                                        [(0.0, 0.0, 0.0), (0.0, 0.0, -pc.TAIL_W), (pc.TAIL_TAB, 0.0, 0.0)])))
-    a = snap(view={"rx": -30, "ry": 30}, rods=skewer, balls=clay)
     for f0, f1, b0_ in ((sq["f0"], sq["f1"], sq["b0"]), (sq["f1"], sq["f0"], (sq["b0"][0], max(ys)))):
         pl = place_by(S["tail"], tail_ang, [(0.0, tl), (pc.TAIL_W, tl), (0.0, tl + pc.TAIL_TAB)],
                       [_world_pt(bworld, S["body"], *f0), _world_pt(bworld, S["body"], *f1), _world_pt(bworld, S["body"], *b0_)])
@@ -441,6 +438,10 @@ def _tiger(scene, p):
         tipw = apply(mul(pl, local[0]), (pc.TAIL_W / 2, 0.0, 0.0))
         if tipw[1] < _world_pt(bworld, S["body"], *f0)[1] - 10:
             break
+    # 糊代を折った尾を、貼る四角の TAIL_HOLD 上に持ってから貼る。前は机の右に尾の先を下にして立てていて、尾が机の下へ 16mm 出た
+    # （エンジンの 3D の検品 omochae.check3d の 3D.out で見つけた）
+    cur["tail"] = (tail_ang, mul(translate(0.0, -TAIL_HOLD, 0.0), pl))
+    a = snap(view={"rx": -30, "ry": 30}, rods=skewer, balls=clay)
     cur["tail"] = (tail_ang, pl)
     steps.append([a, snap(view={"rx": -25, "ry": 35}, rods=skewer, balls=clay, act="place", moving=["tail"])])
     # できあがりの動き: 頭が揺れて、静かな時の傾きで止まる（軸のまわりに回す。頭が上がる向きが正で、rot_z の正と同じ向き）。
@@ -454,6 +455,16 @@ def _tiger(scene, p):
             cur[k] = (ang, mul(swing, pl))
         cpos = apply(swing, tuple(clay7))
         finale.append(snap(view={"rx": -10, "ry": 20}, rods=skewer, balls={"clay": {"at": list(cpos)}}))
+    # 検品だけの姿（JSON に出さない）: できあがりを、静かな時の傾きから ±MIN_SWING まで 0.5° ずつ回す。できあがりの動きの 4 つの姿の
+    # 間も、玉・腕・頭が前の壁に当たらない事を 3D の形で見る（型紙の当たりの検査 fit_gaps と同じ角）
+    sweep = []
+    n_sw = int(round(2 * pc.MIN_SWING / 0.5))
+    for i in range(n_sw + 1):
+        deg = rest - pc.MIN_SWING + i * 0.5
+        swing = mul(translate(xa, ya, 0.0), mul(rot_z(deg), translate(-xa, -ya, 0.0)))
+        for k, (ang, pl) in base.items():
+            cur[k] = (ang, mul(swing, pl))
+        sweep.append((f"揺れ {deg - rest:+.1f}°", snap(view={"rx": -10, "ry": 20}, rods=skewer, balls={"clay": {"at": list(apply(swing, tuple(clay7)))}})))
     for k, v in base.items():
         cur[k] = v
     if len(steps) != len(steps_text):
@@ -476,7 +487,12 @@ def _tiger(scene, p):
                  "cutaway": {"body": [str(front_side)]}}
     rods = {"skewer": {"r": 1.0, "color": "#c8a46a", "kind": "rod", "owner": "body"}}
     balls = {"clay": {"r": round(pc.clay_r(p["weight_g"]), 3), "color": "#8a6f55"}}
-    return steps_text, steps, finale, rods, balls, structure
+    # 検品の決め（omochae.check3d）: 粘土の玉は 5 重りの腕に付く。机に置く形。刷った面は、胴と脚は外、両面の頭は両側
+    faces = {"body": "out", **{k: "out" for k in legs}}
+    if p["head_sides"] == 2:
+        faces["head"] = "both"
+    rules = {"attach": {"clay": "drop"}, "desk": True, "faces": faces, "extra": sweep}
+    return steps_text, steps, finale, rods, balls, structure, rules
 
 
 def _axis_angle(R):
@@ -731,7 +747,11 @@ def _goraigo_rise(scene, p):
     structure = {"inside": {"pusher": "tube", "base": "pusher", "cradle": "tube", "fan": "tube", "figure": "tube", "chopstick": "pusher"},
                  "exploded": exploded, "cutaway": {"tube": [front_face("tube")], "pusher": [front_face("pusher")]}}
     rod_kinds = {"chopstick": {"r": sf.CHOPSTICK_W / 2, "color": "#d9c49a", "kind": "rod", "owner": "pusher"}}
-    return steps_text, steps, finale, rod_kinds, {}, structure
+    # 検品の決め（omochae.check3d）: 静かな時（手順 16 の終わり）に扇と像は外筒の口の 2mm 以上下（隠れる）。刷った面は、外筒は外、
+    # 内筒は内（破線を刷る隠れる部品で、色の面を内にする）、台は外（上の面が上・横の面が外）。手に持つ玩具なので机は見ない
+    rules = {"below": {"parts": ["fan", "figure"], "of": "tube", "clear": 2.0, "pose": (16, -1)},
+             "faces": {"tube": "out", "pusher": "in", "base": "out"}, "desk": False}
+    return steps_text, steps, finale, rod_kinds, {}, structure, rules
 
 
 def _slider_fan(scene, p):
@@ -744,13 +764,19 @@ RECIPES = {"pivot_counterweight": _tiger, "slider_fan": _slider_fan}
 
 def build(scenario_path, commit=None):
     """場面の JSON（examples/ の形）から、作り方の 3D の JSON を作る。Returns dict。組み立ての書き方が無い雛形は None。"""
+    return assemble(scenario_path, commit)[0]
+
+
+def assemble(scenario_path, commit=None):
+    """build と同じ dict と、レシピの検品の決め（omochae.check3d.inspect の rules）。組み立ての書き方が無い雛形は (None, None)。
+    検品は入口（main）だけで回す。build は今までどおり形だけを返す（試験や読む側が、検品の落ちる形も作れるように）。"""
     from .__main__ import load_source
     from .compose import compose
     path = pathlib.Path(scenario_path)
     sc = json.loads(path.read_text(encoding="utf-8"))
     tid = sc["template"]
     if tid not in RECIPES:
-        return None
+        return None, None
     tpl = TEMPLATES[tid]
     p = {**tpl.DEFAULTS, **sc["params"]}
     _, layout, fails = compose(tid, p, load_source(sc["source_id"]))
@@ -759,8 +785,8 @@ def build(scenario_path, commit=None):
     scene = Scene(layout)
     made = RECIPES[tid](scene, p)
     if made is None:
-        return None
-    texts, steps, finale, rods, balls, structure = made
+        return None, None
+    texts, steps, finale, rods, balls, structure, rules = made
     toy = path.stem.replace("_", "-")
     return {
         "format": FORMAT, "toy": toy, "template": tid, "source_id": sc["source_id"], "params": sc["params"],
@@ -772,14 +798,16 @@ def build(scenario_path, commit=None):
         "structure": structure,
         "rods": rods, "balls": balls,
         "engine": {"commit": commit, "command": f"python -m omochae.assembly3d --scenario {path.as_posix()}"},
-    }
+    }, rules
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(prog="python -m omochae.assembly3d", description="作り方の 3D を、手順と 1 対 1 の段ごとの形にして JSON で出す")
+    from .__main__ import Parser  # 呼び方の誤りは 4（ほかの入口と同じ。README の命令の試験が見る）
+    ap = Parser(prog="python -m omochae.assembly3d", description="作り方の 3D を、手順と 1 対 1 の段ごとの形にして JSON で出す")
     ap.add_argument("--scenario", required=True, help="場面の JSON（examples/tora_v6.json など）")
     ap.add_argument("--out", help="書き出す JSON（無ければ標準出力）")
     ap.add_argument("--commit", help="出所に書く commit（無ければ git の HEAD）")
+    ap.add_argument("--record", help="検品の記録（段ごとの絵の一覧 PNG・短い動画 GIF・文 TXT）を書く所。落ちても書く")
     args = ap.parse_args(argv)
     commit = args.commit
     if commit is None:
@@ -787,15 +815,28 @@ def main(argv=None):
         r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True)
         commit = r.stdout.strip() or None
     try:
-        data = build(args.scenario, commit)
+        data, rules = assemble(args.scenario, commit)
     except (FoldError, ValueError) as e:
         print(f"作れない: {e}", file=sys.stderr)
         return 3
     if data is None:
         print("この雛形の組み立ての書き方はまだ無い", file=sys.stderr)
         return 4
+    # エンジンが自分で組んだ形を検品する（制作者の言葉「エンジンは3D組み立て検品を自分でする」）。落ちたら JSON を書かない
+    # （サイトが当たる形を描かないため）。終わりの値は、型紙の検査に落ちた時と同じ 3。所見（NOTE）は落ちにしない
+    from .check3d import inspect, render, summary
+    hits = inspect(data, rules)
+    for line in summary(hits):
+        print(line, file=sys.stderr)
+    if args.record:
+        for path in render(data, hits, pathlib.Path(args.record) / f"{data['toy']}-check"):
+            print(path, file=sys.stderr)
+    if any(not h.note for h in hits):
+        print("3D の組み立て検品に落ちた。JSON は書かない", file=sys.stderr)
+        return 3
     text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     if args.out:
+        pathlib.Path(args.out).parent.mkdir(parents=True, exist_ok=True)
         pathlib.Path(args.out).write_text(text, encoding="utf-8")
         print(args.out)
     else:
