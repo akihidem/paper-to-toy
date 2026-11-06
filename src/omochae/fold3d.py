@@ -27,6 +27,9 @@
   押し上げる量は寸法から、筒の高さは折った形から取る
 - 竹串の長さと端の位置は見ない（竹串は刷る部品でなく、型紙に長さが無い）。見るのは、竹串の線が溝を通るかだけ
 終了: 0 = 確かめて通った / 3 = 落ちた / 4 = 確かめられない（まだ組めない形・読めない）。
+
+内筒を下から押し上げる形（rise）の外筒と内筒は check_rise で確かめる。本人の決定（2026-11-06）「御来迎 v12 と虎 v5 に、3D の確かめを
+試験として足す。」による試験（tests/test_goraigo_rise_3d.py）だけが呼び、上の入口（つまみの形だけを組む）と凍結の基準の床は変えない。
 """
 import math
 import sys
@@ -617,6 +620,83 @@ def check(parts, p):
             else:
                 n = nums.get(kind)
                 failures.append(Failure(fail.floor, fail.where, f"{fail.message}（手順 {n}）" if n else fail.message))
+    return notes, failures
+
+
+def _fit(outer, inner):
+    """折った内筒の断面が、折った外筒の断面に収まる時のすき間 mm（負なら、はみ出す長さ）。紙の厚みは入れない。"""
+    up_o, c_o, _, _ = tube_axis(outer)
+    up_i, c_i, _, _ = tube_axis(inner)
+    sec_o, sec_i = _section(outer, up_o, c_o), _section(inner, up_i, c_i)
+    if sec_i.within(sec_o):
+        return sec_o.exterior.distance(sec_i), sec_i
+    return -max(sec_o.distance(Point(pt)) for pt in sec_i.exterior.coords), sec_i
+
+
+def check_rise(parts, p):
+    """内筒を下から押し上げる形（rise）の外筒と内筒を、刷る部品から折って組み、確かめる。Returns (所見の文の並び, 失敗の並び)。
+
+    試験だけが呼ぶ（凍結の基準の床ではない。床の名は、つまみの形と同じ事を見る 3D.close・3D.face と、この形だけの 3D.fit・3D.stroke）。
+    つまみの形の確かめ（check）と同じ部品（fold・_close・_face・tube_axis・_section）を使い、面は硬い板・折り線は蝶番と見る。
+    - 3D.close: 外筒と内筒が、型紙の折り線で 90° ずつ折ると角筒に閉じ、糊代が帯の反対の端の面に重なる
+    - 3D.face: 外筒（色の境で折る見える部品）の色の面が筒の外を向く。内筒は隠れる部品なので向きを見ない（3D.face と同じ決まり）
+    - 3D.fit: 折った内筒の断面が外筒の断面に収まる（すき間が 0 より大きい）
+    - 3D.stroke: 内筒を外筒の真ん中に入れ、台の上の面（内筒の上の端）を、静かな時（口から押し上げる量 s だけ下）から開いた位置
+      （口の高さ）まで動かす。静かな時に、台の上に立つ物（受けの底の紙＋扇の高さ・像の高さ）の上の端が口より下（口と同じ高さは落とす）、
+      差し込みが内筒の一辺（折った断面の幅）以上。開いた位置で、内筒の下の端が外筒の下へ RISE_GRIP 以上出る（指でつまんで押し引きする）。
+      筒の高さと内筒の長さ・一辺は折った形から、押し上げる量・扇の高さ・像の高さ・紙の厚さは寸法から取る（つまみの形の 3D.fan と同じ取り方）
+    見ない事: 扇が開く所（受けと蛇腹の折り目のばねで開く仕組みで、蝶番ではないので、面と蝶番の 3D では組めない）・台（蓋）と受けと
+    像は折らない・紙の厚み・たわみ・摩擦。
+    """
+    by = {q.key: q for q in parts}
+    if OUTER not in by or INNER not in by:
+        raise ToolMissing("外筒と内筒が無い")
+    notes, failures, folded = [], [], {}
+    for key in (OUTER, INNER):
+        q = by[key]
+        try:
+            faces = fold(q)
+        except FoldError as e:
+            failures.append(Failure("3D.close", q.label, str(e)))
+            continue
+        note, fail = _close(q, faces)
+        if fail:
+            failures.append(fail)
+            continue
+        notes.append(note)
+        folded[key] = faces
+        if q.hide_folds:
+            note, fail = _face(q, faces)
+            notes.append(note) if note else failures.append(fail)
+    if len(folded) < 2:
+        return notes, failures  # 閉じない筒は、入れる・押し上げるを見ない（1 つの崩れに 1 行）
+    fit, sec_i = _fit(folded[OUTER], folded[INNER])
+    inner_label = by[INNER].label
+    if fit <= EPS:
+        failures.append(Failure("3D.fit", inner_label, f"内筒の断面が外筒の断面に収まらず（すき間 {fit:.1f}mm）、外筒に入らない"))
+        return notes, failures
+    notes.append(f"入れる {inner_label}: 内筒は外筒の中に入る（断面のすき間 {fit:.2f}mm）")
+    _, _, bot_o, top_o = tube_axis(folded[OUTER])
+    _, _, bot_i, top_i = tube_axis(folded[INNER])
+    H, L = top_o - bot_o, top_i - bot_i
+    x0, y0, x1, y1 = sec_i.bounds
+    a = max(x1 - x0, y1 - y0)
+    s, t, h, fh = p["push_amount"], p["paper_thickness"], p["fold_height"], p["figure_h"]
+    grip = TEMPLATES["slider_fan"].RISE_GRIP
+    rest = H - s  # 静かな時の、台の上の面の外筒の底からの高さ。開いた位置では H（口の高さ）
+    stand = max(t + h, fh)
+    bad = []
+    if rest + stand >= H - EPS:
+        bad.append(f"静かな時に、台の上の物（扇 {t + h:g}・像 {fh:g}）の上の端が口から {rest + stand - H:.1f}mm 出る")
+    if rest < a - EPS:
+        bad.append(f"静かな時に、内筒が外筒に {rest:.1f}mm しか差し込まれず、一辺 {a:.1f} より短い")
+    if L - H < grip - EPS:
+        bad.append(f"開いた位置で、内筒の下の端が外筒の下へ {L - H:.1f}mm しか出ず、{grip}mm 出ない")
+    if bad:
+        failures.extend(Failure("3D.stroke", inner_label, m) for m in bad)
+        return notes, failures
+    notes.append(f"押し上げる {inner_label}: 台の上の面は底から {rest:.1f}mm（静かな時。扇と像は口の {H - rest - stand:.1f}mm 下に隠れる）から "
+                 f"{H:.1f}mm（開いた位置。口の高さ）まで {s:g}mm 上がる。内筒の下の端は、開いた位置でも外筒の下へ {L - H:.1f}mm 出る")
     return notes, failures
 
 

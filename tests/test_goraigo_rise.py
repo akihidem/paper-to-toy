@@ -70,7 +70,7 @@ st = sf.steps(V12)
 assert len(st) == 11 and st[0].startswith("刷った物差し"), st
 assert "押し上げる" in st[-1] and "開く" in st[-1] and "引き下げる" in st[-1] and "筒に入る" in st[-1], st[-1]
 assert "一緒に持つ" in st[-1] and "抜ける" in st[-1], st[-1]  # 止めは無いので、静かな時は外筒と内筒を一緒に持つ
-assert any("2 内筒の上にかぶせ" in x for x in st) and any("6 受け" in x for x in st)
+assert any("2 内筒の上の口に差し込み" in x and "内の面に貼る" in x for x in st) and any("6 受け" in x for x in st)
 
 # 4. 3D の確かめはつまみの形だけを組むので、この形は確かめられない（4）
 r = subprocess.run([sys.executable, "-m", "omochae.fold3d", "--template", "slider_fan", "--params", json.dumps({"push_part": "rise"})],
@@ -98,10 +98,10 @@ msg = lambda **extra: [f.message for f in sf.check_physics({**V12, **extra})][0]
 assert "台が筒の下に出る" in msg(push_amount=103) and "差し込まれず" not in msg(push_amount=103)
 assert "21mm しか差し込まれず" in msg(push_amount=81)
 assert floors(push_amount=80) == []                                       # 差し込み 22 なら通る（境）
-assert floors(pusher_side=25, base_side=25) == ["F5.slide_clearance"]    # 内筒が外筒の一辺−1 より小さくない（蓋の行は重ねない）
-assert floors(base_side=21) == ["F5.base_size"]                          # 台が内筒より小さく、糊代を内筒の外の面に貼れない
-assert floors(base_side=24) == ["F5.base_size"]                          # 台が内筒より 1mm を超えて大きい
-assert floors(pusher_side=24, base_side=25) == ["F5.base_size"]          # 蓋をした台（25＋紙 2 枚）が外筒の一辺−1 に収まらない
+assert floors(pusher_side=25, base_side=24.5) == ["F5.slide_clearance"]  # 内筒が外筒の一辺−1 より小さくない
+assert floors(base_side=22) == ["F5.base_size"]                          # 台が内筒と同じ大きさで、糊代の紙 2 枚が口に入らない
+assert floors(base_side=20.9) == ["F5.base_size"]                        # 台が内筒より 1mm を超えて小さく、糊代が壁に届かない
+assert floors(base_side=21) == [] and floors(base_side=21.7) == []       # 境（内筒−1 と、内筒−紙 2 枚）
 assert floors(fold_count=24) == ["F5.fan_clearance"]                     # 24 枚 × 4mm は 192° で、ほぼ 180° に収まらない
 assert floors(figure_w=25) == ["F5.figure_base"]                         # 像の幅 25 が筒の一辺−2 を超え、筒に入らない
 # 右の列の段の下に文字が重ならない: 筒が短く扇が長い寸法（段が左の列の筒より下まで来る）でも、配置の検査が通る
