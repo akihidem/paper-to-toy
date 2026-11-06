@@ -101,4 +101,39 @@ for leg in legs:
     f0 = next(f for f in tube if f.poly.contains(Polygon([(a / 2 - 0.1, t + h / 2 - 0.1), (a / 2 + 0.1, t + h / 2 - 0.1), (a / 2 + 0.1, t + h / 2 + 0.1)]).centroid))
     up = unit(sub(f0.at((a / 2, t)), f0.at((a / 2, t + h))))  # 脚の下の端から上の端（胴の底の側）への向き
     assert all(dot(g.normal, up) > 0.99 for g in tabs), [dot(g.normal, up) for g in tabs]
-print("ok 虎の胴と脚を 3D で折って組む")
+
+# 3. ① 糊代の根元: 胴の糊代の多角形の辺は、どれも外形か折り線に乗る（隣の側面と、切る線も折り線も無い縁でつながらない）。
+#    首の形・吊る形・角を落とした胴、糊代の幅の範囲の両端で見る（落とす前は、端の壁の糊代 4 枚が糊代の幅だけ側面とつながっていた）
+from shapely.geometry import LineString
+
+for q in (dict(pc.DEFAULTS, mount="neck"), dict(pc.DEFAULTS, mount="hang", axle_height=pc.DEFAULTS["body_height"] - pc.HOLE_MARGIN), v5,
+          dict(pc.DEFAULTS, mount="neck", glue=pc.RANGES["glue"][0]), dict(pc.DEFAULTS, mount="neck", glue=pc.RANGES["glue"][1])):
+    body = next(x for x in pc.parts(q) if x.key == "body")
+    edge = Polygon(body.outline).boundary
+    folds = [LineString(ln) for ln in body.mountain + body.valley]
+    for gl in body.glue:
+        for a_, b_ in zip(gl, gl[1:] + gl[:1]):
+            seg = LineString([a_, b_])
+            on = edge.buffer(1e-6).contains(seg) or any(f.buffer(1e-6).contains(seg) for f in folds)
+            assert on, (q["mount"], q["glue"], a_, b_)
+
+# 4. ② 札「1 胴」: 後ろの壁の床の側の白い帯の内にあり、縞・黒い斑・位置の印にかからない（胴の高さと幅の範囲の下限・角を落とした胴でも）
+from omochae.textfit import text_width
+
+for q in (dict(pc.DEFAULTS, mount="neck"), v5, dict(pc.DEFAULTS, mount="neck", body_height=pc.RANGES["body_height"][0], axle_height=20,
+                                                       body_width=pc.RANGES["body_width"][0], strip_width=10)):
+    body = next(x for x in pc.parts(q) if x.key == "body")
+    H, L, W, g, c = q["body_height"], q["body_length"], q["body_width"], q["glue"], q["body_round"]
+    d = c / math.sqrt(2)
+    b0 = g + (W - 2 * d) + c + (H - d)
+    x0, y0 = body.label_xy
+    box = Polygon([(x0, y0), (x0 + text_width(body.label, pc.LABEL_SIZE), y0), (x0 + text_width(body.label, pc.LABEL_SIZE), y0 + 1.3 * pc.LABEL_SIZE),
+                   (x0, y0 + 1.3 * pc.LABEL_SIZE)])
+    band = Polygon([(H + L + 0.2, b0 + 0.2), (H + L + 0.2 + pc.FOOT_BAND * (H - 0.4), b0 + 0.2), (H + L + 0.2 + pc.FOOT_BAND * (H - 0.4), b0 + W - 0.2),
+                    (H + L + 0.2, b0 + W - 0.2)])
+    assert band.contains(box), (q["body_height"], q["body_width"], box.bounds, band.bounds)
+    marks_or_ink = [a_ for a_ in body.art if a_["kind"] == "mark" or a_.get("fill") in (pc.STRIPE, pc.INK)]
+    for a_ in marks_or_ink:
+        shape = Polygon(a_["pts"]) if a_["kind"] == "poly" else LineString(a_["pts"]).buffer(0.3)
+        assert not shape.intersects(box), (q["body_height"], a_.get("mark") or a_.get("fill"))
+print("ok 虎の胴と脚を 3D で折って組む・糊代の根元・胴の札")
