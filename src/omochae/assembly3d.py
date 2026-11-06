@@ -330,7 +330,7 @@ def _tiger(scene, p):
                         [apply(G, (tip, 0.0, 0.0)), apply(G, (tip + 10, 0.0, 0.0)), apply(G, (tip, 10.0, 0.0))])
         drop = place_by(S["drop"], {}, [(4.0, 4.0), (4.0, 14.0), (14.0, 4.0)],
                         [apply(G, (0.0, 0.0, za)), apply(G, (0.0, 10.0, za)), apply(G, (10.0, 0.0, za))]) if "drop" in parts else None
-        clay = apply(G, (0.0, p["weight_below_axle"], za))
+        clay = apply(G, (p["clay_back"], p["weight_below_axle"], za))  # 粘土は 5 重りの腕の下の穴（v7 から軸の clay_back 後ろ）
         return strip, head, drop, clay
 
     cur = {k: ({}, scene.on_paper(k)) for k in parts}
