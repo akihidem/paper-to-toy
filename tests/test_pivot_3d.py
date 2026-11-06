@@ -87,9 +87,13 @@ assert any("角の面に来る" in m for m in fails(dict(q5, axle_height=48)))
 assert any("尾の糊代の四角" in m for m in fails(dict(q5, body_width=20, body_round=10, strip_width=10)))
 low = dict(neck, axle_height=15, head_h=26, weight_below_axle=5, weight_behind=0)
 assert any("床に近すぎる" in m for m in fails(low)) and not any("床に近すぎる" in m for m in fails(dict(low, leg_height=10)))
-# 吊る形の頭は胴の前の端より後ろまでかかり、胴の底より下へ出ると前の脚に当たるので、脚の分を足さない（検品の例の寸法）
-hang_low = dict(pc.DEFAULTS, mount="hang", body_height=30, axle_height=26, ear_length=12, head_w=26, head_h=20, weight_below_axle=20)
-assert any("床に近すぎる" in m for m in fails(hang_low)) and any("床に近すぎる" in m for m in fails(dict(hang_low, leg_height=10)))
+# 吊る形の頭も首の帯に貼った 1 枚の紙で、胴の幅の真ん中にある。左右の前の脚の間（胴の幅 − 2·(LEG_SIDE_GAP＋LEG_SIDE)）を
+# 通るので、脚の分だけ床は遠い。頭が胴の前の端より後ろまでかかる寸法（耳 12）も、前にある寸法（耳 25）も同じ
+assert pc.DEFAULTS["body_width"] - 2 * (pc.LEG_SIDE_GAP + pc.LEG_SIDE) >= 2
+for ear in (12, 25):
+    hang_low = dict(pc.DEFAULTS, mount="hang", body_height=30, axle_height=26, ear_length=ear, head_w=26 if ear == 12 else 15, head_h=20, weight_below_axle=20)
+    assert any("床に近すぎる" in m for m in fails(hang_low)), (ear, fails(hang_low))
+    assert not any("床に近すぎる" in m for m in fails(dict(hang_low, leg_height=10))), (ear, fails(dict(hang_low, leg_height=10)))
 # 低すぎる脚は落とし、形は壊さない（横の糊代の頂点の順と指の線）
 assert any("脚が低すぎ" in m for m in fails(dict(q5, leg_height=3))) and not any("脚が低すぎ" in m for m in fails(q5))
 for hh in (0.5, 1, 2, 3, pc.LEG_MIN):

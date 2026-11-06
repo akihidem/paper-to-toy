@@ -171,9 +171,12 @@ def check_physics(p):
         room = p["ear_length"] - HOLE_MARGIN
         if room < reach and math.degrees(math.asin(room / reach)) < MIN_SWING:
             out.append(Failure("F5.pivot", "頭", f"頭が胴に当たるまで {MIN_SWING}° 揺れない"))
-        # 吊る形の頭は、耳の穴の真下に下がり、胴の前の端より後ろまでかかる。胴の底より下へ出ると前の脚に当たるので、
-        # 脚がある時も、床までは胴の底で見る（脚の分を足さない）
-        if H - HOLE_MARGIN - reach < 3:
+        # 頭は首の帯に貼った 1 枚の紙で、胴の幅の真ん中（帯の面＝軸に直交する面）にある。前の 2 本の脚は胴の横の縁から
+        # LEG_SIDE_GAP 内の左右にあり、間が空く。頭は脚の間を通るので、脚がある時は床までが脚の高さだけ遠い。
+        # 間が 2mm 未満の胴では、脚の分を足さない（頭の紙と脚が触れうるため）
+        gap = p["body_width"] - 2 * (LEG_SIDE_GAP + LEG_SIDE)
+        lift = p["leg_height"] if gap >= 2 else 0
+        if H + lift - HOLE_MARGIN - reach < 3:
             out.append(Failure("F5.pivot", "頭", "頭の下端が床に近すぎる"))
     else:
         # 首の帯が穴の縁に当たらずに MIN_SWING まで揺れるか。帯の面は軸に直交する（軸は帯の面の穴を貫く）ので、
