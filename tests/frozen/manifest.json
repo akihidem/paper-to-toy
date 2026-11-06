@@ -1,5 +1,5 @@
 {
- "criteria.md": "fe956157c46110cd236d90ebd5da56c0de982209c91c436c52fef195252f5358",
+ "criteria.md": "e8675ba5c3a33bb615b76ca0eacf7fe4713db6b563f103dc4ff6cbe4fda6e2d1",
  "scenarios": {
   "balance_neg.json": {
    "floors": [
@@ -960,6 +960,13 @@
    "rc": 3,
    "sha256": "1d0bd982b85255f3e04f6bc80ae0996f51650bd161d6f6e663d8fc4dc3eb8eb6"
   },
+  "twist_drum_neg4.json": {
+   "floors": [
+    "F5.drum"
+   ],
+   "rc": 3,
+   "sha256": "68aa1b4ea3b4a9e46252a4aeaa3d203b2c583319a9d71c12b3a303b2a839cb72"
+  },
   "twist_drum_neg_kanko.json": {
    "floors": [
     "F5.drum"
@@ -979,7 +986,7 @@
     "F5.drum"
    ],
    "rc": 3,
-   "sha256": "d27df5682090f6883899161b9a3f1b7c9adbaacde0092167cee0204cedd4f7be"
+   "sha256": "cb956e1bc4fe84c95ac2808a24d7678b3c66c43602015dd544d85d2126a96991"
   },
   "twist_drum_neg_kanko4.json": {
    "floors": [
@@ -987,6 +994,13 @@
    ],
    "rc": 3,
    "sha256": "dbf73b947715c3501052858fffec62746ed4dced726253047a94d49c69322f66"
+  },
+  "twist_drum_neg_kanko5.json": {
+   "floors": [
+    "F5.drum"
+   ],
+   "rc": 3,
+   "sha256": "7eaa6576f3c0f6c5eff27ccfdcdcc175b5bac38cc2fee96c14f5648569edac38"
   },
   "twist_drum_neg_source.json": {
    "floors": [
