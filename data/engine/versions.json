@@ -98,6 +98,35 @@
     ]
    },
    "note": "御来迎 goraigo-v12（#117・合体 13479c0 と #122・合体 5edeb49）。形は rise（内筒を下から押し上げる）で、型紙の 1 枚も rise。虎の tora-v5 は 1 本目だけが入った所なので、この版に入れない"
+  },
+  {
+   "version": 4,
+   "commit": "41c90b6875a53600547b14aaf786f6fd81a88926",
+   "at": "2026-11-06",
+   "proposals": [
+    {
+     "id": "EP-0046",
+     "target": {
+      "kind": "template",
+      "name": "pivot_counterweight"
+     },
+     "title": "pivot_counterweight（紙 neck）: 作る前のレビューの指摘を、雛形に入れるか見る",
+     "numbers": {
+      "reviews": 1,
+      "reports": 0
+     },
+     "finding": "実物の写真と照らした直しを、虎にも全部入れる: 丸い赤縁の首の穴・明るい黄と紺の縞・白い下と脚・長い頭・上の面の尾（paper-to-toy #119）と、立体の脚と角を落とした胴・糊代の根元・札（#124）"
+    }
+   ],
+   "sheet_sets": {
+    "pivot_counterweight": "tora-v5"
+   },
+   "sources": {
+    "pivot_counterweight": [
+     "NDL-1187053-R0000014-R"
+    ]
+   },
+   "note": "虎 tora-v5（#119・合体 4fad8f3 と #124・合体 41c90b6）。写真と照らした直しの 1 本目と 2 本目"
   }
  ],
  "next": [
