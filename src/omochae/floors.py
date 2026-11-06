@@ -103,6 +103,10 @@ def check_art(parts):
                     for x0, y0, w, h in p.cuts:
                         if ink.intersects(box(p.x + x0, p.y + y0, p.x + x0 + w, p.y + y0 + h)):
                             out.append(Failure("F5.image_box", p.name, "位置の印が中の切り込みにかかり、切ると消える"))
+                    # 丸い切り抜きも、矩形の切り込みと同じく切ると消える（同じ文にする。切る物の形で言い分けない）
+                    for cx, cy, r in p.round_cuts:
+                        if ink.intersects(Point(p.x + cx, p.y + cy).buffer(r)):
+                            out.append(Failure("F5.image_box", p.name, "位置の印が中の切り込みにかかり、切ると消える"))
             # 部品の外かは、面なら塗りで見る。輪郭線が切る線の上に乗る絵（虎の頭）は、外へ出た半分を切り落とすので困らない。
             # 折り線と糊代は、切り落とされないので輪郭線の太さまで見る。
             inside = geom if item["kind"] == "poly" else ink
@@ -126,4 +130,8 @@ def check_holes(parts):
         for x, y, r in p.holes:
             if not poly.buffer(EPS).contains(Point(x, y).buffer(r)):
                 out.append(Failure("F5.hole", p.name, f"穴 ({x:.1f}, {y:.1f}) が部品の外に出ている"))
+        # 丸い切り抜きも、寸法から置くので紙の外に出うる。穴と同じ床で見る（外に出た丸は、紙の縁を切り欠いてしまう）
+        for x, y, r in p.round_cuts:
+            if not poly.buffer(EPS).contains(Point(x, y).buffer(r)):
+                out.append(Failure("F5.hole", p.name, f"丸い切り抜き ({x:.1f}, {y:.1f}) が部品の外に出ている"))
     return out

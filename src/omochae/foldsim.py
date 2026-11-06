@@ -10,6 +10,7 @@
 終了: 0 = 書き出した（折りの無い形は、書く物が無いまま 0）/ 3 = 検査に落ちた / 4 = 書き出せない。
 """
 import argparse
+import math
 import pathlib
 import re
 import shutil
@@ -21,6 +22,8 @@ from .model import ToolMissing, check_name
 from .tools import work_dir
 
 COLORS = {"outline": "#000000", "mountain": "#ff0000", "valley": "#0000ff"}
+# 丸い切り抜きを近づける多角形の辺の数。半径 15mm でも辺の中ほどのずれは 0.05mm 未満で、紙の切り口の幅より小さい
+ROUND_SEGMENTS = 48
 
 
 def part_svg(part):
@@ -38,6 +41,11 @@ def part_svg(part):
     for x, y, cw, ch in part.cuts:
         corners = [(x, y), (x + cw, y), (x + cw, y + ch), (x, y + ch), (x, y)]
         for (a, b), (c, d) in zip(corners, corners[1:]):
+            lines.append((a, b, c, d, COLORS["outline"]))
+    # 丸い切り抜きは、ROUND_SEGMENTS 本の辺の多角形にして黒で書く（Origami Simulator は線だけを読むので、円を線で近づける）
+    for cx, cy, r in part.round_cuts:
+        ring = [(cx + r * math.cos(2 * math.pi * i / ROUND_SEGMENTS), cy + r * math.sin(2 * math.pi * i / ROUND_SEGMENTS)) for i in range(ROUND_SEGMENTS + 1)]
+        for (a, b), (c, d) in zip(ring, ring[1:]):
             lines.append((a, b, c, d, COLORS["outline"]))
     for kind in ("mountain", "valley"):
         for (a, b), (c, d) in getattr(part, kind):
