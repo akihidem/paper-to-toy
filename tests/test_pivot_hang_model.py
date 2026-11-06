@@ -44,7 +44,8 @@ for form in ({**DEFAULTS, "mount": "neck"}, hang):
 print("ok 胴の折る向き")
 # 用意する物の道具（本人の確認 2026-11-06）: 首の形は前の壁の四角い穴を切るので、カッターを書く。吊る形には書かない
 from omochae.templates.pivot_counterweight import materials
-assert materials({**DEFAULTS, "mount": "neck"})[1] == "のり、はさみ、定規、カッター", materials({**DEFAULTS, "mount": "neck"})
+# 首の形は、重りの腕をテープで仮に留めて試してから貼るので、セロハンテープも書く（EP-0011、2026-11-06）
+assert materials({**DEFAULTS, "mount": "neck"})[1] == "のり、はさみ、定規、セロハンテープ、カッター", materials({**DEFAULTS, "mount": "neck"})
 assert materials(hang)[1] == "のり、はさみ、定規", materials(hang)
 # カッターは部品を組まずに形の値で決める。部品から決めた答え（胴に中を切り抜く所がある）と、首の形・吊る形で同じ事を見る
 for form in ({**DEFAULTS, "mount": "neck"}, hang):
