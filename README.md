@@ -6,6 +6,15 @@ Paper to toy は、内部構造のある機構を、紙のような2次元素材
 
 A papercraft template engine: generates printable PDF patterns from dimensions and checks them before and after rendering. Being built at Built with Claude: Japan 2026 (hackathon).
 
+## 地平
+
+制作者の言葉（2026-11-07）:
+
+- 「内部構造を持つ機構をつくれるシステム」（paper-to-toy の核の言い方）
+- 「これを基礎で支えるのが paper to toy で、物理現象とか DNA とかなんでも紙で作れるモデルを生成できるようにするのはどう？」
+
+江戸の玩具は最初の題材です。寸法から刷る部品を出す雛形・刷れるか組めるか動くかの検査・3D で折って組む確かめ・作った人の報告で直す輪は、題材を選びません。物理現象や DNA の二重らせんのような、内部構造を持つ機構の紙のモデルへ広げる事を、地平として置きます（今の雛形と提出の範囲は江戸の玩具）。
+
 ## 提出物との関係
 
 このエンジンは [utsushi](https://github.com/akihidem/utsushi)（ハッカソンの提出物）の一部を、開発期間中（2026-11-02 12:00 JST 以降）に切り出した物です。コードはすべて期間中に utsushi の repo で新しく作りました。提出物は utsushi で、このエンジンは単独の提出物ではありません。元の commit: utsushi `1d17988`（その後の v8 の直しは utsushi `74c354c` から写した）。
