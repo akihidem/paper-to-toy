@@ -59,10 +59,14 @@ STRIPE_STEP = 8  # 縞の間 mm
 # 尾（4）: 幅・長さと、根元の糊代の長さ。尾は胴の上の面の後ろの端に糊代を貼って立て、上へ反らせる（実物の写真の直し E。前は後ろの壁に貼った）
 TAIL_W, TAIL_LEN, TAIL_TAB = 8, 56, 8
 TAIL_BACK = 3  # 尾の糊代を貼る四角の、上の面の後ろの端からの間 mm
-# 立体の脚（leg_height > 0）: 白い角筒の一辺・上の糊代の長さ・横の糊代の幅と、胴の底の四隅から脚を貼る四角までの間 mm（LEG_INSET。
-# 描いた脚の LEG_IN は胴の長さの割合で、別の物）。
-# 一辺は、胴の幅の下限（20mm）でも底に 2 本が並ぶ太さ（2·7＋2·3 = 20）
-LEG_SIDE, LEG_TAB, LEG_GLUE, LEG_INSET = 7, 5, 5, 3
+# 立体の脚（leg_height > 0）: 白い角筒の一辺・上の糊代の長さ・横の糊代の幅 mm（描いた脚の LEG_IN は胴の長さの割合で、別の物）。
+# 一辺は、胴の幅の下限（20mm）でも底に 2 本が並ぶ太さ（2·(7＋2)＋2 = 20）
+LEG_SIDE, LEG_TAB, LEG_GLUE = 7, 5, 5
+# 脚を貼る長四角（位置の印）は、脚の上の面（一辺 LEG_SIDE）と、前と後ろへ外に折った 2 つの糊代（LEG_TAB ずつ）を合わせた大きさ。
+# 胴の前と後ろの端から LEG_INSET、横の端から LEG_SIDE_GAP 内に置く（糊代が胴の底からはみ出さないように。前は四角だけを 3mm 内に
+# 置いていて、外へ折った糊代が胴の外へ 2mm 出た）。どれも胴の長さと幅の範囲の下限（40・20mm）でも 2 本ずつ並ぶ
+LEG_INSET, LEG_SIDE_GAP = 1, 2
+LEG_MIN = 5  # 脚の高さの下限 mm。これより低いと、角筒の横の糊代と指の線が脚の面に収まらない
 TITLES = {"neck": "首を胴の穴に入れる", "hang": "頭を前に吊る"}
 
 
@@ -167,7 +171,9 @@ def check_physics(p):
         room = p["ear_length"] - HOLE_MARGIN
         if room < reach and math.degrees(math.asin(room / reach)) < MIN_SWING:
             out.append(Failure("F5.pivot", "頭", f"頭が胴に当たるまで {MIN_SWING}° 揺れない"))
-        if H + p["leg_height"] - HOLE_MARGIN - reach < 3:
+        # 吊る形の頭は、耳の穴の真下に下がり、胴の前の端より後ろまでかかる。胴の底より下へ出ると前の脚に当たるので、
+        # 脚がある時も、床までは胴の底で見る（脚の分を足さない）
+        if H - HOLE_MARGIN - reach < 3:
             out.append(Failure("F5.pivot", "頭", "頭の下端が床に近すぎる"))
     else:
         # 首の帯が穴の縁に当たらずに MIN_SWING まで揺れるか。帯の面は軸に直交する（軸は帯の面の穴を貫く）ので、
@@ -177,7 +183,7 @@ def check_physics(p):
         need = NECK_BACK * math.tan(t) + p["strip_width"] / (2 * math.cos(t))
         if need > p["opening"] / 2:
             out.append(Failure("F5.pivot", "首", f"首の帯（幅 {p['strip_width']}）が穴（{p['opening']}）の縁に当たるまで {MIN_SWING}° 揺れない"))
-        # 脚がある時は、床までが脚の高さだけ遠い
+        # 首の形の頭は前の壁より前にあり、胴の下の脚には当たらないので、脚がある時は床までが脚の高さだけ遠い
         if p["head_h"] / 2 > ax + p["leg_height"] - 3:
             out.append(Failure("F5.pivot", "頭", "頭の下端が床に近すぎる"))
     # 粘土の玉の 2 つの決まり（軸の竹串・底）は、重りの別の落ち（重心が軸より上・傾き）が無い時だけ言う。1 つの崩れに別の行が続くと
@@ -198,6 +204,8 @@ def check_physics(p):
         out.append(Failure("F5.pivot", "帯", "帯が胴の内幅に入らない"))
     # 角を落とした胴（body_round）: 吊る形は耳が角の面に来るので落とせない。首の形は、軸の穴が側面の縦の所に要る。
     # 上の面は角の分だけ細くなるので、尾を貼る四角（TAIL_W）が入る幅が要る
+    if 0 < p["leg_height"] < LEG_MIN:
+        out.append(Failure("F5.pivot", "脚", f"脚が低すぎて角筒に折れない（{p['leg_height']}mm。{LEG_MIN}mm 以上）"))
     c = p["body_round"]
     if c:
         d = c / math.sqrt(2)
@@ -306,15 +314,18 @@ def _leg_part(n, h):
     """立体の脚 1 本（n は部品の番号 6〜9）: 白い角筒。刷った面を外にして角筒にする（山折り）。上の 2 つの糊代を外へ折り（谷折り）、
     刷った面（斜線）を上に向けて胴の底の四角に貼る。前は脚を側面に描いていた（実物の写真の直し F の繋ぎ）。"""
     a, t, gl = LEG_SIDE, LEG_TAB, LEG_GLUE
+    k = min(1.0, h / 4)  # 横の糊代の角を落とす長さ。低い脚でも頂点の順が入れ替わらない（検査で落ちる低さでも、形は壊さない）
     outline = [(0, t), (0.5, 0), (a - 0.5, 0), (a, t), (2 * a, t), (2 * a + 0.5, 0), (3 * a - 0.5, 0), (3 * a, t), (4 * a, t),
-               (4 * a + gl, t + 1), (4 * a + gl, t + h - 1), (4 * a, t + h), (0, t + h)]
+               (4 * a + gl, t + k), (4 * a + gl, t + h - k), (4 * a, t + h), (0, t + h)]
     leg = Part(n, f"leg{n - 5}", "脚", outline, label_xy=(0.6, t + 0.6), label=f"{n} 脚",
                mountain=[((k * a, t), (k * a, t + h)) for k in (1, 2, 3, 4)], valley=[((0, t), (a, t)), ((2 * a, t), (3 * a, t))],
-               glue=[[(4 * a, t), (4 * a + gl, t + 1), (4 * a + gl, t + h - 1), (4 * a, t + h)],
+               glue=[[(4 * a, t), (4 * a + gl, t + k), (4 * a + gl, t + h - k), (4 * a, t + h)],
                      [(0.5, 0), (a - 0.5, 0), (a, t), (0, t)], [(2 * a + 0.5, 0), (3 * a - 0.5, 0), (3 * a, t), (2 * a, t)]])
     leg.art = [_panel(k * a + 0.2, t + 0.2, (k + 1) * a - 0.2, t + h - 0.2, WHITE) for k in range(4)]
-    # 指の線（前の面の下の端）
-    leg.art += [{"kind": "line", "pts": [(a * j / 3, t + h - 0.6), (a * j / 3, t + h - 2.6)], "stroke": STRIPE, "sw": 0.3} for j in (1, 2)]
+    # 指の線（前の面の下の端）。脚の面に収まる長さだけ描く
+    toe = min(2.0, h - 1.2)
+    if toe > 0.3:
+        leg.art += [{"kind": "line", "pts": [(a * j / 3, t + h - 0.6), (a * j / 3, t + h - 0.6 - toe)], "stroke": STRIPE, "sw": 0.3} for j in (1, 2)]
     return leg
 
 
@@ -405,10 +416,12 @@ def parts(p):
     body.art += _wall_art(H - 0.2, b0 + 0.2, H - 0.4, W - 0.4, -1, d) + _wall_art(H + L + 0.2, b0 + 0.2, H - 0.4, W - 0.4, +1, d)
     body.art += _side_art(H, ch1 + 0.2, L, Hs - 0.4, False, not legs) + _side_art(H, b1 + 0.2, L, Hs - 0.4, True, not legs)
     if legs:
-        # 脚を貼る四角（位置の印）: 胴の底の面（x が H〜H＋L・y が b0〜b1）の四隅から LEG_INSET 内。前の 2 本は前の壁の側（x = H）
-        a = LEG_SIDE
-        for x0, y0 in ((H + LEG_INSET, b0 + LEG_INSET), (H + LEG_INSET, b1 - LEG_INSET - a), (H + L - LEG_INSET - a, b0 + LEG_INSET), (H + L - LEG_INSET - a, b1 - LEG_INSET - a)):
-            body.art.append({"kind": "mark", "pts": [(x0, y0), (x0 + a, y0), (x0 + a, y0 + a), (x0, y0 + a)], "closed": True, "mark": "leg"})
+        # 脚を貼る長四角（位置の印）: 胴の底の面（x が H〜H＋L・y が b0〜b1）の四隅。長い向き（2 つの糊代の向き）は胴の前後（x）。
+        # 前の 2 本は前の壁の側（x = H）
+        a, fx = LEG_SIDE, LEG_SIDE + 2 * LEG_TAB
+        for x0, y0 in ((H + LEG_INSET, b0 + LEG_SIDE_GAP), (H + LEG_INSET, b1 - LEG_SIDE_GAP - a),
+                       (H + L - LEG_INSET - fx, b0 + LEG_SIDE_GAP), (H + L - LEG_INSET - fx, b1 - LEG_SIDE_GAP - a)):
+            body.art.append({"kind": "mark", "pts": [(x0, y0), (x0 + fx, y0), (x0 + fx, y0 + a), (x0, y0 + a)], "closed": True, "mark": "leg"})
     # 尾の糊代を貼る四角（位置の印）。上の面の後ろの端の近く、幅の真ん中（実物の尾は上の面の後ろ寄りから上へ反る。直し E）
     ty = (top0 + top1) / 2
     tx1 = H + L - TAIL_BACK
@@ -567,7 +580,7 @@ def steps(p):
                 f"粘土を頭の裏の真ん中、頭の上の端から {p['weight_below_axle'] - arm:g}mm 下に貼る"]
     if p["leg_height"] > 0:
         # 立体の脚（本人の追加の指示）。上の面を閉じる前に貼る（底を内から押さえて貼れる）。脚が無い形の手順の数と番号は変えない
-        out.append("6〜9 脚を山折りの線で角筒にして糊代で貼り、上の 2 つの糊代を外へ谷折りして、1 胴の底の点の線の四角に 1 本ずつ貼る")
+        out.append("6〜9 脚を山折りの線で角筒にして糊代で貼り、上の 2 つの糊代を外へ谷折りして、糊代を前と後ろに向けて 1 胴の底の点の線の長四角に 1 本ずつ貼る")
     # 尾は上の面の後ろの四角に立てて貼る（実物の写真の直し E。前は「丸くして、後ろに貼る」で、後ろの壁に貼っていた）
     out += ["1 胴の上の面を閉じる", "4 尾の糊代を山折りし、1 胴の上の面の後ろの点の線の四角に貼る。尾は上へ反らせる"]
     return out
