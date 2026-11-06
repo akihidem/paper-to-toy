@@ -119,3 +119,44 @@ assert any(f.where == "左の玉" and "振れない" in f.message for f in fs), 
 shape = t.diagram(0, 0, 50, 80, O)[0]["pts"]
 assert Polygon(shape).is_valid, "図の外形が自分と交わる"
 print("ok")
+
+# EP-0002（作る前のレビューの指摘から採った案。2026-11-06）: 弥次郎兵衛の紙で、体の左右の袖の長さがずれていた（図をそのまま写した）。
+# 重りに耐える強さのため、真ん中の軸にも竹串を貼る線が欲しいという声もあった。
+# - 体の外形の左右の端（袖の先）は、支点（V の先）の真上の線から同じ距離
+# - 体（裏）の刷った面に、真ん中の軸の竹串を置く縦の赤い線を刷る。線は支点の真上の線に乗り、竹串の太さを含めて体の内にあり、
+#   腕の竹串（差し込みの奥の端から肩まで）と重ならない（重なると、表と裏の紙が平らに合わない）
+# - 重心の式に、真ん中の竹串の重さを入れる（長さ × 1mm あたりの重さを、線の真ん中に置く）
+# - 用意する物と組み方の文が、真ん中の軸の竹串の長さと置き方を言う
+from shapely.geometry import LineString
+seen = 0
+for bw in (t.RANGES["body_w"][0], Y["body_w"], t.RANGES["body_w"][1]):
+    for bh in (t.RANGES["body_h"][0], Y["body_h"], t.RANGES["body_h"][1]):
+        q = {**Y, "body_w": bw, "body_h": bh}
+        if t.check_range(q) or t.check_physics(q):
+            continue  # 検査で落ちる寸法は刷らない
+        seen += 1
+        body = Polygon([t._rel(q, v) for v in t._YAKKO])
+        xs = [x for x, _ in body.exterior.coords]
+        assert abs(min(xs) + max(xs)) < 0.01, (q, "袖の左右の長さが違う", min(xs), max(xs))
+        lo, hi = t.center_stick(q)
+        assert abs(lo[0]) < 1e-9 and abs(hi[0]) < 1e-9, (lo, hi)
+        stick = LineString([lo, hi])
+        assert body.buffer(-t.SKEWER_R).contains(stick), (q, "真ん中の竹串が体の外に出る")
+        for inner, sh, _ in t.arm_geometry(q):
+            assert stick.distance(LineString([inner, sh])) > 2 * t.SKEWER_R, (q, "真ん中の竹串が腕の竹串に重なる")
+        back = next(x for x in t.parts(q) if x.key == "back")
+        tx, ty = t._yk(q, [t._TIP])[0]
+        mid = [a for a in back.art if a.get("role") == "center"]
+        assert len(mid) == 1 and mid[0]["pts"][0] == (lo[0] + tx, lo[1] + ty) and mid[0]["pts"][-1] == (hi[0] + tx, hi[1] + ty), mid
+        Lc = abs(hi[1] - lo[1])
+        assert any(abs(m - t.SKEWER_G_PER_MM * Lc) < 1e-12 and x == 0 and abs(z - (lo[1] + hi[1]) / 2) < 1e-9 for m, x, z in t.yajirobe_points(q)), "重心の式に真ん中の竹串が無い"
+assert seen >= 3, seen
+lo, hi = t.center_stick(Y)
+Lc = abs(hi[1] - lo[1])
+st = t.steps(Y)
+assert any(f"{Lc:.0f}mm" in x and "真ん中の軸" in x for x in st), st
+assert any("縦の赤い線" in x for x in st), st
+assert any("真ん中の軸" in m and f"{Lc:.0f}mm" in m for m in t.materials(Y)), t.materials(Y)
+_, layout, fails = compose("balance", Y, load_source(t.SOURCE))
+assert not fails, [f.line() for f in fails]
+print("ok 弥次郎兵衛の袖と真ん中の軸")

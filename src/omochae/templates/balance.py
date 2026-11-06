@@ -13,11 +13,12 @@
 
 動きの見込み（F5.balance）の前提（質量は g、長さは mm。pivot_model と同じく下を z の正にする）:
 - 弥次郎兵衛: 支点は V の先。質量の点は、紙の体 2 枚（外形の面積 × 坪量、外形の重心）、先の当て紙、
-  竹串の腕 2 本（太さ 3mm の竹串の線密度の見込み × 長さ、腕の真ん中）、玉 2 つ。紙の曲がり・糊の重さ・摩擦は入れない。
+  竹串の腕 2 本（太さ 3mm の竹串の線密度の見込み × 長さ、腕の真ん中）、真ん中の軸の竹串 1 本（同じく。支点の真上の線の上）、玉 2 つ。
+  紙の曲がり・糊の重さ・摩擦は入れない。
   ・重心が支点より MIN_DROP 以上下にある（上にあれば倒れる。真下に近いと少しの風で回って落ちる）。
   ・玉の粘土を手で量る差（CLAY_TOL）だけ左右が違っても、静かな時の傾きが MAX_TILT 以下（重心が低いほど傾きは小さい）。
   ・傾けた時に玉が台の竹串に当たるまで MIN_SWING 以上振れる。玉の下が机に当たらない。
-  ・腕の竹串の差し込みが体の中に収まり、左右の腕が体の中で交わらない。竹串 1 本の長さで足りる。
+  ・腕の竹串の差し込みが体の中に収まり、左右の腕が体の中で交わらない。真ん中の軸の竹串と腕の竹串が重ならない。竹串 1 本の長さで足りる。
   ・支点の先は紙を重ねて厚くする（当て紙）。表裏 2 枚と当て紙の厚みの和が MIN_TIP_T 以上（薄い縁は串の先が滑るか刺さる）。
 - 起き上がり小法師: 底の半球の曲がりの中心は、底から半径 R の高さにある。重心がそれより下なら、傾けた時に
   重心が上がるので戻る（半球の上で転がる限り。円錐の側が床に付くほど倒すと、ここの式は外れる）。
@@ -120,13 +121,20 @@ def check_range(p):
 # ---------------------------------------------------------------- 弥次郎兵衛
 
 # コマ 7 の奴を 1205 幅に縮めた図で手で取った点（画素は使っていない）。帽子 → 袖の横棒 → 胴 → V の先。
-_YAKKO = [(410, 828), (486, 828), (480, 806), (592, 735), (607, 748), (601, 800), (590, 828), (668, 828), (668, 890), (632, 890),
-          (655, 978), (582, 978), (565, 1060), (549, 985), (480, 985), (503, 890), (410, 890)]
+# 袖の横棒の左右の端は、支点（V の先 x = 565）の真上の線から同じ 129（袖の幅 258 の半分）にそろえた。図の袖は左が 155・右が 103 で、
+# 作る前のレビューで「体の両手の長さが左右でずれている。合わせると釣り合いを取りやすい」と言われた（採った案 EP-0002、2026-11-06）。
+# 帽子・襟・裾・V と肩は図のまま（肩の左右の差は腕の床が玉ごとに見る）
+_YAKKO = [(436, 828), (486, 828), (480, 806), (592, 735), (607, 748), (601, 800), (590, 828), (694, 828), (694, 890), (632, 890),
+          (655, 978), (582, 978), (565, 1060), (549, 985), (480, 985), (503, 890), (436, 890)]
 _HAT = [(486, 828), (480, 806), (592, 735), (607, 748), (601, 800), (590, 828)]
 _COLLAR = [[(548, 830), (562, 902), (578, 842)]]
 _HEM = [[(492, 940), (642, 935)]]
-_X0, _Y0, _PX_W, _PX_H = 410, 735, 668 - 410, 1060 - 735
+_X0, _Y0, _PX_W, _PX_H = 436, 735, 694 - 436, 1060 - 735
 _TIP, _SHOULDERS = (565, 1060), ((480, 985), (655, 978))
+# 真ん中の軸の竹串（EP-0002）の上の端は、袖の横棒の高さの真ん中（828 と 890 の間）。下の端は、竹串の太さと片側の余りが V の内に
+# 収まる一番低い所（center_stick で求める）。重りの重さは肩から V を通って支点へかかるので、V の首から袖までを 1 本で支える
+CENTER_TOP_PX = (828 + 890) / 2
+CENTER_MARGIN = 0.5
 _V_TOP = ((549, 985), (582, 978))
 
 
@@ -155,6 +163,25 @@ def arm_geometry(p):
     return out
 
 
+def center_stick(p):
+    """真ん中の軸の竹串の (下の端, 上の端)。支点を原点・下を正。支点の真上の線（x = 0）に置く（EP-0002）。
+
+    上の端は袖の横棒の高さの真ん中。下の端は、竹串の太さと片側の余り（CENTER_MARGIN）が体の内に収まる一番低い所
+    （V は先ほど細いので、それより下へ伸ばすと竹串が紙の外に出る）。
+    """
+    inner = Polygon([_rel(p, q) for q in _YAKKO]).buffer(-(SKEWER_R + CENTER_MARGIN))
+    top = _rel(p, (_TIP[0], CENTER_TOP_PX))[1]
+    cut = LineString([(0, 0), (0, top)]).intersection(inner)
+    pieces = [cut] if cut.geom_type == "LineString" else list(cut.geoms)
+    seg = next(g for g in pieces if any(abs(y - top) < 1e-9 for _, y in g.coords))  # 上の端を含む 1 本
+    return (0.0, max(y for _, y in seg.coords)), (0.0, top)
+
+
+def center_len(p):
+    (_, lo), (_, hi) = center_stick(p)
+    return abs(lo - hi)
+
+
 def ball_r(g):
     return (3 * g / (4 * math.pi * CLAY_DENSITY)) ** (1 / 3)
 
@@ -171,6 +198,9 @@ def yajirobe_points(p, extra_left=0.0):
         stick = SKEWER_G_PER_MM * (p["arm_length"] + p["arm_insert"])
         pts.append((stick, (inner[0] + ball[0]) / 2, (inner[1] + ball[1]) / 2))
         pts.append((p["ball_g"] + (extra_left if i == 0 else 0), ball[0], ball[1]))
+    # 真ん中の軸の竹串（EP-0002）。支点より上にあるので重心を上げる。長さ × 1mm あたりの重さを、線の真ん中に置く
+    (_, lo), (_, hi) = center_stick(p)
+    pts.append((SKEWER_G_PER_MM * abs(lo - hi), 0, (lo + hi) / 2))
     return pts
 
 
@@ -214,6 +244,10 @@ def _check_yajirobe(p):
             out.append(Failure("F5.balance", f"{side}の腕", f"竹串の差し込みの奥 {p['arm_insert']}mm が体の外に出る"))
     if LineString(arms[0][:2]).intersects(LineString(arms[1][:2])):
         out.append(Failure("F5.balance", "腕", "左右の竹串が体の中で交わる"))
+    # 真ん中の軸の竹串（EP-0002）が腕の竹串に重なると、表と裏の紙が平らに合わない。竹串の太さ 2 本分を離す
+    mid = LineString(center_stick(p))
+    if any(mid.distance(LineString(a[:2])) <= 2 * SKEWER_R for a in arms):
+        out.append(Failure("F5.balance", "真ん中の軸", f"真ん中の竹串が腕の竹串に重なる（腕の差し込み {p['arm_insert']}mm を浅く）"))
     if p["arm_length"] + p["arm_insert"] > SKEWER_LEN:
         out.append(Failure("F5.balance", "腕", f"腕に竹串が {p['arm_length'] + p['arm_insert']}mm 要り、{SKEWER_LEN}mm の竹串で足りない"))
     if tip_thickness(p) < MIN_TIP_T:
@@ -246,6 +280,12 @@ def _back_part(p):
         x1, y1 = sh[0] + tx, sh[1] + ty
         k = 1 - 1 / math.hypot(x1 - x0, y1 - y0)
         art.append({"kind": "line", "pts": [(x0, y0), (x0 + (x1 - x0) * k, y0 + (y1 - y0) * k)], "stroke": ARM_MARK, "sw": 0.6, "role": "arm"})
+        art.append({"kind": "poly", "pts": [(x0 - 0.8, y0 - 0.8), (x0 + 0.8, y0 - 0.8), (x0 + 0.8, y0 + 0.8), (x0 - 0.8, y0 + 0.8)], "fill": ARM_MARK})
+    # 真ん中の軸の竹串を置く縦の線と、両端の四角い印（EP-0002: 「真ん中の軸にも竹串を貼る線があると良い。重りに耐える強さが要る」）
+    (cx0, lo), (cx1, hi) = center_stick(p)
+    ends = [(cx0 + tx, lo + ty), (cx1 + tx, hi + ty)]
+    art.append({"kind": "line", "pts": ends, "stroke": ARM_MARK, "sw": 0.6, "role": "center"})
+    for x0, y0 in ends:
         art.append({"kind": "poly", "pts": [(x0 - 0.8, y0 - 0.8), (x0 + 0.8, y0 - 0.8), (x0 + 0.8, y0 + 0.8), (x0 - 0.8, y0 + 0.8)], "fill": ARM_MARK})
     return Part(2, "back", "体（裏）", outline, label_xy=(p["body_w"] * 0.93, p["body_h"] * 0.33), label="2", art=art)
 
@@ -453,6 +493,8 @@ def bom(p):
             {"number": 8, "key": "ball", "name": "玉", "qty": 2, "material": f"油粘土 {p['ball_g']:g}g（直径 約 {2 * ball_r(p['ball_g']):.0f}mm）", "substituted": True, "original_guess": "不明（図では白い玉）", "reason": "量を変えて試しやすいため"},
             {"number": 9, "key": "stand", "name": "台の柱", "qty": 1, "material": f"竹串（{SKEWER_LEN}mm の見込み）", "substituted": True, "original_guess": "棒の上の板と人形（図による）", "reason": "台の人形を作る手間を省き、先の尖った支えにするため"},
             {"number": 10, "key": "base", "name": "台の土台", "qty": 1, "material": "油粘土 30g ほどか消しゴム", "substituted": True, "original_guess": "不明", "reason": "竹串をまっすぐ立てるため"},
+            {"number": 11, "key": "center", "name": "真ん中の軸", "qty": 1, "material": f"竹串（{center_len(p):.0f}mm に切る）", "substituted": True,
+             "original_guess": "無し（図には描かれていない。作る前のレビューの声で足した）", "reason": "重りの重さで体の紙が V の所で曲がらないよう、真ん中を支えるため"},
         ]
     return [
         {"number": 1, "key": "shell", "name": "胴（円錐）", "qty": 1, "material": paper, "substituted": True, "original_guess": "張子か土（推定）", "reason": why},
@@ -466,7 +508,8 @@ def materials(p):
     # 行の位置でなく key で引く。形によって部品表の行が違うので、位置で引くと別の行を刷る。
     by = {r["key"]: r for r in bom(p)}
     if p["kind"] == "yajirobe":
-        return [f"{by['front']['material']}を 1 枚", "のり、はさみ、定規", f"{by['arm']['material']}を 2 本", f"{by['ball']['material']}を 2 つ",
+        return [f"{by['front']['material']}を 1 枚", "のり、はさみ、定規", f"{by['arm']['material']}を 2 本と、{by['center']['material']}を 1 本（真ん中の軸）",
+                f"{by['ball']['material']}を 2 つ",
                 f"台: {by['stand']['material']}と{by['base']['material']}"]
     return [f"{by['shell']['material']}を 1 枚", "のり、はさみ、定規", by["tape"]["material"], by["weight"]["material"]]
 
@@ -475,10 +518,10 @@ def steps(p):
     out = ["刷った物差しに定規を当て、10cm か確かめる", "部品を実線で切る"]
     if p["kind"] == "yajirobe":
         out += [f"3 先の当て紙を蛇腹に折って {int(p['tip_layers'])} 枚に重ね、糊で貼る",
-                f"竹串 2 本を {p['arm_length'] + p['arm_insert']}mm に切る。4 腕の物差しの左の端に竹串の端を合わせ、"
+                f"竹串 2 本を {p['arm_length'] + p['arm_insert']}mm に、もう 1 本を {center_len(p):.0f}mm（真ん中の軸）に切る。4 腕の物差しの左の端に竹串の端を合わせ、"
                 f"肩の印（端から {p['arm_insert']}mm）と玉の印（端から {p['arm_insert'] + p['arm_length']}mm＝竹串の先）をペンで写す",
-                f"2 体（裏）の刷った面を上にし、竹串を赤い線に沿って置く。竹串の端を四角い印に、肩の印を肩の角に合わせる"
-                f"（差し込み {p['arm_insert']}mm、水平から {p['arm_angle']}° 下）",
+                f"2 体（裏）の刷った面を上にし、腕の竹串を斜めの赤い線に沿って置く。竹串の端を四角い印に、肩の印を肩の角に合わせる"
+                f"（差し込み {p['arm_insert']}mm、水平から {p['arm_angle']}° 下）。真ん中の軸の竹串は、縦の赤い線に沿って両端を四角い印に合わせて置く",
                 "3 当て紙を V の先に置き、糊を塗って 1 体（表）を、刷った面を上にしたまま（裏返さない）重ねて外形をそろえて貼る。乾いたら当て紙を V の線で切りそろえる",
                 f"竹串の先に油粘土を {p['ball_g']:g}g ずつ丸め、玉の中心が竹串の先（肩から {p['arm_length']}mm）に来るように付ける",
                 "竹串を土台に立て、V の先を竹串の先か指先に乗せる。傾いたら軽い側の粘土を足す"]
