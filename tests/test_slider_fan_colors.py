@@ -48,6 +48,16 @@ for form in sf.PUSH_PARTS:
     p = {**sf.DEFAULTS, "push_part": form, **({"pusher_height": 84} if form in ("tube", "stick") else {})}
     tube = {q.key: q for q in sf.parts(p)}["tube"]
     x0, y0, x1, y1 = sf.label_box(p["tube_side"], p["tube_height"])
+    # 札は外筒の絵に本当に描かれる: 紫の枠が札の枠そのもので、白い紙がその内にある（位置の式だけ見ていると、
+    # 描く所が消えても別の面へ描いても通った。検品の指摘）
+    frames = [a for a in tube.art if a.get("fill") == sf.LABEL_FRAME]
+    papers = [a for a in tube.art if a.get("fill") == sf.LABEL_PAPER]
+    assert len(frames) == 1 and len(papers) == 1, (form, len(frames), len(papers))
+    bbox = lambda a: (min(x for x, _ in a["pts"]), min(y for _, y in a["pts"]), max(x for x, _ in a["pts"]), max(y for _, y in a["pts"]))
+    assert all(abs(u - v) < 1e-9 for u, v in zip(bbox(frames[0]), (x0, y0, x1, y1))), (form, bbox(frames[0]))
+    px0, py0, px1, py1 = bbox(papers[0])
+    assert x0 < px0 < px1 < x1 and y0 < py0 < py1 < y1, (form, bbox(papers[0]))
+    assert tube.art.index(papers[0]) > tube.art.index(frames[0]), form  # 白い紙は枠の上に描く（後に描く物が上）
     assert all(not (x0 - r <= hx <= x1 + r and y0 - r <= hy <= y1 + r) for hx, hy, r in tube.holes), form
     assert all(cx >= x1 for cx, _, _, _ in [(c[0], c[1], c[2], c[3]) for c in tube.cuts]), form
     # 外形の切れ込み（つまみの形の溝）は 2 面目にある
