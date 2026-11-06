@@ -18,7 +18,11 @@ from .compose import TEMPLATES
 READINGS = {
     # 御来迎（R5-L・必須の 1 つ）: 押し方の読み。たたき台は tab（側面のつまみで押し上げる。元の repo の H-A）。
     # 本人の決定（2026-11-05）で H-A に決まった。必須の紙（pos_tab）とも同じ
-    "slider_fan": {"tube": "tab", "stick": "tab"},
+    "slider_fan": {"tube": "tab", "stick": "tab",
+                   # 筒を外す形（EP-0017、本人のレビュー 2026-11-06。糸なし・2 受け）は次の版の形。型紙の 1 枚は今の組（goraigo-v10）の
+                   # tab のまま（必須の紙 pos_tab と、この表の決まり）で、lift は別の読みに置く。次の版の型紙の 1 枚を lift に替えるかは本人が決める
+                   # （替える時は、この行を {"tab": "lift", ...} にし、tests/test_sheets.py の 3 を直す）
+                   "lift": "tab"},
     # 首振り虎（R14-R・必須の 1 つ）: 頭の支え方の読み。たたき台は neck（首を胴の穴に入れる。元の repo の H-A）。
     # 本人の決定（2026-11-05）で H-A に決まった。必須の紙もこの形（pos_tiger_neck）で刷る。hang（頭を前に吊る）はヒント
     "pivot_counterweight": {"hang": "neck"},
