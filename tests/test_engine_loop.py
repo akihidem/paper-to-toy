@@ -489,4 +489,33 @@ led5 = el.ledger()
 assert [p["id"] for p in led5["versions"][-1]["proposals"]] == ["EP-0001", "EP-0003"] and [p["id"] for p in led5["next"]] == ["EP-0002"]
 assert cli("release", "--commit", "abc1234", "--by", "作る人").returncode == 0 and [p["id"] for p in el.ledger()["versions"][-1]["proposals"]] == ["EP-0002"], "選ばなければ全部（前と同じ）"
 
+# 16. 雛形をまたぐ困り事の種類に、穴・足りない部品・手順と説明・接着を足した（11-06 のワークショップの感想 18 件で、本人が挙げた
+# 「穴の位置と大きさ・部品・手順の少なさ・接着」が、前の語では 1 つも共有の案にならなかった）。2 つの雛形で出たら共有の案になる
+os.environ["OMOCHAE_ENGINE_LOOP"] = str(tmp / "local6")
+os.environ["OMOCHAE_ENGINE_LEDGER"] = str(tmp / "versions6.json")
+
+
+def survey(b):
+    g = {**copy.deepcopy(b["groups"][0]), "sheet_set": "", "stuck_steps": {}, "quit_steps": {}, "craft_steps": {}, "record_ids": [], "current_set": None}
+    g.pop("current_set")
+    b["current_sets"] = {}
+    b["groups"] = [{**copy.deepcopy(g), "template": "spinner", "paper": "pinwheel",
+                    "texts": [{"kind": "idea", "step": None, "text": "軸の穴の場所がわかりにくい", "count": 1},
+                              {"kind": "keep", "step": None, "text": "組み方の手順がほしい", "count": 1}]},
+                   {**copy.deepcopy(g), "template": "wheel_cart", "paper": "stick",
+                    "texts": [{"kind": "keep", "step": None, "text": "車の接着がむずかしい", "count": 1},
+                              {"kind": "idea", "step": None, "text": "車軸の穴が大きすぎる", "count": 1}]},
+                   {**copy.deepcopy(g), "template": "lever_link", "paper": "saru_take",
+                    "texts": [{"kind": "keep", "step": None, "text": "パーツが足りない気がする。作る順番を知りたい", "count": 1},
+                              {"kind": "idea", "step": None, "text": "腕が外れやすいので留め方を知りたい", "count": 1}]}]
+
+
+(tmp / "survey.json").write_text(json.dumps(variant(survey), ensure_ascii=False), encoding="utf-8")
+assert cli("take", str(tmp / "survey.json")).returncode == 0
+sk = {p["key"]: p for p in el.proposals()}
+assert "shared:hole:spinner+wheel_cart" in sk, sorted(sk)
+assert "shared:steps:lever_link+spinner" in sk and "shared:join:lever_link+wheel_cart" in sk, sorted(sk)
+assert not any(k.startswith("shared:parts:") for k in sk), "足りない部品は 1 つの雛形だけなので、共有の案にしない"
+assert [t["text"] for t in sk["shared:hole:spinner+wheel_cart"]["evidence"]] == ["軸の穴の場所がわかりにくい", "車軸の穴が大きすぎる"]
+
 print("OK test_engine_loop")
