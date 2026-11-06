@@ -1,4 +1,4 @@
-"""作り方の印（omochae.ways・#53）を確かめる。本人の決定 (c): 「紙一枚」(a) と「折るだけ」(b) を別の印で持つ。"""
+"""作り方の印（omochae.ways・#53）を確かめる。制作者の決定 (c): 「紙一枚」(a) と「折るだけ」(b) を別の印で持つ。"""
 import json
 import pathlib
 import subprocess
@@ -36,7 +36,7 @@ assert all(set(r) >= {"template", "form", "one_sheet", "fold_only", "period", "o
 # 紙一枚の形（main 007599a の時点）。相撲は割ピンを使うので外れる
 assert {(r["template"], r["form"]) for r in table if r["one_sheet"]} >= {("popup_jar", "square"), ("popup_jar", "hex"),
                                                                           ("slide_box", "lid"), ("slide_box", "sleeve"), ("whistle", "horn")}
-# 5. 当時の材料（再現の良さの別の軸・本人の言葉）: 紙のほかの材料が全部、当時あった物の語の一覧に当たる時だけ。
+# 5. 当時の材料（再現の良さの別の軸・制作者の言葉）: 紙のほかの材料が全部、当時あった物の語の一覧に当たる時だけ。
 # 知らない物にも今の物にも付けない。油粘土は江戸の頃に無かったので、当時の材料に数えない（akihidem/utsushi#311）
 assert ways.marks("pivot_counterweight", "neck")["period"] is False and "油粘土" in ways.details("pivot_counterweight", "neck")["modern_substitutes"]
 assert ways.marks("whistle", "horn")["period"] is True  # 紙だけ

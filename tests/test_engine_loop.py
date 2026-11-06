@@ -410,7 +410,7 @@ assert "手順 3: 3 回・2 人" in row_of(out, "tab") and "手順 3: 1 回・1 
 for word in ("効いた", "改善し", "良くな", "悪くな", "%", "％", "平均"):
     assert word not in out, word
 
-# 13. 玩具ごとの案と版（玩具 = 雛形 + 形。本人の決定 11-05「型紙は玩具ごとに 1 枚」）。工夫・レビュー・動きの床の案も紙で分ける。
+# 13. 玩具ごとの案と版（玩具 = 雛形 + 形。制作者の決定 11-05「型紙は玩具ごとに 1 枚」）。工夫・レビュー・動きの床の案も紙で分ける。
 # 紙の名の無い前の形の束は、前の鍵のまま（上の 1〜8 がそのまま通っている）
 os.environ["OMOCHAE_ENGINE_LOOP"] = str(tmp / "local3")
 os.environ["OMOCHAE_ENGINE_LEDGER"] = str(tmp / "versions3.json")
@@ -439,7 +439,7 @@ for kind, word in (("craft", "羽"), ("review", "穴")):
     assert [t["text"] for t in toy[f"{kind}:spinner:spin-v1:pinwheel"]["evidence"]] == [f"pinwheel の{'羽を少し細くした' if word == '羽' else '軸の穴が小さく見える'}"]
 assert toy["review:spinner:spin-v1:pinwheel"]["numbers"]["reviews"] == 1 and toy["motion:spinner:spin-v1:top"]["numbers"]["not_moved"] == 2
 # 別の読みの形（ヒント）の声も案にする。機械は捨てず、型紙でない事と型紙の形を並べて、人が決める。
-# 御来迎の型紙は rise（本人の決定 2026-11-06）。前の型紙 tab で刷った紙（goraigo-v10）の声も、別の読みとして今の型紙の形を並べる
+# 御来迎の型紙は rise（制作者の決定 2026-11-06）。前の型紙 tab で刷った紙（goraigo-v10）の声も、別の読みとして今の型紙の形を並べる
 reading = toy["craft:slider_fan:goraigo-v10:tube"]
 assert "別の読み" in reading["why"] and "型紙は rise" in reading["why"], reading["why"]
 assert "型紙は rise" in toy["craft:slider_fan:goraigo-v10:tab"]["why"], toy["craft:slider_fan:goraigo-v10:tab"]["why"]

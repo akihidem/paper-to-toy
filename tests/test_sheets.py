@@ -1,4 +1,4 @@
-"""玩具 1 つに型紙 1 枚（omochae.sheets・本人の決定 2026-11-05）を確かめる。"""
+"""玩具 1 つに型紙 1 枚（omochae.sheets・制作者の決定 2026-11-05）を確かめる。"""
 import json
 import pathlib
 import sys
@@ -35,7 +35,7 @@ for key, forms in groups.items():
         assert len(got) == 1, (key, forms)
 assert set(DIFFERENT_TOYS) <= set(groups)  # 名指しした組が、雛形の変更で消えていない
 
-# 3. 本人の決定のたたき台（御来迎は内筒を下から押し上げる形 rise（2026-11-06）、首振り虎は元の repo の H-A）。必須 2 種の紙は、
+# 3. 制作者の決定のたたき台（御来迎は内筒を下から押し上げる形 rise（2026-11-06）、首振り虎は元の repo の H-A）。必須 2 種の紙は、
 #    そのたたき台で刷る場面。御来迎の rise には凍結の場面が無い（凍結の置き場は足さない）ので examples/goraigo_v13.json で刷る。
 #    pos_tab（既定の tab）は別の読みの場面
 assert sheets.is_sheet("slider_fan", "rise") and sheets.is_sheet("pivot_counterweight", "neck")

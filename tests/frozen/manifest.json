@@ -1,5 +1,5 @@
 {
- "criteria.md": "e8675ba5c3a33bb615b76ca0eacf7fe4713db6b563f103dc4ff6cbe4fda6e2d1",
+ "criteria.md": "1441a06ee655961960e2cc2335d98a55c0435b731e2c9f28cd5c9fc63c710dbb",
  "scenarios": {
   "balance_neg.json": {
    "floors": [
@@ -1134,6 +1134,7 @@
  },
  "tests": [
   "test_balance",
+  "test_color_out",
   "test_engine_loop",
   "test_exit_codes",
   "test_fan_model",
@@ -1142,6 +1143,8 @@
   "test_fold3d",
   "test_foldsim",
   "test_frozen_manifest",
+  "test_goraigo_rise",
+  "test_goraigo_rise_3d",
   "test_guards",
   "test_init_python",
   "test_intake",
@@ -1151,6 +1154,8 @@
   "test_paper_words",
   "test_path_confine",
   "test_pdf_repeatable",
+  "test_pivot_3d",
+  "test_pivot_fold3d",
   "test_pivot_hang_model",
   "test_pivot_model",
   "test_pivot_neck_opening",
@@ -1161,6 +1166,7 @@
   "test_sheet_v8",
   "test_sheets",
   "test_slide_box",
+  "test_slider_fan_colors",
   "test_slider_tube_stroke",
   "test_spinner",
   "test_stand_figure",

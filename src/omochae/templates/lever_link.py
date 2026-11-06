@@ -60,7 +60,7 @@ from shapely import affinity
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import unary_union
 
-from ..paper_words import BOARD as CARD_BOARD, paper_name  # 紙の書き方は 4 つの名前だけ（本人の指示 2026-11-05）
+from ..paper_words import BOARD as CARD_BOARD, paper_name  # 紙の書き方は 4 つの名前だけ（制作者の指示 2026-11-05）
 from ..model import Failure, Part
 
 ID = "lever_link"
