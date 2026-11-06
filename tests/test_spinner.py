@@ -138,6 +138,7 @@ for sq in (s.RANGES["square"][0], 90, s.DEFAULTS["square"], 150, s.RANGES["squar
             bends = [a for a in v.art if a["kind"] == "mark" and a.get("mark") == "bend"]
             assert len(bends) == 4, (q, len(bends))
             heads = [a for a in v.art if a["kind"] == "mark" and a.get("mark") == "bend_head"]
+            assert len(heads) == 4, (q, len(heads))  # zip が黙って短くならないよう、矢じりの数を先に見る（検品の指摘）
             corners = [(sq, 0), (sq, sq), (0, sq), (0, 0)]  # 印の穴のある角の順（雛形の tips と同じ）
             for (hx, hy, r), b, h, (kx, ky) in zip(v.holes[1:], bends, heads, corners):
                 start, end = b["pts"][0], b["pts"][-1]
