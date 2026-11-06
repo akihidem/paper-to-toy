@@ -11,6 +11,11 @@
    - 粘土の玉は 5 重りの腕の下の穴の所。
 4. できあがりの動き（finale）: 頭が揺れて止まる。最後は段の終わりの形と同じ。
 5. 入口: 書き出せる（終わりの値 0）。組み立ての書き方が無い形（御来迎のつまみの形）は 4。
+6. 紙の行列（paper.place）: 紙の座標を机の面（y = 0）へ写し、刷った面は上。段 1 の部品の置き場は、紙の行列と刷った所（paper.at）から出した物と同じ。
+7. 手の種類（act）と動く部品（moving）がどの POSE にもある。中身の分解（structure）: inside・exploded（できあがりから離した 1 枚）・cutaway（見る人の方の面）。
+8. 御来迎 v14（内筒を下から押し上げる）: 18 段。静かな時は内筒が外筒の中（隙間 0.75mm）、台の上の面は外筒の底から 70mm、扇と像は口の下。
+   押し上げると台の上の面が口の高さで、扇は開く角の見込み（約 176°）の半円に開く（custom）。割り箸は開いた時も外筒の下へ 77mm 出る。
+   外筒の刷った面は外、内筒の刷った面は内、台の刷った面は上、像は両側に顔。
 紙は折り線で分けた硬い面（fold3d と同じ）。紙の厚み・糊・たわみは入れない。
 """
 import json
@@ -180,4 +185,91 @@ with tempfile.TemporaryDirectory() as d:
     assert r.returncode == 0 and json.loads(out.read_text(encoding="utf-8"))["toy"] == "tora-v6", r.stderr
     r = subprocess.run([sys.executable, "-m", "omochae.assembly3d", "--scenario", str(ROOT / "examples/fan_tab.json")], cwd=ROOT, env=env, capture_output=True, text=True)
     assert r.returncode == 4, (r.returncode, r.stderr)
-print(f"ok 作り方の 3D の JSON（虎 v6・{len(data['steps'])} 段・形のずれ {worst:.1e}mm）")
+
+# 6. 紙の行列
+P = M(data["paper"]["place"])
+assert all(abs(ap(P, c)[1]) < TOL for c in ((0, 0), (data["paper"]["w"], 0), (0, data["paper"]["h"]))) and normal(P)[1] < -0.999
+first = data["steps"][0]["poses"][0]
+for key, (x, y) in data["paper"]["at"].items():
+    got = M(first["parts"][key]["place"])
+    root = next(pn for pn in parts[key]["panels"] if pn["id"] == 0)
+    for q in root["poly"][:3]:
+        assert math.dist(ap(got, q), ap(P, (q[0] + x, q[1] + y))) < TOL, (key, q)
+
+# 7. 手の種類・動く部品・中身の分解
+ACTS = {"cut", "fold", "thread", "place", "open", "move"}
+
+
+def check_acts_structure(d, pk):
+    for pose in [q for st in d["steps"] for q in st["poses"]] + d["finale"]["poses"] + [d["structure"]["exploded"]]:
+        assert pose["act"] in ACTS and isinstance(pose["moving"], list), (pose.get("act"), pose.get("moving"))
+    st = d["structure"]
+    assert set(st["exploded"]["parts"]) == set(pk), sorted(st["exploded"]["parts"])
+    for key, ids in st["cutaway"].items():
+        for i in ids:
+            assert i in d["steps"][-1]["poses"][-1]["parts"][key]["panels"], (key, i)
+
+
+check_acts_structure(data, parts)
+assert data["structure"]["inside"]["strip"] == "body" and data["structure"]["cutaway"] == {"body": ["3"]}
+assert [q["act"] for q in data["steps"][6]["poses"]] == ["move", "thread", "thread"]  # 帯を穴に入れて竹串を通す
+
+# 8. 御来迎 v14
+from omochae.templates import slider_fan as sf  # noqa: E402
+
+g = build(ROOT / "examples/goraigo_v14.json", commit="test")
+v14 = dict(sf.DEFAULTS, **json.loads((ROOT / "examples/goraigo_v14.json").read_text(encoding="utf-8"))["params"])
+gp = {q["key"]: q for q in g["parts"]}
+assert [st["text"] for st in g["steps"]] == sf.steps(v14) and len(g["steps"]) == 18
+check_acts_structure(g, gp)
+gworst = 0.0
+for pose in [q for st in g["steps"] for q in st["poses"]]:
+    for key, st in pose["parts"].items():
+        if st.get("custom"):
+            continue
+        tree = gp[key]["tree"]
+        mats = {str(tree["root"]): M(st["place"])}
+
+        def ofg(i):
+            if i not in mats:
+                row = tree["rows"][i]
+                mats[i] = mul(ofg(str(row["parent"])), hinge(row["hinge"][0], row["hinge"][1], st["turns"][i]))
+            return mats[i]
+        for pan in gp[key]["panels"]:
+            gworst = max(gworst, max(math.dist(ap(ofg(str(pan["id"])), q), ap(M(st["panels"][str(pan["id"])]), q)) for q in pan["poly"]))
+assert gworst < 0.01, gworst
+
+
+def box(pose, key):
+    pts = [ap(M(pose["parts"][key]["panels"][str(pn["id"])]), q) for pn in gp[key]["panels"] for q in pn["poly"]]
+    return [min(q[k] for q in pts) for k in range(3)], [max(q[k] for q in pts) for k in range(3)]
+
+
+rest, opened = g["steps"][15]["poses"][-1], g["steps"][16]["poses"][-1]
+A, a, Ht, s_up, Lp = v14["tube_side"], v14["pusher_side"], v14["tube_height"], v14["push_amount"], v14["pusher_height"]
+(t0, t1), (p0, p1) = box(rest, "tube"), box(rest, "pusher")
+assert abs((t1[0] - t0[0]) - A) < TOL and abs((p1[0] - p0[0]) - a) < TOL and abs((p0[0] - t0[0]) - (A - a) / 2) < TOL  # 内筒は外筒の真ん中
+mouth, bottom = t0[1], t1[1]
+assert abs((bottom - mouth) - Ht) < TOL
+base_top = box(rest, "base")[0][1]
+assert abs((bottom - base_top) - (Ht - s_up)) < TOL, (bottom - base_top)  # 台の上の面は外筒の底から 70mm
+assert box(rest, "fan")[0][1] > mouth + 2 - TOL and box(rest, "figure")[0][1] > mouth + 2 - TOL  # 扇と像は口の下（2mm 以上）
+assert abs(box(opened, "base")[0][1] - mouth) < TOL  # 押し上げると台の上の面が口の高さ
+fan_lo, fan_hi = box(opened, "fan")
+R = v14["fold_height"]
+assert opened["parts"]["fan"].get("custom") and abs((fan_hi[0] - fan_lo[0]) / 2 - R) < 0.5 and abs((mouth - fan_lo[1]) - R) < 0.5, (fan_lo, fan_hi)
+ch = opened["rods"]["chopstick"]
+assert abs((ch["to"][1] - bottom) - 77.0) < 0.01, ch["to"][1] - bottom  # fold3d.check_rise と同じ 77mm
+norm_of = lambda key, i: normal(M(rest["parts"][key]["panels"][str(i)]))
+cen = (0.0, (mouth + bottom) / 2, 0.0)
+for pn in gp["tube"]["panels"][:4]:  # 外筒の 4 面は刷った面が外
+    c = Polygon(pn["poly"]).centroid
+    w = ap(M(rest["parts"]["tube"]["panels"][str(pn["id"])]), (c.x, c.y))
+    assert (w[0] - cen[0]) * norm_of("tube", pn["id"])[0] + (w[2] - cen[2]) * norm_of("tube", pn["id"])[2] > 0, pn["id"]
+for pn in gp["pusher"]["panels"][:4]:  # 内筒の 4 面は刷った面が内
+    c = Polygon(pn["poly"]).centroid
+    w = ap(M(rest["parts"]["pusher"]["panels"][str(pn["id"])]), (c.x, c.y))
+    assert w[0] * norm_of("pusher", pn["id"])[0] + w[2] * norm_of("pusher", pn["id"])[2] < 0, pn["id"]
+assert norm_of("base", 1)[1] < -0.999 and norm_of("figure", 0)[2] > 0.999 and norm_of("figure", 1)[2] < -0.999
+assert g["structure"]["inside"]["pusher"] == "tube" and g["structure"]["cutaway"] == {"tube": ["0"], "pusher": ["2"]}
+print(f"ok 作り方の 3D の JSON（虎 v6・{len(data['steps'])} 段・形のずれ {worst:.1e}mm／御来迎 v14・{len(g['steps'])} 段・形のずれ {gworst:.1e}mm）")

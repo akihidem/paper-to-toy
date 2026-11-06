@@ -191,7 +191,9 @@ class Scene:
                 ang[str(i)] = round(abs(angles.get(f.hinge, 0.0)), 4)
         return {"place": css(world[0]), "turns": turns, "angles": ang, "panels": {str(i): css(m) for i, m in enumerate(world)}}, world
 
-    def pose(self, states, hidden=(), rods=None, balls=None, view=None, on_paper=False, tool=None, custom=()):
+    def pose(self, states, hidden=(), rods=None, balls=None, view=None, on_paper=False, tool=None, custom=(), act=None, moving=None):
+        """POSE 1 枚。act（手の種類: cut・fold・thread・place・open・move）と moving（動く部品）は、書き方が言わなければ、
+        前の POSE との違いから決める（切る道具 → cut、custom → open、折る角が変わる → fold、棒が出る → thread、置き場が変わる → move）。"""
         out = {"parts": {}, "hidden": sorted(hidden), "rods": rods or {}, "balls": balls or {},
                "view": view or {"rx": -20, "ry": 30}, "on_paper": bool(on_paper)}
         for key, (angles, place) in states.items():
@@ -203,7 +205,22 @@ class Scene:
             out["parts"][key] = st
         if tool:
             out["tool"] = tool
+        prev = getattr(self, "_prev", None)
+        changed_place = sorted(k for k, st in out["parts"].items() if prev and k in prev["parts"] and st["place"] != prev["parts"][k]["place"])
+        changed_fold = sorted(k for k, st in out["parts"].items() if prev and k in prev["parts"] and st["turns"] != prev["parts"][k]["turns"])
+        new_rods = sorted(k for k in out["rods"] if not prev or k not in prev["rods"])
+        if moving is None:
+            moving = sorted(set(changed_place) | set(changed_fold) | set(custom))
+        if act is None:
+            act = ("cut" if tool and tool.get("kind") in ("scissors", "knife") else "open" if custom else "fold" if changed_fold
+                   else "thread" if new_rods else "move" if changed_place else "place")
+        out["act"], out["moving"] = act, sorted(moving)
+        self._prev = out
         return out
+
+    def paper_place(self):
+        """刷った紙の行列（紙の座標 → 世界）。紙は机の面（y = 0）に、刷った面を上にして、組み立てる所の奥に寝ている。"""
+        return css([[1.0, 0.0, 0.0, -self.page.w / 2], [0.0, 0.0, -1.0, 0.0], [0.0, 1.0, 0.0, self.paper_z0], [0.0, 0.0, 0.0, 1.0]])
 
     def part_list(self):
         out = []
@@ -321,11 +338,11 @@ def _tiger(scene, p):
     page_w = scene.page.w
     # 1. 物差し
     ruler = None
-    steps.append([snap(on_paper=True, view={"rx": -70, "ry": 0}, tool=ruler)])
+    steps.append([snap(on_paper=True, view={"rx": -70, "ry": 0}, tool=ruler, act="place", moving=[])])
     # 2. 切る・小さい穴（紙から部品を切り離す）
-    steps.append([snap(on_paper=True, view={"rx": -70, "ry": 0}, tool={"kind": "scissors"}), snap(view={"rx": -70, "ry": 0})])
+    steps.append([snap(on_paper=True, view={"rx": -70, "ry": 0}, tool={"kind": "scissors"}), snap(view={"rx": -70, "ry": 0}, act="cut", moving=sorted(parts))])
     # 3. 前の壁の丸い穴を切る
-    steps.append([snap(view={"rx": -70, "ry": 0, "focus": ["body"]}, tool={"kind": "knife"})])
+    steps.append([snap(view={"rx": -70, "ry": 0, "focus": ["body"]}, tool={"kind": "knife"}, moving=["body"])])
     # 4. 胴を箱に（上の面は開ける）
     cur["body"] = ({}, body_place({}, 0.0))
     a = snap(view={"rx": -35, "ry": 30, "focus": ["body"]})
@@ -356,16 +373,16 @@ def _tiger(scene, p):
     at = translate(xa, ya, 0.0)
     s7, h7, d7, clay7 = neck_places(at)
     cur["strip"], cur["head"] = (band, s7), (head_ang, h7)
-    b = snap(view=view_side)
+    b = snap(view=view_side, act="thread", moving=["strip", "head"])
     skewer = {"skewer": {"from": [xa, ya, (W + 20) / 2], "to": [xa, ya, -(W + 20) / 2]}}
     steps.append([a, b, snap(view=view_side, rods=skewer)])
     # 8. 腕に竹串・粘土・仮留め
     cur["drop"] = ({}, d7)
-    a = snap(view=view_side, rods=skewer)
+    a = snap(view=view_side, rods=skewer, act="thread", moving=["drop"])
     clay = {"clay": {"at": list(clay7)}}
-    steps.append([a, snap(view=view_side, rods=skewer, balls=clay)])
+    steps.append([a, snap(view=view_side, rods=skewer, balls=clay, act="place", moving=["clay"])])
     # 9. 腕を帯に貼る
-    steps.append([snap(view=view_side, rods=skewer, balls=clay)])
+    steps.append([snap(view=view_side, rods=skewer, balls=clay, act="place", moving=["drop"])])
     # 10. 脚を角筒にして底の四角へ（胴の組を脚の高さだけ上げる）
     leg_ang = {k: _all_lines(parts[k], 90) for k in legs}
     if legs:
@@ -393,7 +410,7 @@ def _tiger(scene, p):
                 if bottom[1] > m[0][1] + legh - 0.5:
                     break
             cur[k] = (leg_ang[k], pl)
-        steps.append([a, snap(view=view_side, rods=skewer, balls=clay)])
+        steps.append([a, snap(view=view_side, rods=skewer, balls=clay, act="place", moving=sorted(legs + ["body", "strip", "head", "drop"]))])
     # 11. 上の面を閉じる
     ybot = -legh if legs else 0.0
     cur["body"] = (closed, body_place(closed, ybot))
@@ -416,7 +433,7 @@ def _tiger(scene, p):
         if tipw[1] < _world_pt(bworld, S["body"], *f0)[1] - 10:
             break
     cur["tail"] = (tail_ang, pl)
-    steps.append([a, snap(view={"rx": -25, "ry": 35}, rods=skewer, balls=clay)])
+    steps.append([a, snap(view={"rx": -25, "ry": 35}, rods=skewer, balls=clay, act="place", moving=["tail"])])
     # できあがりの動き: 頭が揺れて止まる（軸のまわりに回す）
     finale = []
     base = {k: cur[k] for k in ("strip", "head", "drop")}
@@ -430,12 +447,245 @@ def _tiger(scene, p):
         cur[k] = v
     if len(steps) != len(steps_text):
         raise ValueError(f"段の数 {len(steps)} が手順の文の数 {len(steps_text)} と合わない")
+    # 中身を分解して見せる（制作者の言葉「AI が 3D で表示して中身をそこで分解できる構造表示と、自分が作った実物がオーバーレイする。」）。
+    # できあがりから、部品を入れた道の逆へ離す: 帯と頭は穴から前へ、腕と粘土は上へ、脚は下へ、尾は上へ、竹串は横へ
+    away = {"strip": (-45.0, 0.0, 0.0), "head": (-45.0, 0.0, 0.0), "drop": (0.0, -35.0, 0.0), "tail": (0.0, -25.0, 0.0)}
+    away.update({k: (0.0, 15.0, 0.0) for k in legs})
+    exploded_states = {k: (ang, mul(translate(*away[k]), pl)) if k in away else (ang, pl) for k, (ang, pl) in cur.items()}
+    sk = skewer["skewer"]
+    exploded = scene.pose(exploded_states, view={"rx": -20, "ry": 35}, act="move", moving=sorted(away),
+                          rods={"skewer": {"from": [sk["from"][0], sk["from"][1], sk["from"][2] + 35], "to": [sk["to"][0], sk["to"][1], sk["to"][2] + 35]}},
+                          balls={"clay": {"at": [clay7[0], clay7[1] - 35, clay7[2]]}})
+    # 内側を見る時に外す面: 胴の面のうち、見る人の方（+z）を向く面
+    _, bw = scene.state("body", *cur["body"])
+    glue_ids = {i for i, poly in enumerate(S["body"].panels) for gl in parts["body"].glue
+                if __import__("shapely.geometry", fromlist=["Polygon"]).Polygon(gl).intersection(__import__("shapely.geometry", fromlist=["Polygon"]).Polygon(poly)).area > 0.99 * __import__("shapely.geometry", fromlist=["Polygon"]).Polygon(poly).area}
+    front_side = max((i for i in range(len(bw)) if i not in glue_ids), key=lambda i: bw[i][2][2])
+    structure = {"inside": {"strip": "body", "drop": "body", "clay": "body", "skewer": "body"}, "exploded": exploded,
+                 "cutaway": {"body": [str(front_side)]}}
     rods = {"skewer": {"r": 1.0, "color": "#c8a46a", "kind": "rod", "owner": "body"}}
     balls = {"clay": {"r": round(pc.clay_r(p["weight_g"]), 3), "color": "#8a6f55"}}
-    return steps_text, steps, finale, rods, balls
+    return steps_text, steps, finale, rods, balls, structure
 
 
-RECIPES = {"pivot_counterweight": _tiger}
+def _fan_open(scene, fan_key, pivot, opening_deg, spread):
+    """扇（蛇腹の帯）が、受けの所を要に開いた形の、面ごとの行列（custom。折り線の角では表せないので面を直に置く）。
+
+    板 k（帯の y が 4k〜4k+4、x が高さ）を、下の端の真ん中が要に来るように立て、要のまわりに φ_k 回す。φ_k は開く角を板の数で
+    等分した所に spread（0〜1）を掛けた角（左が 1 枚目）。刷った面は見る人の方。山と谷の重なりは、板ごとに前後へ 0.15mm ずらして見せる。
+    """
+    q = scene.parts[fan_key]
+    n = len(scene.sheets[fan_key].panels)
+    w = (max(y for _, y in q.outline) - min(y for _, y in q.outline)) / n
+    out = {}
+    for k in range(n):
+        phi = spread * (-opening_deg / 2 + (k + 0.5) * opening_deg / n)
+        A = [[0.0, 1.0, 0.0, -(k * w + w / 2)], [-1.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0], [0.0, 0.0, 0.0, 1.0]]
+        m = mul(translate(pivot[0], pivot[1], pivot[2] + (0.15 if k % 2 else -0.15)), mul(rot_z(phi), A))
+        out[str(k)] = css(m)
+    return out
+
+
+def _goraigo_rise(scene, p):
+    """御来迎（内筒を下から押し上げる形 rise）の段ごとの形。手順の文（slider_fan.steps）と 1 対 1。
+
+    判断の芯:
+    - 外筒は色の境で山折りして角筒にし（刷った面が外）、内筒は谷折りで角筒にする（刷った面が内。割り箸を貼る長方形は 1 面目の内）。
+    - 内筒・台・受け・扇・像・割り箸は 1 つの組にし、台の上の面の真ん中を組の原点にする。組は外筒の脇で組み、下から外筒に入れて、
+      静かな時の高さ（台の上の面が外筒の底から 筒の高さ − 押し上げる量 − 内筒の長さ ＋ 内筒の長さ）と、押し上げた高さ（口の高さ）に置く。
+      高さは omochae.fold3d.check_rise と同じ式。
+    - 受けは台の印（台の奥の半分）に、像は台の前の半分に立てる。扇は受けの U の中に畳んで立て、口から出たら要（扇の下の端の真ん中）の
+      まわりに開く（custom）。開く角は雛形の開く角の見込み（帯の長さ ÷ 高さ）。
+    - 割り箸は、内筒の 1 面目の内の点の線の長方形の真ん中に沿わせ、上の端を長方形の上の端にそろえ、長さ CHOPSTICK_LEN で下へ出す。
+    """
+    from .templates import slider_fan as sf
+    if p["push_part"] != sf.RISE:
+        return None
+    parts, S = scene.parts, scene.sheets
+    A, Ht, a, Lp, s_up = p["tube_side"], p["tube_height"], p["pusher_side"], p["pusher_height"], p["push_amount"]
+    b = p["base_side"]
+    g = p["base_glue"]
+    fw, fh = p["figure_w"], p["figure_h"]
+    n_fold, fold_w, fold_h = int(p["fold_count"]), p["fold_width"], p["fold_height"]
+    opening = sf.opening_bound_deg(n_fold, fold_w, fold_h)
+    # 角
+    tube_closed = _all_lines(parts["tube"], 90)
+    tube_crease = _all_lines(parts["tube"], 60)
+    inner_closed = _all_lines(parts["pusher"], 90)
+    base_folded = _all_lines(parts["base"], 90)
+    cradle_u = _all_lines(parts["cradle"], 90)
+    fan_stack = _all_lines(parts["fan"], 180)
+    fig_folded = _all_lines(parts["figure"], 180)
+    # 組の中の置き場（組の原点 = 台の上の面の真ん中。x 右・y 下・z 見る人の方）
+    def inner_rel(angles):
+        return place_by(S["pusher"], angles, [(0.0, 0.0), (a, 0.0), (0.0, Lp)], [(-a / 2, 0.0, -a / 2), (a / 2, 0.0, -a / 2), (-a / 2, Lp, -a / 2)])
+    base_rel = lambda angles: place_by(S["base"], angles, [(g, g), (g + b, g), (g, g + b)], [(-b / 2, 0.0, -b / 2), (b / 2, 0.0, -b / 2), (-b / 2, 0.0, b / 2)])
+    # 受けの底の面は台の印（台の座標の線の外接の四角）に合わせる
+    mark = [pt for it in parts["base"].art if it["kind"] == "line" for pt in it["pts"]]
+    mx0, mx1 = min(x for x, _ in mark), max(x for x, _ in mark)
+    my0, my1 = min(y for _, y in mark), max(y for _, y in mark)
+    to_group = lambda x, y: (x - g - b / 2, 0.0, y - g - b / 2)
+    cq = parts["cradle"]
+    c_y0 = min(r["hinge"][0][1] for r in S["cradle"].rows.values())
+    c_y1 = max(r["hinge"][0][1] for r in S["cradle"].rows.values())
+    c_w = max(x for x, _ in cq.outline)
+    cradle_rel = lambda angles: place_by(S["cradle"], angles, [(0.0, c_y0), (c_w, c_y0), (0.0, c_y1)], [to_group(mx0, my0), to_group(mx1, my0), to_group(mx0, my1)])
+    zc = (to_group(0, my0)[2] + to_group(0, my1)[2]) / 2  # 受けの U の真ん中（扇の束の z）
+    fan_rel = lambda angles: place_by(S["fan"], angles, [(0.0, 0.0), (0.0, fold_w), (10.0, 0.0)], [(-fold_w / 2, 0.0, zc), (fold_w / 2, 0.0, zc), (-fold_w / 2, -10.0, zc)])
+    fy = max(y for _, y in parts["figure"].outline)
+    zf = b / 4  # 台の前の半分の真ん中
+    fig_rel = lambda angles: place_by(S["figure"], angles, [(fw / 2, fy), (fw / 2 + 10, fy), (fw / 2, fy - 10)], [(0.0, 0.0, zf), (10.0, 0.0, zf), (0.0, -10.0, zf)])
+    stick = next(it for it in parts["pusher"].art if it["kind"] == "mark" and it.get("mark") == "stick")
+    sx = (min(x for x, _ in stick["pts"]) + max(x for x, _ in stick["pts"])) / 2
+    sy = min(y for _, y in stick["pts"])
+    stick_top = (sx - a / 2, sy, -a / 2 + sf.CHOPSTICK_W / 2)  # 1 面目（奥）の内に沿う
+    # 外筒の置き場: 作る所（机の上に立てる）と、手に持つ所
+    def tube_at(angles, x0, ybottom):
+        return place_by(S["tube"], angles, [(0.0, 0.0), (A, 0.0), (0.0, Ht)], [(x0 - A / 2, ybottom - Ht, A / 2), (x0 + A / 2, ybottom - Ht, A / 2), (x0 - A / 2, ybottom, A / 2)])
+    work_x, y_bottom = -60.0, -150.0
+    rest_top = y_bottom - (Ht - s_up - Lp + Lp)  # 台の上の面（静かな時）
+    open_top = rest_top - s_up
+    G_build = translate(60.0, -Lp, 0.0)  # 内筒を机に立てた所
+    group_keys = ["pusher", "base", "cradle", "fan", "figure"]
+
+    def lie(key, x, z, lift=0.0):
+        """部品を机の上に、刷った面を上にして寝かせる（作る所）。"""
+        q = parts[key]
+        bx0, by0 = min(x_ for x_, _ in q.outline), min(y_ for _, y_ in q.outline)
+        return place_by(S[key], {}, [(bx0, by0), (bx0 + 10, by0), (bx0, by0 + 10)], [(x, -lift, z), (x + 10, -lift, z), (x, -lift, z + 10)])
+
+    cur = {k: ({}, scene.on_paper(k)) for k in parts}
+    steps_text = sf.steps(p)
+    steps = []
+    snap = lambda **kw: scene.pose(dict(cur), **kw)
+    rods = {}
+
+    def chop(G):
+        top = apply(G, stick_top)
+        return {"chopstick": {"from": list(top), "to": list(apply(G, (stick_top[0], stick_top[1] + sf.CHOPSTICK_LEN, stick_top[2])))}}
+    # 1・2. 物差し・切る
+    steps.append([snap(on_paper=True, view={"rx": -70, "ry": 0}, tool={"kind": "ruler"}, act="place", moving=[])])
+    steps.append([snap(on_paper=True, view={"rx": -70, "ry": 0}, tool={"kind": "scissors"}), snap(view={"rx": -70, "ry": 0}, act="cut", moving=sorted(parts))])
+    # 3・4. 外筒を山折りして角筒に（作る所に立てる）
+    cur["tube"] = ({}, tube_at({}, work_x, 0.0))
+    a3 = snap(view={"rx": -15, "ry": 30, "focus": ["tube"]})
+    cur["tube"] = (tube_crease, tube_at(tube_crease, work_x, 0.0))
+    steps.append([a3, snap(view={"rx": -15, "ry": 30, "focus": ["tube"]})])
+    cur["tube"] = (tube_closed, tube_at(tube_closed, work_x, 0.0))
+    steps.append([snap(view={"rx": -15, "ry": 30, "focus": ["tube"]})])
+    # 5. 内筒を谷折りして戻す（作る所に立てる）
+    cur["pusher"] = (inner_closed, mul(G_build, inner_rel(inner_closed)))
+    a5 = snap(view={"rx": -15, "ry": 30, "focus": ["pusher"]})
+    cur["pusher"] = ({}, mul(G_build, inner_rel({})))
+    steps.append([a5, snap(view={"rx": -15, "ry": 30, "focus": ["pusher"]})])
+    # 6. 割り箸を内筒の点の線の長方形に沿わせて留める（平らな内筒の上）
+    rods = chop(G_build)
+    steps.append([snap(view={"rx": -15, "ry": 30, "focus": ["pusher"]}, rods=rods, act="place", moving=["chopstick"])])
+    # 7. 内筒を角筒に（割り箸は内）
+    cur["pusher"] = (inner_closed, mul(G_build, inner_rel(inner_closed)))
+    steps.append([snap(view={"rx": -15, "ry": 30, "focus": ["pusher"]}, rods=rods)])
+    # 8. 台の糊代を下へ山折り（机の少し上で）
+    cur["base"] = ({}, lie("base", 110.0, 0.0, lift=10.0))
+    a8 = snap(view={"rx": -40, "ry": 20, "focus": ["base"]}, rods=rods)
+    cur["base"] = (base_folded, mul(translate(0.0, 0.0, 0.0), place_by(S["base"], base_folded, [(g, g), (g + b, g), (g, g + b)],
+                                                                         [(110.0, -10.0, 0.0), (110.0 + b, -10.0, 0.0), (110.0, -10.0, b)])))
+    steps.append([a8, snap(view={"rx": -40, "ry": 20, "focus": ["base"]}, rods=rods)])
+    # 9. 台を内筒の上の口に差し込む
+    cur["base"] = (base_folded, mul(G_build, base_rel(base_folded)))
+    steps.append([snap(view={"rx": -30, "ry": 30, "focus": ["pusher", "base"]}, rods=rods, act="place", moving=["base"])])
+    # 10. 扇を蛇腹に畳む（机の上）
+    cur["fan"] = ({}, lie("fan", -40.0, 40.0, lift=1.0))
+    a10 = snap(view={"rx": -60, "ry": 10, "focus": ["fan"]}, rods=rods)
+    cur["fan"] = (fan_stack, place_by(S["fan"], fan_stack, [(0.0, 0.0), (0.0, fold_w), (10.0, 0.0)], [(-40.0, -1.0, 40.0), (-40.0, -1.0, 40.0 + fold_w), (-30.0, -1.0, 40.0)]))
+    steps.append([a10, snap(view={"rx": -60, "ry": 10, "focus": ["fan"]}, rods=rods)])
+    # 11. 受けを U の字に（机の上）
+    cur["cradle"] = ({}, lie("cradle", 100.0, 40.0, lift=0.5))
+    a11 = snap(view={"rx": -40, "ry": 20, "focus": ["cradle"]}, rods=rods)
+    cur["cradle"] = (cradle_u, place_by(S["cradle"], cradle_u, [(0.0, c_y0), (c_w, c_y0), (0.0, c_y1)], [(100.0, -0.5, 40.0), (100.0 + c_w, -0.5, 40.0), (100.0, -0.5, 40.0 + (c_y1 - c_y0))]))
+    steps.append([a11, snap(view={"rx": -40, "ry": 20, "focus": ["cradle"]}, rods=rods)])
+    # 12. 受けを台の印に貼る
+    cur["cradle"] = (cradle_u, mul(G_build, cradle_rel(cradle_u)))
+    steps.append([snap(view={"rx": -35, "ry": 30, "focus": ["base", "cradle"]}, rods=rods, act="place", moving=["cradle"])])
+    # 13. 畳んだ扇を受けに立てて貼る
+    cur["fan"] = (fan_stack, mul(G_build, fan_rel(fan_stack)))
+    steps.append([snap(view={"rx": -20, "ry": 30, "focus": ["base", "cradle", "fan"]}, rods=rods, act="place", moving=["fan"])])
+    # 14. 像を山折りで裏どうし（机の上）
+    cur["figure"] = ({}, lie("figure", -20.0, 80.0, lift=2.0))
+    a14 = snap(view={"rx": -50, "ry": 10, "focus": ["figure"]}, rods=rods)
+    fx0 = min(x for x, _ in parts["figure"].outline)
+    cur["figure"] = (fig_folded, place_by(S["figure"], fig_folded, [(fw / 2, fy), (fw / 2 + 10, fy), (fw / 2, fy - 10)],
+                                          [(-20.0 + fw / 2 - fx0, -2.0, 80.0 + fy), (-10.0 + fw / 2 - fx0, -2.0, 80.0 + fy), (-20.0 + fw / 2 - fx0, -2.0, 80.0 + fy - 10)]))
+    steps.append([a14, snap(view={"rx": -50, "ry": 10, "focus": ["figure"]}, rods=rods)])
+    # 15. 像を台の受けの前に立てて貼る
+    cur["figure"] = (fig_folded, mul(G_build, fig_rel(fig_folded)))
+    steps.append([snap(view={"rx": -15, "ry": 30, "focus": ["base", "cradle", "fan", "figure"]}, rods=rods, act="place", moving=["figure"])])
+
+    def group_at(G):
+        for k, rel in (("pusher", inner_rel(inner_closed)), ("base", base_rel(base_folded)), ("cradle", cradle_rel(cradle_u)),
+                       ("fan", fan_rel(fan_stack)), ("figure", fig_rel(fig_folded))):
+            cur[k] = (cur[k][0], mul(G, rel))
+        return chop(G)
+    # 16. 外筒を手に持つ所へ、組を外筒の下から入れる
+    cur["tube"] = (tube_closed, tube_at(tube_closed, 0.0, y_bottom))
+    G_below = translate(0.0, y_bottom + fold_h + 20.0, 0.0)
+    r16a = group_at(G_below)
+    a16 = snap(view={"rx": -10, "ry": 25}, rods=r16a)
+    G_rest = translate(0.0, rest_top, 0.0)
+    r16 = group_at(G_rest)
+    steps.append([a16, snap(view={"rx": -10, "ry": 25}, rods=r16, act="thread", moving=sorted(group_keys + ["chopstick"]))])
+    # 17. 押し上げると扇が口から出て開く（開く所は custom）
+    G_open = translate(0.0, open_top, 0.0)
+    pivot = apply(G_open, (0.0, 0.0, zc))
+    r17 = group_at(G_open)
+    rise = snap(view={"rx": -10, "ry": 25}, rods=r17)
+    opening_poses = []
+    for i in range(1, 11):
+        pose_ = snap(view={"rx": -5, "ry": 15}, rods=r17, custom=("fan",))
+        pose_["parts"]["fan"]["panels"] = _fan_open(scene, "fan", pivot, opening, i / 10)
+        opening_poses.append(pose_)
+    steps.append([rise] + opening_poses)
+    # 18. 引き下げると畳まれて筒に入る
+    closing = []
+    for i in range(9, -1, -1):
+        pose_ = snap(view={"rx": -5, "ry": 15}, rods=r17, custom=("fan",))
+        pose_["parts"]["fan"]["panels"] = _fan_open(scene, "fan", pivot, opening, i / 10)
+        closing.append(pose_)
+    r18 = group_at(G_rest)
+    steps.append(closing + [snap(view={"rx": -10, "ry": 25}, rods=r18)])
+    # できあがりの動き: 押し上げて扇が開く
+    finale = [rise] + opening_poses
+    if len(steps) != len(steps_text):
+        raise ValueError(f"段の数 {len(steps)} が手順の文の数 {len(steps_text)} と合わない")
+    # 中身を分解して見せる: 静かな時の形から、組を外筒の下へ抜き、組の中は入れた道の逆へ離す（台は内筒の上へ、受けと扇は台の上へ、
+    # 像は前へ）。割り箸は内筒と一緒
+    group_at(G_rest)
+    down = 150.0
+    away = {"pusher": (0.0, down, 0.0), "base": (0.0, down - 30.0, 0.0), "cradle": (0.0, down - 50.0, 0.0), "fan": (0.0, down - 70.0, 0.0),
+            "figure": (0.0, down - 40.0, 30.0)}
+    exploded_states = {k: (ang, mul(translate(*away[k]), pl)) if k in away else (ang, pl) for k, (ang, pl) in cur.items()}
+    exploded = scene.pose(exploded_states, view={"rx": -15, "ry": 30}, act="move", moving=sorted(away),
+                          rods=chop(mul(translate(0.0, down, 0.0), G_rest)))
+    # 内側を見る時に外す面: 外筒と内筒の、見る人の方（z が一番大きい所）にある面
+    def front_face(key):
+        _, wm = scene.state(key, *cur[key])
+        from shapely.geometry import Polygon
+        def zc(i):
+            c = Polygon(S[key].panels[i]).centroid
+            return apply(wm[i], (c.x, c.y, 0.0))[2]
+        body = [i for i in range(len(wm)) if not any(Polygon(gl).intersection(Polygon(S[key].panels[i])).area > 0.99 * Polygon(S[key].panels[i]).area for gl in parts[key].glue)]
+        return str(max(body, key=zc))
+    structure = {"inside": {"pusher": "tube", "base": "pusher", "cradle": "tube", "fan": "tube", "figure": "tube", "chopstick": "pusher"},
+                 "exploded": exploded, "cutaway": {"tube": [front_face("tube")], "pusher": [front_face("pusher")]}}
+    rod_kinds = {"chopstick": {"r": sf.CHOPSTICK_W / 2, "color": "#d9c49a", "kind": "rod", "owner": "pusher"}}
+    return steps_text, steps, finale, rod_kinds, {}, structure
+
+
+def _slider_fan(scene, p):
+    from .templates import slider_fan as sf
+    return _goraigo_rise(scene, p) if p["push_part"] == sf.RISE else None
+
+
+RECIPES = {"pivot_counterweight": _tiger, "slider_fan": _slider_fan}
 
 
 def build(scenario_path, commit=None):
@@ -456,14 +706,16 @@ def build(scenario_path, commit=None):
     made = RECIPES[tid](scene, p)
     if made is None:
         return None
-    texts, steps, finale, rods, balls = made
+    texts, steps, finale, rods, balls, structure = made
     toy = path.stem.replace("_", "-")
     return {
         "format": FORMAT, "toy": toy, "template": tid, "source_id": sc["source_id"], "params": sc["params"],
-        "paper": {"w": scene.page.w, "h": scene.page.h, "at": {q.key: [round(q.x, 4), round(q.y, 4)] for q in layout["parts"]}},
+        "paper": {"w": scene.page.w, "h": scene.page.h, "place": scene.paper_place(),
+                  "at": {q.key: [round(q.x, 4), round(q.y, 4)] for q in layout["parts"]}},
         "parts": scene.part_list(),
         "steps": [{"n": i + 1, "text": t, "poses": poses} for i, (t, poses) in enumerate(zip(texts, steps))],
         "finale": {"poses": finale},
+        "structure": structure,
         "rods": rods, "balls": balls,
         "engine": {"commit": commit, "command": f"python -m omochae.assembly3d --scenario {path.as_posix()}"},
     }
