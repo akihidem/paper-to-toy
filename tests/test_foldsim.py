@@ -34,8 +34,7 @@ def check(out, tpl, params, head):
 tab = {"push_part": "tab"}
 out, failures = export("slider_fan", tab, load_source(slider_fan.SOURCE), tempfile.mkdtemp())
 assert not failures
-# 扇の足の帯（EP-0012、2026-11-06 に足した 8 帯）も折り線があるので書き出す
-assert check(out, slider_fan, tab, "slider_fan") == ["slider_fan_band_foldsim.svg", "slider_fan_base_foldsim.svg", "slider_fan_fan_foldsim.svg", "slider_fan_pusher_foldsim.svg", "slider_fan_tube_foldsim.svg"]
+assert check(out, slider_fan, tab, "slider_fan") == ["slider_fan_base_foldsim.svg", "slider_fan_fan_foldsim.svg", "slider_fan_pusher_foldsim.svg", "slider_fan_tube_foldsim.svg"]
 
 # 2. 虎（首の形）と、名前の頭・部品の選び
 neck = {"mount": "neck"}
@@ -51,7 +50,7 @@ assert pivot_counterweight.parts({**pivot_counterweight.DEFAULTS, **neck})[0].cu
 # 3. 検査に落ちる寸法は書き出さず、前の回の同じ頭の SVG も残さない。部品を減らした回は、減らした分だけになる
 d = tempfile.mkdtemp()
 src = load_source(slider_fan.SOURCE)
-assert len(export("slider_fan", tab, src, d)[0]) == 5  # 外筒・内筒・台・扇・足の帯（足の帯は EP-0012 で足した）
+assert len(export("slider_fan", tab, src, d)[0]) == 4
 out, failures = export("slider_fan", {"push_part": "tab", "fold_height": 50}, src, d)
 assert out == [] and [f.floor for f in failures] == ["F5.fan_height"] and not any(pathlib.Path(d).iterdir())
 export("slider_fan", tab, src, d)
@@ -69,26 +68,25 @@ for tpl in TEMPLATES.values():
 # 模様に読める --name は断り、頭 a・b の SVG を消さない（形の検査は tests/test_path_confine.py。ここは消さない事を見る）
 from omochae.model import ToolMissing
 d = tempfile.mkdtemp()
-# 2 つの名前 × 5 部品（足の帯は EP-0012 で足した。前は 4 部品で 8）
 for n in ("a", "b"):
     export("slider_fan", tab, src, d, name=n)
 try:
     export("slider_fan", {"push_part": "tab", "fold_height": 50}, src, d, name="[ab]")
     raise AssertionError("模様に読める名前を通した")
 except ToolMissing:
-    assert len(list(pathlib.Path(d).iterdir())) == 10
+    assert len(list(pathlib.Path(d).iterdir())) == 8
 # 寸法が落ちる時も、知らない部品の key を先に落とし、前の SVG を消さない
 try:
     export("slider_fan", {"push_part": "tab", "fold_height": 50}, src, d, name="a", parts={"fna"})
     raise AssertionError("知らない部品を通した")
 except ValueError:
-    assert len(list(pathlib.Path(d).iterdir())) == 10
+    assert len(list(pathlib.Path(d).iterdir())) == 8
 # 部品が作れない寸法（型の違う値）と知らない部品の key を一緒に渡しても、key を先に落とし、前の SVG を消さない
 try:
     export("slider_fan", {"push_part": "tab", "fold_count": "many"}, src, d, name="a", parts={"fna"})
     raise AssertionError("知らない部品を通した")
 except ValueError:
-    assert len(list(pathlib.Path(d).iterdir())) == 10
+    assert len(list(pathlib.Path(d).iterdir())) == 8
 # 雛形の部品でも今の形に無い物（吊る形の drop）は落とし、前の SVG を消さない
 dh = tempfile.mkdtemp()
 tsrc = load_source(pivot_counterweight.SOURCE)
