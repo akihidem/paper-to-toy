@@ -127,6 +127,35 @@
     ]
    },
    "note": "虎 tora-v5（#119・合体 4fad8f3 と #124・合体 41c90b6）。写真と照らした直しの 1 本目と 2 本目"
+  },
+  {
+   "version": 5,
+   "commit": "e7cf5f7085020652fe9125188b781870b9961df2",
+   "at": "2026-11-06",
+   "proposals": [
+    {
+     "id": "EP-0047",
+     "target": {
+      "kind": "template",
+      "name": "pivot_counterweight"
+     },
+     "title": "pivot_counterweight（紙 neck）: 作る前のレビューの指摘を、雛形に入れるか見る",
+     "numbers": {
+      "reviews": 1,
+      "reports": 0
+     },
+     "finding": "見える平らな部品は、頭の上で折り返した鏡写しと 1 枚にし、裏どうしを貼ると両側に絵が出る（御来迎 v13 の像と虎 v6 の頭で同じ作り）。虎は頭を両側から見た顔の 1 枚にした（paper-to-toy #129）"
+    }
+   ],
+   "sheet_sets": {
+    "pivot_counterweight": "tora-v6"
+   },
+   "sources": {
+    "pivot_counterweight": [
+     "NDL-1187053-R0000014-R"
+    ]
+   },
+   "note": "虎 tora-v6（#129・合体 e7cf5f7）。首の形。見本は examples/tora_v6.json（v5 の見本に head_sides 2）"
   }
  ],
  "next": [
