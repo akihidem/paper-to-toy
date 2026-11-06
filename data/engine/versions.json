@@ -9,5 +9,146 @@
    "note": "輪を足す前からの形。刷った組との結び付きは、次の版から刻む"
   }
  ],
- "next": []
+ "next": [
+  {
+   "id": "EP-0001",
+   "target": {
+    "kind": "template",
+    "name": "balance"
+   },
+   "title": "balance（紙 okiagari）: 作る前のレビューの指摘を、雛形に入れるか見る",
+   "numbers": {
+    "reviews": 3,
+    "reports": 0
+   },
+   "finding": "重り（油粘土）を付ける所の線と、部品の向きと貼る順を紙に示す。切る線と折る線を見分けられるようにする",
+   "adopted_at": "2026-11-06"
+  },
+  {
+   "id": "EP-0002",
+   "target": {
+    "kind": "template",
+    "name": "balance"
+   },
+   "title": "balance（紙 yajirobe）: 作る前のレビューの指摘を、雛形に入れるか見る",
+   "numbers": {
+    "reviews": 3,
+    "reports": 0
+   },
+   "finding": "真ん中の軸にも竹串を貼る線を足し、左右の腕の長さをそろえる。棒の上に立つ全体の形は、要る部分を人が選べる形にする",
+   "adopted_at": "2026-11-06"
+  },
+  {
+   "id": "EP-0003",
+   "target": {
+    "kind": "template",
+    "name": "lever_link"
+   },
+   "title": "lever_link（紙 ebako）: 作る前のレビューの指摘を、雛形に入れるか見る",
+   "numbers": {
+    "reviews": 4,
+    "reports": 0
+   },
+   "finding": "絵を隠す天幕の紙と、天幕を巻き上げる糸と支えの穴を部品に足し、正面だけでなく箱の形で出す",
+   "adopted_at": "2026-11-06"
+  },
+  {
+   "id": "EP-0004",
+   "target": {
+    "kind": "template",
+    "name": "lever_link"
+   },
+   "title": "lever_link（紙 saru_take）: 作る前のレビューの指摘を、雛形に入れるか見る",
+   "numbers": {
+    "reviews": 4,
+    "reports": 0
+   },
+   "finding": "竹登り猿と竿登りの猿の紙は 1 つにまとめる。猿は両手両足のある立体か両面にし、枠のある棒と中の棒の部品を足す",
+   "adopted_at": "2026-11-06"
+  },
+  {
+   "id": "EP-0005",
+   "target": {
+    "kind": "template",
+    "name": "lever_link"
+   },
+   "title": "lever_link（紙 sumo）: 作る前のレビューの指摘を、雛形に入れるか見る",
+   "numbers": {
+    "reviews": 3,
+    "reports": 0
+   },
+   "finding": "腕・頭と胴・足を別々の部品にして後からつなぐ。腕の真ん中に竹串を通して回すと上下する形にする",
+   "adopted_at": "2026-11-06"
+  },
+  {
+   "id": "EP-0006",
+   "target": {
+    "kind": "template",
+    "name": "popup_jar"
+   },
+   "title": "popup_jar（紙 square）: 作る前のレビューの指摘を、雛形に入れるか見る",
+   "numbers": {
+    "reviews": 2,
+    "reports": 0
+   },
+   "finding": "人形は飛び出さず上で回る。息を吹き込む筒と、中で人形を回す風車を、絵に無い中の作りとして出す",
+   "adopted_at": "2026-11-06"
+  },
+  {
+   "id": "EP-0007",
+   "target": {
+    "kind": "template",
+    "name": "pull_nod"
+   },
+   "title": "pull_nod（紙 bow）: 作る前のレビューの指摘を、雛形に入れるか見る",
+   "numbers": {
+    "reviews": 3,
+    "reports": 0
+   },
+   "finding": "杵と臼の部品を足し、糸を引くと体が起きて腕を振りかぶる、餅つきの動きの作りにする",
+   "adopted_at": "2026-11-06"
+  },
+  {
+   "id": "EP-0008",
+   "target": {
+    "kind": "template",
+    "name": "pull_nod"
+   },
+   "title": "pull_nod（紙 jaw）: 作る前のレビューの指摘を、雛形に入れるか見る",
+   "numbers": {
+    "reviews": 4,
+    "reports": 0
+   },
+   "finding": "頭と下顎を立体で出し、糸を付ける位置と開くための重りの位置を示す。糸を通す棒も型紙で作る",
+   "adopted_at": "2026-11-06"
+  },
+  {
+   "id": "EP-0009",
+   "target": {
+    "kind": "template",
+    "name": "pull_nod"
+   },
+   "title": "pull_nod（紙 peck）: 作る前のレビューの指摘を、雛形に入れるか見る",
+   "numbers": {
+    "reviews": 2,
+    "reports": 0
+   },
+   "finding": "原典を読むと、鳥は動く仕掛けの無い鑑賞用の模型らしい。ついばむ仕掛けの読みを見直す",
+   "adopted_at": "2026-11-06"
+  },
+  {
+   "id": "EP-0010",
+   "target": {
+    "kind": "template",
+    "name": "spinner"
+   },
+   "title": "spinner（紙 pinwheel）: 作る前のレビューの指摘を、雛形に入れるか見る",
+   "numbers": {
+    "reviews": 3,
+    "reports": 0
+   },
+   "finding": "折る線と曲げる印を紙に刷り、題の「紙の角を軸へ寄せる」を、どの色をどの面にするかまで分かる字にする",
+   "adopted_at": "2026-11-06"
+  }
+ ]
 }
