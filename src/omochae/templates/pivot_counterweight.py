@@ -171,11 +171,15 @@ def check_physics(p):
         room = p["ear_length"] - HOLE_MARGIN
         if room < reach and math.degrees(math.asin(room / reach)) < MIN_SWING:
             out.append(Failure("F5.pivot", "頭", f"頭が胴に当たるまで {MIN_SWING}° 揺れない"))
-        # 頭は首の帯に貼った 1 枚の紙で、胴の幅の真ん中（帯の面＝軸に直交する面）にある。前の 2 本の脚は胴の横の縁から
-        # LEG_SIDE_GAP 内の左右にあり、間が空く。頭は脚の間を通るので、脚がある時は床までが脚の高さだけ遠い。
-        # 間が 2mm 未満の胴では、脚の分を足さない（頭の紙と脚が触れうるため）
-        gap = p["body_width"] - 2 * (LEG_SIDE_GAP + LEG_SIDE)
-        lift = p["leg_height"] if gap >= 2 else 0
+        # 吊る形の頭の裏には粘土の玉（3g で直径 約 15mm）を貼るので、頭は左右の前の脚の間を通らない物として見る。
+        # 脚の分だけ床が遠いと見てよいのは、揺れても頭の後ろの端が、前の脚の角筒の前の面より前にある時だけ。
+        # 頭は耳の穴（胴の前の面から ear_length − HOLE_MARGIN 前）の真下で、前後に head_w の幅。揺れると後ろの端は
+        # 軸から頭の下の端までの長さ·sin(MIN_SWING) だけ後ろへ寄る。前の脚の角筒は、胴の前の面から LEG_INSET＋LEG_TAB 後ろから始まる
+        lift = 0
+        if p["leg_height"] > 0:
+            back = (p["ear_length"] - HOLE_MARGIN) - p["head_w"] / 2 - reach * math.sin(math.radians(MIN_SWING))
+            if back > -(LEG_INSET + LEG_TAB):
+                lift = p["leg_height"]
         if H + lift - HOLE_MARGIN - reach < 3:
             out.append(Failure("F5.pivot", "頭", "頭の下端が床に近すぎる"))
     else:
