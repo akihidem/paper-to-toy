@@ -1,7 +1,7 @@
-"""御来迎（slider_fan）の色と筒の札を確かめる。どの形にも効く。
+"""御来迎（slider_fan）の色を確かめる。どの形にも効く。
 
 本人の決定（2026-11-06）「実物の写真と照らした直しは、御来迎・虎とも全部入れる。次の版へ」の色の直し（案 D）。
-- 筒は白木、扇は金に寄せ、筒の 1 面目に紫の枠の札を描く（実物は「御来迎」の字の札。部品の絵に字は刷らないので形だけ）。
+- 筒は白木、扇は金に寄せる。v12 で足した筒の紫の枠の札は、本人の指示（2026-11-06「① 外筒の紫色の部分は不用（外す）」）で外した。
 - どの形も色の境で折る（線を刷らない）ので、隣り合う面と板が同じ色にならない事を、全部の形で見る。
 - 寸法の直し（扇を細かく小さく・筒を細長く）は、次の組の形の見本の場面で入れる（この試験ではない）。
 """
@@ -37,31 +37,17 @@ for c in (sf.FAN_A, sf.FAN_B):
 for c in (sf.WOOD, sf.WOOD_ALT):
     assert sum(rgb(c)) / 3 >= 0.75, c
 
-# 2. 筒の札（紫の枠）は 1 面目の内で、折り線・角の 2 本線・上と下の帯・部品の札「1 外筒」・溝・穴にかからない。寸法の範囲の端でも見る
-for A in (sf.RANGES["tube_side"][0], 30, sf.RANGES["tube_side"][1]):
-    for H in (sf.RANGES["tube_height"][0], 84, 120, sf.RANGES["tube_height"][1]):
-        x0, y0, x1, y1 = sf.label_box(A, H)
-        assert 1 <= x0 and x1 <= A - 1.2 - 1, (A, H, x0, x1)  # 左の折り線（筒の端）と、右の角の 2 本線（一辺−1.2）から 1mm 以上
-        assert 4.5 + 1 <= y0 and y1 <= H - 5 - 1, (A, H, y0, y1)  # 上の帯（部品の札もここ）と下の帯から 1mm 以上
-        assert y1 - y0 >= x1 - x0, (A, H, x1 - x0, y1 - y0)  # 札は縦長（太く短い筒でも横長にしない。検品の指摘）
+# 2. 筒の紫の枠の札は無い（指示 ①）: どの形も、外筒の絵は上と下の帯・面の地（白木の 4 つの色が全部ある）と、角の 2 本線（線の色）だけ。
+#    塗りも線も、ほかの色（紫の枠・白い札の紙）を持たない
 for form in sf.PUSH_PARTS:
     p = {**sf.DEFAULTS, "push_part": form, **({"pusher_height": 84} if form in ("tube", "stick") else {})}
     tube = {q.key: q for q in sf.parts(p)}["tube"]
-    x0, y0, x1, y1 = sf.label_box(p["tube_side"], p["tube_height"])
-    # 札は外筒の絵に本当に描かれる: 紫の枠が札の枠そのもので、白い紙がその内にある（位置の式だけ見ていると、
-    # 描く所が消えても別の面へ描いても通った。検品の指摘）
-    frames = [a for a in tube.art if a.get("fill") == sf.LABEL_FRAME]
-    papers = [a for a in tube.art if a.get("fill") == sf.LABEL_PAPER]
-    assert len(frames) == 1 and len(papers) == 1, (form, len(frames), len(papers))
-    bbox = lambda a: (min(x for x, _ in a["pts"]), min(y for _, y in a["pts"]), max(x for x, _ in a["pts"]), max(y for _, y in a["pts"]))
-    assert all(abs(u - v) < 1e-9 for u, v in zip(bbox(frames[0]), (x0, y0, x1, y1))), (form, bbox(frames[0]))
-    px0, py0, px1, py1 = bbox(papers[0])
-    assert x0 < px0 < px1 < x1 and y0 < py0 < py1 < y1, (form, bbox(papers[0]))
-    assert tube.art.index(papers[0]) > tube.art.index(frames[0]), form  # 白い紙は枠の上に描く（後に描く物が上）
-    assert all(not (x0 - r <= hx <= x1 + r and y0 - r <= hy <= y1 + r) for hx, hy, r in tube.holes), form
-    assert all(cx >= x1 for cx, _, _, _ in [(c[0], c[1], c[2], c[3]) for c in tube.cuts]), form
-    # 外形の切れ込み（つまみの形の溝）は 2 面目にある
-    assert all(x >= p["tube_side"] or not (x0 < x < x1 and y0 < y < y1) for x, y in tube.outline), form
+    fills = {a.get("fill") for a in tube.art if a["kind"] == "poly"}
+    strokes = {a.get("stroke") for a in tube.art if a["kind"] == "line"}
+    assert fills == {sf.WOOD, sf.WOOD_ALT, sf.WOOD_TOP, sf.WOOD_BOTTOM}, (form, fills)
+    assert strokes == {sf.LINE} and sum(1 for a in tube.art if a["kind"] == "line") == 2, (form, strokes)
+    assert all(a["kind"] in ("poly", "line") for a in tube.art), form
+
 # 3. 範囲の上限: 筒の高さを 130 まで書ける形は、内筒も同じ高さまで書ける（内筒を下から押す形と柄の形は、内筒が筒より短いと落とす）
 assert sf.RANGES["pusher_height"][1] >= sf.RANGES["tube_height"][1]
 # 折り数は写真の 44〜52 枚を書け、上限 60 まで受ける。扇の長さを書く時も、合っている長さを範囲の検査が先に落とさない
@@ -72,4 +58,4 @@ assert sf.check_range({**sf.DEFAULTS, "fold_count": 61})[0].floor == "F5.range"
 for form in ("tube", "stick"):
     tall = {**sf.DEFAULTS, "push_part": form, "tube_height": 130, "pusher_height": 130}
     assert sf.check_range(tall) == [] and not [f for f in sf.check_physics(tall) if "押し切れない" in f.message], form
-print("ok 御来迎の色（白木・金）と筒の札")
+print("ok 御来迎の色（白木・金）・筒の札は無い")

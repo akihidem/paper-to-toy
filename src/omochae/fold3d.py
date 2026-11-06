@@ -646,8 +646,10 @@ def check_rise(parts, p):
     - 3D.fit: 折った内筒の断面が外筒の断面に収まる（すき間が 0 より大きい）
     - 3D.stroke: 内筒を外筒の真ん中に入れ、台の上の面（内筒の上の端）を、静かな時（口から押し上げる量 s だけ下）から開いた位置
       （口の高さ）まで動かす。静かな時に、台の上に立つ物（受けの底の紙＋扇の高さ・像の高さ）の上の端が口より下（口と同じ高さは落とす）、
-      差し込みが内筒の一辺（折った断面の幅）以上。開いた位置で、内筒の下の端が外筒の下へ RISE_GRIP 以上出る（指でつまんで押し引きする）。
-      筒の高さと内筒の長さ・一辺は折った形から、押し上げる量・扇の高さ・像の高さ・紙の厚さは寸法から取る（つまみの形の 3D.fan と同じ取り方）
+      内筒が外筒に内筒の一辺（折った断面の幅）以上入っている（静かな時が一番短い。傾かない）。割り箸（刷る部品でないので、雛形の
+      見込みの長さ CHOPSTICK_LEN で置く）は台の糊代の下から下へ伸び、内筒に CHOPSTICK_GLUE 以上貼れて、開いた位置でも外筒の下へ
+      CHOPSTICK_GRIP 以上残る（押し引きする所）。
+      筒の高さと内筒の長さ・一辺は折った形から、押し上げる量・扇と像の高さ・紙の厚さ・台の糊代は寸法から取る（つまみの形の 3D.fan と同じ取り方）
     見ない事: 扇が開く所（受けと蛇腹の折り目のばねで開く仕組みで、蝶番ではないので、面と蝶番の 3D では組めない）・台（蓋）と受けと
     像は折らない・紙の厚み・たわみ・摩擦。
     """
@@ -685,21 +687,27 @@ def check_rise(parts, p):
     x0, y0, x1, y1 = sec_i.bounds
     a = max(x1 - x0, y1 - y0)
     s, t, h, fh = p["push_amount"], p["paper_thickness"], p["fold_height"], p["figure_h"]
-    grip = TEMPLATES["slider_fan"].RISE_GRIP
+    sf = TEMPLATES["slider_fan"]
     rest = H - s  # 静かな時の、台の上の面の外筒の底からの高さ。開いた位置では H（口の高さ）
     stand = max(t + h, fh)
+    inside = min(L, rest)  # 静かな時に、内筒が外筒の中に入っている長さ（下の端が外筒の下に出る時は、外筒の底から台まで）
+    _, below = sf.chopstick_lengths(L, H, p["base_glue"])  # 開いた位置で、割り箸が外筒の下へ出る長さ（所見の文に言う）
     bad = []
     if rest + stand >= H - EPS:
         bad.append(f"静かな時に、台の上の物（扇 {t + h:g}・像 {fh:g}）の上の端が口から {rest + stand - H:.1f}mm 出る")
-    if rest < a - EPS:
-        bad.append(f"静かな時に、内筒が外筒に {rest:.1f}mm しか差し込まれず、一辺 {a:.1f} より短い")
-    if L - H < grip - EPS:
-        bad.append(f"開いた位置で、内筒の下の端が外筒の下へ {L - H:.1f}mm しか出ず、{grip}mm 出ない")
+    if inside < a - EPS:
+        bad.append(f"静かな時に、内筒が外筒に {inside:.1f}mm しか入らず、一辺 {a:.1f} より短い")
+    # 割り箸の決まり（貼れる長さ・開いた位置で外筒の下に残る長さ）は、型紙の床と同じ式と同じ順（雛形の chopstick_problem）で、
+    # 折った形の筒の高さと内筒の長さで見る（2 つに書くと判定がずれた。見直しの指摘）
+    problem = sf.chopstick_problem(L, H, p["base_glue"])
+    if problem:
+        bad.append(problem)
     if bad:
         failures.extend(Failure("3D.stroke", inner_label, m) for m in bad)
         return notes, failures
-    notes.append(f"押し上げる {inner_label}: 台の上の面は底から {rest:.1f}mm（静かな時。扇と像は口の {H - rest - stand:.1f}mm 下に隠れる）から "
-                 f"{H:.1f}mm（開いた位置。口の高さ）まで {s:g}mm 上がる。内筒の下の端は、開いた位置でも外筒の下へ {L - H:.1f}mm 出る")
+    notes.append(f"押し上げる {inner_label}: 台の上の面は底から {rest:.1f}mm（静かな時。扇と像は口の {H - rest - stand:.1f}mm 下に隠れ、内筒は外筒に "
+                 f"{inside:.1f}mm 入る）から {H:.1f}mm（開いた位置。口の高さ）まで {s:g}mm 上がる。割り箸（{sf.CHOPSTICK_LEN}mm）は、開いた位置でも"
+                 f"外筒の下へ {below:.1f}mm 出る")
     return notes, failures
 
 
