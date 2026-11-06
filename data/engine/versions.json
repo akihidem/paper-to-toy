@@ -81,20 +81,6 @@
    "adopted_at": "2026-11-06"
   },
   {
-   "id": "EP-0006",
-   "target": {
-    "kind": "template",
-    "name": "popup_jar"
-   },
-   "title": "popup_jar（紙 square）: 作る前のレビューの指摘を、雛形に入れるか見る",
-   "numbers": {
-    "reviews": 2,
-    "reports": 0
-   },
-   "finding": "人形は飛び出さず上で回る。息を吹き込む筒と、中で人形を回す風車を、絵に無い中の作りとして出す",
-   "adopted_at": "2026-11-06"
-  },
-  {
    "id": "EP-0007",
    "target": {
     "kind": "template",
