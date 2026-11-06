@@ -338,7 +338,7 @@ PYTHONPATH=src .venv/bin/python -m omochae.engine_loop check examples/bundles/sa
 PYTHONPATH=src .venv/bin/python -m omochae.engine_loop take examples/bundles/sample_made_up.json    # 入口。連絡先の形のある文は落として数だけ残す。続けて案を起こし、Issue の下書きを置く
 PYTHONPATH=src .venv/bin/python -m omochae.engine_loop list                     # 案の一覧（下書きが置き場にある案に印。show <番号> で当たった文つき）
 PYTHONPATH=src .venv/bin/python -m omochae.engine_loop propose                  # 案と下書きを起こし直す（take が続けて回すので、手で打つのは確かめたい時だけ）
-PYTHONPATH=src .venv/bin/python -m omochae.engine_loop adopt EP-0001 --by <人>   # 人が採る（reject で採らない）
+PYTHONPATH=src .venv/bin/python -m omochae.engine_loop adopt <案の番号> --by <人>   # 人が採る（reject で採らない）。番号は take と list が出す
 PYTHONPATH=src .venv/bin/python -m omochae.engine_loop release --commit <番号> --by <人> --sheet-set slider_fan=<組の名>   # 直しが main に入った後、次の版を刻む
 PYTHONPATH=src .venv/bin/python -m omochae.engine_loop compare                  # 版ごとの数を並べる（判定はしない）
 ```
