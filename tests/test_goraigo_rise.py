@@ -27,6 +27,7 @@ assert SC["template"] == "slider_fan" and V12["push_part"] == sf.RISE
 A, H = V12["tube_side"], V12["tube_height"]
 assert abs(V12["fold_height"] / A - 1.1) <= 0.05 and abs(V12["figure_w"] / A - 0.4) <= 0.01, (V12["fold_height"], V12["figure_w"])
 assert 3.8 <= H / A <= 4.0, H / A
+assert sf.RISE_GRIP == 15  # 親指と人差し指の腹でつまむ長さの見込み（前は 10）
 assert sf.check_range(V12) == [], [f.line() for f in sf.check_range(V12)]
 assert sf.check_physics(V12) == [], [f.line() for f in sf.check_physics(V12)]
 assert compose("slider_fan", SC["params"], SRC)[2] == []
@@ -67,15 +68,27 @@ assert not any("本" in m for m in sf.materials(V12)), sf.materials(V12)
 # 3. 題と組み方: 新しい形なので手順の番号は新しい。最後は、内筒を下から押し上げると扇が口から出て開き、引き下げると畳まれて筒に入る
 assert sf.title(V12) == "内筒を下から押し上げる"
 st = sf.steps(V12)
-assert len(st) == 11 and st[0].startswith("刷った物差し"), st
-assert "押し上げる" in st[-1] and "開く" in st[-1] and "引き下げる" in st[-1] and "筒に入る" in st[-1], st[-1]
-assert "一緒に持つ" in st[-1] and "抜ける" in st[-1], st[-1]  # 止めは無いので、静かな時は外筒と内筒を一緒に持つ
+# 作る順（切る → 部品ごとに折る → 貼る → 組む → 押し上げる）で、1 つの段に 1 つの動き
+assert len(st) == 16 and st[0].startswith("刷った物差し") and st[1].startswith("部品を全部、実線で切る"), st
+order = [next(i for i, x in enumerate(st) if x.startswith(head)) for head in
+         ("1 外筒を、色の境で", "1 外筒の糊代を", "2 内筒を、破線で", "2 内筒の糊代を", "3 台の 4 つの糊代を", "3 台を、印のある",
+          "4 扇を色の境で", "6 受けを、2 本の", "6 受けの底の面の裏を", "畳んだ 4 扇の下の端を", "5 像の足を", "4 扇を手で畳み", "1 外筒を片手で持ち", "内筒をゆっくり引き下げる")]
+assert order == sorted(order), order
+assert "片手で持ち" in st[-2] and "もう片方の手" in st[-2] and "ゆっくり押し上げる" in st[-2] and "開く" in st[-2], st[-2]
+assert "ゆっくり引き下げる" in st[-1] and "筒に入る" in st[-1] and "一緒に持つ" in st[-1] and "抜ける" in st[-1], st[-1]
 assert any("2 内筒の上の口に差し込み" in x and "内の面に貼る" in x for x in st) and any("6 受け" in x for x in st)
 
-# 4. 3D の確かめはつまみの形だけを組むので、この形は確かめられない（4）
-r = subprocess.run([sys.executable, "-m", "omochae.fold3d", "--template", "slider_fan", "--params", json.dumps({"push_part": "rise"})],
-                   cwd=ROOT, env={"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin"}, capture_output=True, text=True)
-assert r.returncode == 4, (r.returncode, r.stderr)
+# 4. 3D の入口（python -m omochae.fold3d）は rise も組む: 見本の寸法は通り（0）、既定の寸法に形だけ rise を入れると型紙の検査で落ちる（3）。
+#    中身の確かめは tests/test_goraigo_rise_3d.py
+env3 = {"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin"}
+r = subprocess.run([sys.executable, "-m", "omochae.fold3d", "--scenario", str(ROOT / "examples/goraigo_v12.json")], cwd=ROOT, env=env3, capture_output=True, text=True)
+assert r.returncode == 0 and "閉じる 1 外筒" in r.stdout and "押し上げる 2 内筒" in r.stdout, (r.returncode, r.stdout, r.stderr)
+# --params は寸法の JSON の file の道（前のこの試験は JSON の字を直に渡していて、file が無くて 4 になっていた）
+with tempfile.TemporaryDirectory() as d:
+    (pathlib.Path(d) / "rise.json").write_text(json.dumps({"push_part": "rise"}), encoding="utf-8")
+    r = subprocess.run([sys.executable, "-m", "omochae.fold3d", "--template", "slider_fan", "--params", str(pathlib.Path(d) / "rise.json")],
+                       cwd=ROOT, env=env3, capture_output=True, text=True)
+assert r.returncode == 3 and "F5.stroke" in r.stderr, (r.returncode, r.stderr)
 
 # 5. この形に効かない床は出ない（ほかの形の負の場面の寸法を v12 に足しても、足・穴・溝の床は出ない）
 rise_floors = {"F5.fan_height", "F5.figure_height", "F5.stroke", "F5.slide_clearance", "F5.base_size", "F5.fan_thickness",
@@ -90,14 +103,14 @@ def floors(**extra):
     return [f.floor for f in sf.check_physics({**V12, **extra})]
 assert floors(push_amount=30) == ["F5.fan_height"]                       # 受けの底＋扇の高さ 28.6＋2 に足りず、静かな時に扇が出る
 assert floors(figure_h=30) == ["F5.figure_height"]                       # 像 30＋2 が押し上げる量 31 を超え、静かな時に像が出る
-assert floors(pusher_height=111) == ["F5.stroke"]                        # 内筒が外筒＋10 に足りず、開いた位置で外筒の下に出ない
-assert floors(push_amount=103) == ["F5.stroke"]                          # 押し上げる量が筒の高さを超え、静かな時に台が筒の下に出る
-assert floors(push_amount=81) == ["F5.stroke"]                           # 静かな時の差し込み 21 が内筒の一辺 22 より短く、傾く
+assert floors(pusher_height=114) == ["F5.stroke"]                        # 内筒が外筒＋15 に足りず、開いた位置で外筒の下に 15mm 出ない
+assert floors(push_amount=101) == ["F5.stroke"]                          # 押し上げる量が筒の高さを超え、静かな時に台が筒の下に出る
+assert floors(push_amount=79) == ["F5.stroke"]                           # 静かな時の差し込み 21 が内筒の一辺 22 より短く、傾く
 # 2 つは文を分ける（台が筒の下に出る寸法で「差し込みが負」と言わない）
 msg = lambda **extra: [f.message for f in sf.check_physics({**V12, **extra})][0]
-assert "台が筒の下に出る" in msg(push_amount=103) and "差し込まれず" not in msg(push_amount=103)
-assert "21mm しか差し込まれず" in msg(push_amount=81)
-assert floors(push_amount=80) == []                                       # 差し込み 22 なら通る（境）
+assert "台が筒の下に出る" in msg(push_amount=101) and "差し込まれず" not in msg(push_amount=101)
+assert "21mm しか差し込まれず" in msg(push_amount=79)
+assert floors(push_amount=78) == []                                       # 差し込み 22 なら通る（境）
 assert floors(pusher_side=25, base_side=24.5) == ["F5.slide_clearance"]  # 内筒が外筒の一辺−1 より小さくない
 assert floors(base_side=22) == ["F5.base_size"]                          # 台が内筒と同じ大きさで、糊代の紙 2 枚が口に入らない
 assert floors(base_side=20.9) == ["F5.base_size"]                        # 台が内筒より 1mm を超えて小さく、糊代が壁に届かない
@@ -105,7 +118,7 @@ assert floors(base_side=21) == [] and floors(base_side=21.7) == []       # 境�
 assert floors(fold_count=24) == ["F5.fan_clearance"]                     # 24 枚 × 4mm は 192° で、ほぼ 180° に収まらない
 assert floors(figure_w=25) == ["F5.figure_base"]                         # 像の幅 25 が筒の一辺−2 を超え、筒に入らない
 # 右の列の段の下に文字が重ならない: 筒が短く扇が長い寸法（段が左の列の筒より下まで来る）でも、配置の検査が通る
-short = {**SC["params"], "tube_height": 70, "pusher_height": 80, "push_amount": 48, "fold_count": 35, "fold_height": 45}
+short = {**SC["params"], "tube_height": 70, "pusher_height": 85, "push_amount": 48, "fold_count": 35, "fold_height": 45}
 assert sf.check_physics({**sf.DEFAULTS, **short}) == [], [f.line() for f in sf.check_physics({**sf.DEFAULTS, **short})]
 _, lay, fs = compose("slider_fan", short, SRC)
 assert fs == [], [f.line() for f in fs]

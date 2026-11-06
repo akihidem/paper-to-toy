@@ -1,7 +1,7 @@
 """御来迎の内筒を下から押し上げる形（rise）の外筒と内筒を、3D の中で折って組む確かめ（omochae.fold3d.check_rise）。
 
-本人の決定（2026-11-06）「御来迎 v12 と虎 v5 に、3D の確かめを試験として足す。」による。凍結の基準の床ではなく、
-python -m omochae.fold3d の入口（つまみの形だけを組む）も変えない（rise はそこで 4 のまま。tests/test_goraigo_rise.py で見る）。
+本人の決定（2026-11-06）「御来迎 v12 と虎 v5 に、3D の確かめを試験として足す。」の、御来迎（v12）の分。虎（v5）の分は、虎の次の組の
+変更と一緒に足す（この試験には無い）。凍結の基準の床ではない。入口 python -m omochae.fold3d も rise を組む（tests/test_goraigo_rise.py で見る）。
 見る事は check_rise の注のとおり: 2 本の筒が閉じる・外筒の色の面が外・内筒が外筒に入る・静かな時から開いた位置までの行程。
 扇が開く所は組まない（受けと蛇腹のばねで開く仕組みで、蝶番ではないので）。面は硬い板で、紙の厚み・たわみ・摩擦は入れない。
 """
@@ -27,7 +27,7 @@ notes, failures = fold3d.check_rise(layout["parts"], p)
 assert failures == [], [f.line() for f in failures]
 heads = [n.split(":")[0] for n in notes]
 assert heads == ["閉じる 1 外筒", "外向き 1 外筒", "閉じる 2 内筒", "入れる 2 内筒", "押し上げる 2 内筒"], heads
-assert "10.0mm 出る" in notes[-1] and "口の高さ" in notes[-1], notes[-1]
+assert "15.0mm 出る" in notes[-1] and "口の高さ" in notes[-1], notes[-1]
 
 
 def floors(parts, **extra):
@@ -53,12 +53,12 @@ assert floors(qs) == ["3D.close"], floors(qs)
 assert floors(parts(pusher_side=27)) == ["3D.fit"]
 assert floors(parts(pusher_side=26)) == ["3D.fit"]  # 一辺が同じ時は、すき間が 0 で入らない（紙の厚みを入れなくても落ちる）
 assert floors(parts(pusher_side=25.5)) == []         # すき間 0.5 なら入る（紙の厚みの分の余りは式の床 F5.slide_clearance が見る）
-# 行程: 押し上げる量が足りないと、静かな時に扇が口から出る（押し上げる量 28: 台の上の面 74＋扇 28.75 が口 102 を超える）
+# 行程: 押し上げる量が足りないと、静かな時に扇が口から出る（押し上げる量 28: 台の上の面 72＋扇 28.75 が口 100 を超える）
 assert floors(parts(), push_amount=28) == ["3D.stroke"]
-# 静かな時の差し込みが内筒の一辺より短い（押し上げる量 81: 差し込み 21 が一辺 22 より短い）
-assert floors(parts(push_amount=81), push_amount=81) == ["3D.stroke"]
-# 内筒が外筒＋10 に足りないと、開いた位置で内筒の下の端が外筒の下へ 10mm 出ない
-assert floors(parts(pusher_height=111)) == ["3D.stroke"]
+# 静かな時の差し込みが内筒の一辺より短い（押し上げる量 79: 差し込み 21 が一辺 22 より短い）
+assert floors(parts(push_amount=79), push_amount=79) == ["3D.stroke"]
+# 内筒が外筒＋15 に足りないと、開いた位置で内筒の下の端が外筒の下へ 15mm 出ない
+assert floors(parts(pusher_height=114)) == ["3D.stroke"]
 
 # 3. 型紙の部品を写しても、元の部品は変えない（試験の負の対照が、ほかの試験の部品に漏れない事の確かめ）
 qs = parts()

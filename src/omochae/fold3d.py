@@ -29,7 +29,8 @@
 終了: 0 = 確かめて通った / 3 = 落ちた / 4 = 確かめられない（まだ組めない形・読めない）。
 
 内筒を下から押し上げる形（rise）の外筒と内筒は check_rise で確かめる。本人の決定（2026-11-06）「御来迎 v12 と虎 v5 に、3D の確かめを
-試験として足す。」による試験（tests/test_goraigo_rise_3d.py）だけが呼び、上の入口（つまみの形だけを組む）と凍結の基準の床は変えない。
+試験として足す。」による（試験 tests/test_goraigo_rise_3d.py）。入口 python -m omochae.fold3d も rise を組む（rise は型紙の 1 枚なので、
+入口で「確かめられない」と言わないため。検品の指摘）。つまみの形の確かめと凍結の基準の床は変えない（3D.fit・3D.stroke は凍結の基準に無い）。
 """
 import math
 import sys
@@ -709,18 +710,21 @@ def run(template_id, params, source, title=None, inject=None):
     p, layout, failures = compose(template_id, params, source, title=title, inject=inject or {})
     if failures:
         return [], failures
-    if template_id != "slider_fan" or p.get(TEMPLATES[template_id].FORM) != "tab":
-        raise ToolMissing("まだ 3D で組めない形（最小の 1 本は、御来迎 つまみの形の外筒と竹串だけ）")
+    form = p.get(TEMPLATES[template_id].FORM) if template_id == "slider_fan" else None
+    if form == "rise":
+        return check_rise(layout["parts"], p)
+    if form != "tab":
+        raise ToolMissing("まだ 3D で組めない形（組めるのは、御来迎 つまみの形と、内筒を下から押し上げる形だけ）")
     return check(layout["parts"], p)
 
 
 def main(argv=None):
-    ap = Parser(prog="omochae.fold3d", description="型紙の部品を 3D の中で折って組み、外筒が閉じるか・溝と竹串が並ぶかを確かめる（最小の 1 本: 御来迎 "
-                                                 "つまみの形）。先に型紙と同じ検査を通す。終了: 0 通った / 3 落ちた / 4 確かめられない")
+    ap = Parser(prog="omochae.fold3d", description="型紙の部品を 3D の中で折って組み、外筒が閉じるか・溝と竹串が並ぶかを確かめる（御来迎 "
+                                                 "つまみの形と、内筒を下から押し上げる形）。先に型紙と同じ検査を通す。終了: 0 通った / 3 落ちた / 4 確かめられない")
     ap.add_argument("--scenario", help="場面の JSON（python -m omochae と同じ形）。渡すと --template・--source・--params は使わない")
     ap.add_argument("--template", default="slider_fan", help="雛形（今は slider_fan だけ組める。既定 slider_fan）")
     ap.add_argument("--source", help="data/sources/ の出典の記録の名前（既定は雛形ごと）")
-    ap.add_argument("--params", help="寸法の JSON。push_part（今は tab だけ組める）が要る")
+    ap.add_argument("--params", help="寸法の JSON。push_part（今は tab と rise を組める）が要る")
     args = ap.parse_args(argv)
     try:
         sc = scenario_from_args(args)
