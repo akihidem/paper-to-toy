@@ -27,6 +27,7 @@
 """
 from shapely.geometry import LineString, Polygon, box as rect
 
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（本人の指示 2026-11-05）
 from ..model import Failure, Part
 
 ID = "slide_box"
@@ -372,7 +373,7 @@ def place(by_key, page, top, gap):
 
 
 def bom(p):
-    paper = f"紙（厚さ {p['paper_thickness']}mm 前後）"
+    paper = paper_name(thickness=p['paper_thickness'])
     why = "家庭のプリンタで刷って作るため"
     lid = p["form"] == "lid"
     rows = [

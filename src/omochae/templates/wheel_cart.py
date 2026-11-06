@@ -15,6 +15,7 @@ import math
 
 from shapely.geometry import LineString, Polygon, box
 
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（本人の指示 2026-11-05）
 from ..model import Failure, Part
 from ..pivot_model import paper_mass
 
@@ -552,10 +553,11 @@ def place(by_key, page, top, gap):
 
 
 def bom(p):
-    paper = f"紙（厚さ {p['paper_thickness']}mm 前後・{p['paper_gsm']}g/m² の見込み）"
+    paper = paper_name(gsm=p['paper_gsm'])
     why = "家庭のプリンタで刷って作るため"
     n = p["wheel_layers"] - 1
-    core = f"空き箱の厚紙（厚さ {p['card_thickness']}mm 前後の見込み）。刷った車輪を型にして切る"
+    # 芯の紙の名前は、計算に使う厚さ（card_thickness）から選ぶ。名前を決め打ちにすると、薄い値にした時に計算と名前が食い違う
+    core = f"{paper_name(thickness=p['card_thickness'])}。刷った車輪を型にして切る"
     if p["ride"] == "rat":
         rows = [
             {"number": 1, "key": "body", "name": "胴（鼠）", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（絵の鼠は白く塗った物で、素材は読めない）", "reason": why},
@@ -608,7 +610,7 @@ def materials(p):
         out.append(by["handle"]["material"])
     out.append(f"{by['axle']['material']} {by['axle']['qty']} 本")
     if "core" in by:
-        out.append(f"空き箱の厚紙（車輪の芯 {by['core']['qty']} 枚分）")
+        out.append(f"{paper_name(thickness=p['card_thickness'])}（車輪の芯 {by['core']['qty']} 枚分）")
     return out
 
 
@@ -619,7 +621,8 @@ def steps(p):
     cut = "部品を実線で切る。" + ("中の四角い穴はまだ切らない。" if p["ride"] in ("stick", "mallet") else "")
     out = ["刷った物差しに定規を当て、10cm か確かめる", cut + "穴は竹串の先であけ、軸の穴は竹串が回るまで広げる"]
     if n:
-        out.append(f"車輪を型にして、空き箱の厚紙から車輪 1 つに {n} 枚ずつ芯を切り、刷った車輪の裏に重ねて貼る。芯の真ん中にも穴をあける")
+        # 芯の紙の名前は、用意する物と同じく計算の厚さから選ぶ（決め打ちだと、薄い芯で用意する物と手順の名前が食い違った）
+        out.append(f"車輪を型にして、{paper_name(thickness=p['card_thickness'])}から車輪 1 つに {n} 枚ずつ芯を切り、刷った車輪の裏に重ねて貼る。芯の真ん中にも穴をあける")
     if p["ride"] == "rat":
         out += ["1 胴を破線で山折りし、糊代で貼って箱にする",
                 "竹串を 1 胴の前の 2 つの穴に通し、後ろの 2 つの穴にもう 1 本通す",
