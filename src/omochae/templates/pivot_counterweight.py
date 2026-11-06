@@ -430,6 +430,12 @@ def _stripe(a, b, w0, w1):
                                     (bx - nx * w1 / 2, by - ny * w1 / 2), (ax - nx * w0 / 2, ay - ny * w0 / 2)], "fill": STRIPE}
 
 
+def _marks_from(start, stop):
+    """縞の所（前の端からの長さ）: start から STRIPE_STEP ずつ、stop の手前まで。軸の所（back）に小数が来ても、縞は軸と同じだけ動く
+    （見直しの指摘: 整数に丸めると、軸を 0.1mm 動かして縞が 1mm 動いた）。start と stop が整数なら range と同じ並び（既定の紙を変えない）。"""
+    return [start + k * STRIPE_STEP for k in range(max(0, math.ceil((stop - start) / STRIPE_STEP)))]
+
+
 def _side_art(x, y, L, H, foot_at_top, legs=True, back=NECK_BACK):
     """側面の絵: 黄の地に、背（上の辺）から下りる紺の縞と、下の白い帯と白い脚 2 本（実物の写真の直し C・F。前は横向きの虎 1 匹の絵で、
     実物は胴そのものが虎で、側面は縞と白い脚だった）。
@@ -448,7 +454,7 @@ def _side_art(x, y, L, H, foot_at_top, legs=True, back=NECK_BACK):
     art = [poly([(m, 0), (L - m, 0), (L - m, H), (m, H)], TIGER)]
     # 縞は背から下りる。長い縞（白い帯の上まで）と短い縞（半ばまで）を交互にする（実物の縞の長さはそろっていない）。
     # 前の端から back＋5mm までは描かない: 首の形の軸の穴（前の端から back。既定 NECK_BACK）が紺の縞に乗ると、黒い穴の丸が見えなくなる
-    for i, u in enumerate(range(math.ceil(back) + 5, int(L) - 5, STRIPE_STEP)):
+    for i, u in enumerate(_marks_from(back + 5, int(L) - 5)):
         low = band + 2 if i % 2 == 0 else H * 0.55
         art.append(_stripe(at(u, H - 1.6), at(u + 2.5, low), 2.6, 0.6))
     art.append(poly([(m, 0), (L - m, 0), (L - m, band), (m, band)], WHITE))
@@ -465,7 +471,7 @@ def _top_art(x, y, L, W, back=NECK_BACK):
     前の端の近く（軸の竹串の線と黒い斑）と後ろの端（尾を貼る四角）には縞を描かない（印と斑が縞に紛れないように）。"""
     art = [_panel(x + 0.2, y, x + L - 0.2, y + W, TIGER)]
     # 縞は首の後ろの黒い斑（軸の 6mm 後ろ・半径 3mm まで）の 3mm 後ろから。既定（back 6）は前と同じ 18mm から（見直しの指摘: 斑だけが動き、縞と重なった）
-    art += [_stripe((x + u, y + 1.6), (x + u + 2.5, y + W - 1.6), 2.4, 1.2) for u in range(math.ceil(back) + 12, int(L) - TAIL_BACK - TAIL_TAB - 6, STRIPE_STEP)]
+    art += [_stripe((x + u, y + 1.6), (x + u + 2.5, y + W - 1.6), 2.4, 1.2) for u in _marks_from(back + 12, int(L) - TAIL_BACK - TAIL_TAB - 6)]
     art.append({"kind": "poly", "pts": _circle(x + back + 6, y + W / 2, min(3.0, W / 4)), "fill": INK})  # 首の後ろ（軸の 6mm 後ろ）
     return art
 
@@ -473,7 +479,7 @@ def _top_art(x, y, L, W, back=NECK_BACK):
 def _bevel_art(x, y, L, C, back=NECK_BACK):
     """角の面（body_round）の絵: 上の面と側面の間の細い面。縞は側面の縞と同じ所から、面の幅をまたぐ。"""
     art = [_panel(x + 0.2, y, x + L - 0.2, y + C, TIGER)]
-    art += [_stripe((x + u, y + 0.6), (x + u + 1.2, y + C - 0.6), 2.6, 2.4) for u in range(math.ceil(back) + 5, int(L) - 5, STRIPE_STEP)]
+    art += [_stripe((x + u, y + 0.6), (x + u + 1.2, y + C - 0.6), 2.6, 2.4) for u in _marks_from(back + 5, int(L) - 5)]
     return art
 
 

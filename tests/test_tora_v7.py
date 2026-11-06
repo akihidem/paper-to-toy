@@ -15,7 +15,8 @@ v7 で今直してください。撮影は v6 のまま。」と、その後の�
    - 首の帯は、揺れの両端のうち水平から遠い方で見る（穴 14mm は、水平から ±10° の一般の検査は通るが、ここで落ちる）。
    - 既定（fit_check 0）では検査しない。v7 の寸法（clay_back・axle_back）を既定から変えると、fit_check 0 でも見る。fit_check は選ぶ値。
      吊る形には clay_back・axle_back・fit_check を使えない（落とす）。
-3. 刷る物: 胴の軸の穴・竹串の線・首の後ろの黒い斑は、軸を離した 3mm だけ後ろ（ほかの胴の形は同じ）。縞は黒い斑と重ならない。腕は幅 10.5mm（後ろへだけ広げる）、
+3. 刷る物: 胴の軸の穴・竹串の線・首の後ろの黒い斑は、軸を離した 3mm だけ後ろ（ほかの胴の形は同じ）。縞は黒い斑と重ならず、
+   軸と同じだけ動く（小数の 0.5mm でも）。腕は幅 10.5mm（後ろへだけ広げる）、
    上の穴は前の端から 4mm、下の穴は 2.5mm 後ろ、粘土の線、札。広い腕は帯の下に置く。v6 の腕は前の所。
 4. 組み方の文: v7 だけ、腕の向き（下の穴が後ろの尾の側）を言う。用意する物は v6 と同じ。揺れの式の粘土は軸の 2.5mm 後ろ（刷る穴と同じ）。
    吊る形の式に clay_back は効かない。
@@ -110,6 +111,12 @@ for b in (b9, b7, by(dict(pc.DEFAULTS))["body"]):  # 縞は黒い斑に重なら
     ink = [Polygon(a["pts"]) for a in b.art if a["kind"] == "poly" and a.get("fill") == pc.INK]
     stripes = [Polygon(a["pts"]) for a in b.art if a["kind"] == "poly" and a.get("fill") == pc.STRIPE]
     assert ink and stripes and not any(s.intersects(k) for s in stripes for k in ink)
+# 縞は軸と同じだけ動く（小数でも。見直しの指摘: 整数に丸めると、軸を 0.1mm 動かして縞が 1mm 動いた）
+# （後ろの壁の縞は軸と関わらないので、軸の所を使う上の面・側面・角の面の絵で見る）
+xs = lambda art: sorted(min(x for x, _ in a["pts"]) for a in art if a["kind"] == "poly" and a.get("fill") in (pc.STRIPE, pc.INK))
+for draw in (lambda b: pc._top_art(0, 0, 64, 20, b), lambda b: pc._side_art(0, 0, 64, 30, False, True, b), lambda b: pc._bevel_art(0, 0, 64, 5, b)):
+    s60, s65 = xs(draw(6)), xs(draw(6.5))
+    assert s60 and len(s60) == len(s65) and all(abs(b - a - 0.5) < 1e-9 for a, b in zip(s60, s65)), (s60, s65)
 drop6, drop7 = by(v6)["drop"], by(v7)["drop"]
 assert drop6.width == pc.DROP_W and abs(drop7.width - (pc.DROP_W + 2.5)) < 1e-9 and drop7.outline == pc.drop_outline(v7)
 assert drop7.holes[0] == (4, 4, 1.0) and abs(drop7.holes[1][0] - 6.5) < 1e-9 and abs(drop7.holes[1][1] - (4 + v7["weight_below_axle"])) < 1e-9
