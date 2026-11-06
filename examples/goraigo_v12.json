@@ -1,0 +1,7 @@
+{
+  "template": "slider_fan",
+  "source_id": "NDL-1187053-R0000005-L",
+  "params": {"push_part": "rise", "tube_side": 27, "tube_height": 101, "pusher_side": 23, "pusher_height": 75, "push_amount": 36,
+             "base_side": 23, "fold_count": 23, "fold_width": 4, "fold_height": 30, "figure_w": 10.8, "figure_h": 28.8},
+  "inject": {}
+}
