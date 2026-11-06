@@ -228,14 +228,17 @@ def _jar(p):
     w = n * a
     outline = [(0, 0), (w, 0), (w + g, 2), (w + g, H - 2), (w, H)]
     glue = [[(w, 0), (w + g, 2), (w + g, H - 2), (w, H)]]
-    valley = [((a * i, 0), (a * i, H)) for i in range(1, n + 1)]
+    # 壺は色の面（土の色・釉・口の輪）を外にして筒にするので、刷った面から見て全部山折り。谷折り（凡例の、刷った面がへこむ向き）のままだと
+    # 色の面が筒の内に入った。本人の決定（2026-11-06「今のうちに4つ直す」）で、御来迎の外筒・虎の胴と同じ線で直した。下の糊代も、
+    # 筒の内へ折る（手順の「内へ折り」）のは刷った面の裏へ折る向きなので山折り。線は刷らず色の境で折るので、型紙の PDF は変わらない
+    folds = [((a * i, 0), (a * i, H)) for i in range(1, n + 1)]
     for i in reversed(range(n)):
         x0, x1 = a * i, a * (i + 1)
         # 足の糊代の角は糊代の長さだけ落とす。内へ折ると隣の糊代と角で重なるので（4 面は 45°、6 面は 30° 必要）、両方に足りる量にした。
         outline += [(x1 - tb, H + tb), (x0 + tb, H + tb), (x0, H)]
         glue.append([(x0, H), (x1, H), (x1 - tb, H + tb), (x0 + tb, H + tb)])
-        valley.append(((x0, H), (x1, H)))
-    jar = Part(1, "jar", "壺", outline, label_xy=(1.5, H - 6), label="1 壺", valley=valley, glue=glue)
+        folds.append(((x0, H), (x1, H)))
+    jar = Part(1, "jar", "壺", outline, label_xy=(1.5, H - 6), label="1 壺", mountain=folds, glue=glue)
     art = []
     gz = H * GLAZE_DOWN
     per = max(1, round(a / 16))
@@ -290,14 +293,17 @@ def _box(p):
             clean.append(q)
     if clean[-1] == clean[0]:
         clean.pop()
-    valley = [((c0, top0), (c1, top0)), ((c0, top1), (c1, top1)), ((c0, front1), (c1, front1)), ((c0, bot1), (c1, bot1)), ((c0, back1), (c1, back1)),
-              ((c0, top0), (c0, top1)), ((c1, top0), (c1, top1)),
-              ((0, top0), (c0, top0)), ((0, top1), (c0, top1)), ((c1, top0), (W, top0)), ((c1, top1), (W, top1))]
+    # 箱は色の面と「2 箱」の字を外にして閉じるので、刷った面から見て全部山折り。谷折り（凡例の、刷った面がへこむ向き）のままだと、
+    # 色の面も前の壁の字も箱の内に入り、外から見ると上の面の穴のずれ（真ん中より右）が左に出た。本人の決定（2026-11-06「今のうちに
+    # 4つ直す」）で、御来迎の外筒・虎の胴と同じ線で直した。糊代は山折りでも箱の内へ折れる（手順どおり）。線は刷らないので PDF は変わらない
+    folds = [((c0, top0), (c1, top0)), ((c0, top1), (c1, top1)), ((c0, front1), (c1, front1)), ((c0, bot1), (c1, bot1)), ((c0, back1), (c1, back1)),
+             ((c0, top0), (c0, top1)), ((c1, top0), (c1, top1)),
+             ((0, top0), (c0, top0)), ((0, top1), (c0, top1)), ((c1, top0), (W, top0)), ((c1, top1), (W, top1))]
     glue = [[(c1, top0), (c1 + 1.5, 0), (W - 1.5, 0), (W, top0)], [(c1, top1), (W, top1), (W - 1.5, top1 + g), (c1 + 1.5, top1 + g)],
             [(0, top0), (1.5, 0), (c0 - 1.5, 0), (c0, top0)], [(0, top1), (c0, top1), (c0 - 1.5, top1 + g), (1.5, top1 + g)],
             [(c0, back1), (c1, back1), (c1 - 1.5, back1 + g), (c0 + 1.5, back1 + g)]]
-    # top0 の線は、上の面の縁が後ろの壁の糊代に貼られる所。折り線ではないので valley から外す。
-    valley = [v for v in valley if v != ((c0, top0), (c1, top0))]
+    # top0 の線は、上の面の縁が後ろの壁の糊代に貼られる所。折り線ではないので折り線から外す。
+    folds = [v for v in folds if v != ((c0, top0), (c1, top0))]
     hw, cx = p["strip_width"] + SLIDE_GAP, c0 + B / 2 + strip_offset(p)
     cuts = [(cx - hw / 2, top0 + B / 2 - HOLE_DEPTH / 2, hw, HOLE_DEPTH), (cx - hw / 2, front1 + B / 2 - HOLE_DEPTH / 2, hw, HOLE_DEPTH)]
     art = [_rect(c0, top0, c1, top1, BOX_TOP), _rect(c0, top1, c1, front1, BOX_WALL), _rect(c0, front1, c1, bot1, BOX_BOTTOM),
@@ -307,7 +313,7 @@ def _box(p):
     f = min(footprint(p), B - 1) / 2
     mx, my = c0 + B / 2, top0 + B / 2
     art.append({"kind": "line", "pts": [(mx - f, my - f), (mx + f, my - f), (mx + f, my + f), (mx - f, my + f), (mx - f, my - f)], "stroke": RIM_LINE, "sw": 0.25})
-    box = Part(2, "box", "箱", clean, label_xy=(c0 + 2, top1 + 2), label="2 箱", valley=valley, glue=glue, cuts=cuts, art=art)
+    box = Part(2, "box", "箱", clean, label_xy=(c0 + 2, top1 + 2), label="2 箱", mountain=folds, glue=glue, cuts=cuts, art=art)
     box.hide_folds = True
     return box
 
@@ -425,9 +431,9 @@ def steps(p):
     n = SIDES[p["jar"]]
     return [
         "刷った物差しに定規を当て、10cm か確かめる",
-        "まず 1 壺だけを実線で切る。色の境で谷折りし、横の糊代で貼って " + ("四角" if n == 4 else "六角") + "の筒にする",
+        "まず 1 壺だけを実線で切る。色の境で山折りし、横の糊代で貼って " + ("四角" if n == 4 else "六角") + "の筒にする",
         "残りの部品を実線で切る。2 箱の上の面と底の面の細い四角い穴はカッターで切る（大人がする）",
-        "2 箱を色の境で谷折りし、横の壁の糊代を前と後ろの壁の内に、後ろの壁の糊代を上の面の内に貼って箱にする",
+        "2 箱を色の境で山折りし、横の壁の糊代を前と後ろの壁の内に、後ろの壁の糊代を上の面の内に貼って箱にする",
         "1 壺の下の糊代を内へ折り、2 箱の上の面の印に合わせて貼る（壺の口から鉛筆で押さえる）",
         "「2 箱」の字のある壁を前にする。穴は真ん中より右にずらしてあるので、人形の顔を前に向けると壺の真ん中に立つ",
         "3 押し帯を縦に色の境で半分に折り、印の線が外に出るように貼り合わせる",
