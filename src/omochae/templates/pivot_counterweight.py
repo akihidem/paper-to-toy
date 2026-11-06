@@ -9,6 +9,7 @@ import math
 from shapely.geometry import LineString, Polygon
 
 from ..model import Failure, Part
+from ..textfit import text_width
 from ..pivot_model import center, paper_mass, period_s, rest_tilt_deg
 
 ID = "pivot_counterweight"
@@ -118,11 +119,6 @@ def hang_thread_mm(p):
     return math.floor(room) if room >= HANG_MIN else None
 
 
-def _ring(cx, cy, r, n=24):
-    """位置の印の丸（閉じた点の線）の頂点。"""
-    return [(cx + r * math.cos(2 * math.pi * i / n), cy + r * math.sin(2 * math.pi * i / n)) for i in range(n)]
-
-
 def axle_z(p):
     """刷る穴の高さ（胴の底から）。吊る形では耳の穴が胴の上の縁から HOLE_MARGIN 下に決まり、axle_height は部品に効かない。"""
     return p["body_height"] - HOLE_MARGIN if p["mount"] == "hang" else p["axle_height"]
@@ -211,6 +207,22 @@ def _flip(pts, x, y, w, h):
     return [(a, 2 * y + h - b) for a, b in pts]
 
 
+LABEL_SIZE = 2.8  # 札の字の大きさ（compose.LABEL_SIZE と同じ。雛形から compose を読むと読み込みの輪になるので、値を写す）
+
+
+def _strip_label(sw):
+    """3 首の帯の札の字と x。帯の真ん中の谷折りの線（x = sw）が、字の「3」と「首」の間の空きを通る所に置く（統括経由の気づき 2026-11-06:
+    札の字が折り線にかかっていた）。「3 首の帯」は 10.7mm で、帯の片側（既定 10mm）には入らないので、番号と名の間で折る。
+    名が片側に入らない細い帯（sw が約 9mm より細い）は「3 帯」にする（「3 首の帯」は帯の枠に収まらず、配置の検査で落ちた。検品の指摘）。
+    """
+    num, pre = text_width("3", LABEL_SIZE), text_width("3 ", LABEL_SIZE)
+    x0 = sw - (num + pre) / 2
+    for text in ("3 首の帯", "3 帯"):
+        if x0 + text_width(text, LABEL_SIZE) <= 2 * sw - 0.3:
+            return text, x0
+    return "3", 1
+
+
 def _side_art(x, y, L, H, flip):
     sx, sy = (L - 1) / (878 - 262), (H - 1) / (668 - 140)
     fix = (lambda ps: _flip(ps, x, y, L, H)) if flip else (lambda ps: ps)
@@ -284,8 +296,9 @@ def parts(p):
     sw = p["strip_width"]
     length = (p["neck_length"] + 12) if not hang else STRIP_HOLE + axle_to_head_top(p) + HEAD_OVERLAP
     # 帯は半分に折って 2 枚にする。1 枚では頭を支えるには柔らかいと見込むため。
-    # 札は軸の穴の下に置く（穴の上の 1.5mm からだと、名の札が穴にかかる）
-    strip = Part(3, "strip", "首の帯", [(0, 0), (2 * sw, 0), (2 * sw, length), (0, length)], label_xy=(1, STRIP_HOLE + 2.5), label="3 首の帯",
+    # 札は軸の穴の下に置き（穴の上の 1.5mm からだと、名の札が穴にかかる）、真ん中の谷折りの線が字の間の空きを通る x にする
+    tag, tag_x = _strip_label(sw)
+    strip = Part(3, "strip", "首の帯", [(0, 0), (2 * sw, 0), (2 * sw, length), (0, length)], label_xy=(tag_x, STRIP_HOLE + 2.5), label=tag,
                  valley=[((sw, 0), (sw, length))], holes=[(sw / 2, STRIP_HOLE, 1.0), (1.5 * sw, STRIP_HOLE, 1.0)])
     tail = Part(4, "tail", "尾", [(0, 0), (8, 0), (8, 56), (0, 56)], label_xy=(1, 1.5), label="4 尾",
                 art=[_panel(0.1, 0.1, 7.9, 55.9, TIGER)] + [{"kind": "line", "pts": [(0.3, y), (7.7, y)], "stroke": STRIPE, "sw": 0.5} for y in range(10, 54, 8)])
@@ -367,7 +380,8 @@ def materials(p):
     hang = f"。糸で下げる時は、たこ糸も。玉の上は穴から {HANG_MIN}〜{L}mm" if L is not None else ""
     return [f"{by['body']['material']}を 1 枚", tools,
             f"{by['axle']['material']}（胴の 2 つの穴・3 首の帯の穴・5 腕の上の穴に通す。胴の上の面の点の線の下を通る）",
-            f"油粘土 {p['weight_g']:g}g（5 腕の下の穴の、点の線の所に付ける{hang}）",
+            f"油粘土 {p['weight_g']:g}g（" + (f"5 腕の下の穴の、点の線の所に付ける{hang}" if p["weight_below_axle"] >= LOWER_HOLE_MIN
+                                          else f"5 腕の上の穴の {p['weight_below_axle']:g}mm 下に付ける") + "）",
             "丸い印は穴（竹串の先であける）。4 尾は外に見えるので色を刷り、3 首の帯と 5 腕は胴の中に入るので白"]
 
 

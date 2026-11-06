@@ -26,7 +26,6 @@ from omochae.__main__ import load_source
 from omochae.compose import compose
 from omochae.floors import check_art
 from omochae.templates import pivot_counterweight as pc
-from shapely.geometry import Polygon
 neck = dict(DEFAULTS, mount="neck")
 # 下の穴の境（LOWER_HOLE_MIN）の前後も見る。重りが後ろへずれない（weight_behind 0）と、浅い重りでも検査を通る（検品の指摘: 前の組は -20 の次が 5 だった）
 seen = hangable = 0
@@ -106,6 +105,20 @@ for mount in ("neck", "hang"):
     assert not fails, (mount, [f.line() for f in fails])
 labels = {x.key: x.label for x in pc.parts(neck)}
 assert labels == {"body": "1 胴", "head": "2 頭", "strip": "3 首の帯", "tail": "4 尾", "drop": "5 腕"}, labels
+# 3 首の帯の札: 真ん中の谷折りの線（x = sw）が、字の「3」と「首」の間の空きを通る（字が折り線にかからない）。細い帯は「3 帯」で、
+# どの帯の幅でも札が帯の枠に収まる（範囲の下限 5mm で「3 首の帯」が枠からはみ出し、配置の検査で落ちていた。検品の指摘）
+from omochae.textfit import text_width
+for sw in range(pc.RANGES["strip_width"][0], pc.RANGES["strip_width"][1] + 1):
+    q = dict(neck, strip_width=sw)
+    strip = next(x for x in pc.parts(q) if x.key == "strip")
+    x0 = strip.label_xy[0]
+    assert strip.label in ("3 首の帯", "3 帯"), (sw, strip.label)
+    assert x0 + text_width("3", pc.LABEL_SIZE) < sw < x0 + text_width("3 ", pc.LABEL_SIZE), (sw, x0)  # 折り線は空きの中
+    assert x0 >= 0 and x0 + text_width(strip.label, pc.LABEL_SIZE) <= 2 * sw, (sw, strip.label, x0)  # 帯の枠の内
+    if not pc.check_range(q) and not check_physics(q):
+        _, _, fails = compose("pivot_counterweight", q, load_source(pc.SOURCE))
+        assert not fails, (sw, [f.line() for f in fails])
+assert next(x for x in pc.parts(neck) if x.key == "strip").label == "3 首の帯"  # 既定の帯（10mm）は名を変えない
 body = next(x for x in pc.parts(neck) if x.key == "body")
 axle = [a for a in body.art if a["kind"] == "mark" and a.get("mark") == "axle"]
 assert len(axle) == 1 and all(x == body.holes[0][0] for x, _ in axle[0]["pts"]), axle  # 2 つの軸の穴と同じ x
