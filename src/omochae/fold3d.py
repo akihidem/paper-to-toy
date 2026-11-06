@@ -155,9 +155,11 @@ class FoldError(Exception):
     """型紙の折り線と外形が合わず、折れない（3D.close で落とす。確かめられない 4 にはしない。式と絵のずれそのものなので）。"""
 
 
-def fold(part, deg=FOLD_DEG):
+def fold(part, deg=FOLD_DEG, angles=None):
     """部品を折り線で面に分け、外形の始めの点を持つ面を動かさずに、折り線ごとに deg° 折る。谷は刷った面の側へ、山は裏へ折る。
 
+    angles は折り線（((x1, y1), (x2, y2))。部品の valley・mountain と同じ形）から角（°）への表で、表に無い線は deg° 折る。
+    角を落とした箱（虎の胴の角の面は 45°）のように、折り線ごとに角が違う形を組むため。渡さなければ、どの線も deg°（今までと同じ）。
     Returns 面の並び（list of Face）。親の面を子より先に並べる。最初の面が動かない面（筒なら 1 面目）。
     外形が自分と交わる・長さ 0 の折り線・外形の縁まで届かない折り線・ほかの折り線と重なる折り線・面をちょうど 2 つに分けない
     折り線・折り線でつながらない面がある時は FoldError（黙って飛ばしたり、例外の 4 にしたりすると、崩れた型紙が
@@ -204,7 +206,7 @@ def fold(part, deg=FOLD_DEG):
                 continue
             o, e = parent.at(a), parent.at(b)
             d = _unit(_sub(e, o))
-            ang = math.radians(deg)
+            ang = math.radians(angles.get((a, b), deg) if angles else deg)
             c = polys[j].centroid.coords[0]
             c0 = parent.at(c)
             # 回す向きは、子の面の真ん中が親の刷った面の側（谷）か裏（山）へ動く方。線の向きで符号が変わるので、動きで決める
