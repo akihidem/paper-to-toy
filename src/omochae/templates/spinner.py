@@ -37,7 +37,7 @@
 """
 import math
 
-from shapely.geometry import Point, Polygon, box
+from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import unary_union
 
 from ..model import Failure, Part
@@ -420,12 +420,14 @@ def _bend_marks(tip_holes, tips, c, ring):
         ux, uy = (c - hx) / d, (c - hy) / d
         start = (hx + ux * (r + 1.2), hy + uy * (r + 1.2))
         end = (c - ux * (ring + 1.5), c - uy * (ring + 1.5))
-        # 切り込みは角から中心への線の上にある。線がその線のどちらの側にあるかを見て、矢じりを反対（遠い）側へ開く
-        side = 1 if (x - c) * (hy - c) - (y - c) * (hx - c) > 0 else -1
-        bx, by = -ux * math.cos(math.radians(30)), -uy * math.cos(math.radians(30))
-        nx, ny = -uy * side * math.sin(math.radians(30)), ux * side * math.sin(math.radians(30))
+        # 切り込みは中心から角への線の上にある。矢じりの先の 2 つの向き（線の左右）のうち、その線から遠い方へ開く。
+        # 前は外積の符号で向きを決めていて、符号を取り違えて切り込みの側へ開いていた（別の系統の検品の指摘）。距離で選べば取り違えない
+        cut = LineString([(c, c), (x, y)])
+        cs, sn = math.cos(math.radians(30)), math.sin(math.radians(30))
+        tips_ = [(end[0] + 3.5 * (-ux * cs - k * uy * sn), end[1] + 3.5 * (-uy * cs + k * ux * sn)) for k in (1, -1)]
+        head = max(tips_, key=lambda pt: cut.distance(Point(pt)))
         out += [{"kind": "mark", "pts": [start, end], "mark": "bend"},
-                {"kind": "mark", "pts": [end, (end[0] + 3.5 * (bx + nx), end[1] + 3.5 * (by + ny))], "mark": "bend_head"}]
+                {"kind": "mark", "pts": [end, head], "mark": "bend_head"}]
     return out
 
 

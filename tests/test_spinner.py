@@ -124,10 +124,11 @@ from omochae.__main__ import load_source
 from omochae.compose import compose
 from omochae.floors import check_art
 pin = P(kind="pinwheel")
+# 切り残しは範囲を 1mm 刻みで見る（範囲の端の 4mm は検査で落ちるので、端だけだと通る寸法の下限の近くを見なかった。別の系統の検品の指摘）
 seen = 0
-for sq in (s.RANGES["square"][0], s.DEFAULTS["square"], s.RANGES["square"][1]):
-    for un in (s.RANGES["uncut"][0], s.DEFAULTS["uncut"], s.RANGES["uncut"][1]):
-        for hd in (s.RANGES["hole_d"][0], s.DEFAULTS["hole_d"], s.RANGES["hole_d"][1]):
+for sq in (s.RANGES["square"][0], 90, s.DEFAULTS["square"], 150, s.RANGES["square"][1]):
+    for un in range(s.RANGES["uncut"][0], s.RANGES["uncut"][1] + 1):
+        for hd in (s.RANGES["hole_d"][0], 2.0, s.DEFAULTS["hole_d"], 6.0, s.RANGES["hole_d"][1]):
             q = {**pin, "square": sq, "uncut": un, "hole_d": hd}
             if s.check_range(q) or s.check_physics(q):
                 continue  # 検査で落ちる寸法は刷らないので、印も見ない
@@ -136,13 +137,18 @@ for sq in (s.RANGES["square"][0], s.DEFAULTS["square"], s.RANGES["square"][1]):
             c, ring = sq / 2, hd / 2 + 2.2
             bends = [a for a in v.art if a["kind"] == "mark" and a.get("mark") == "bend"]
             assert len(bends) == 4, (q, len(bends))
-            for (hx, hy, r), b in zip(v.holes[1:], bends):
+            heads = [a for a in v.art if a["kind"] == "mark" and a.get("mark") == "bend_head"]
+            corners = [(sq, 0), (sq, sq), (0, sq), (0, 0)]  # 印の穴のある角の順（雛形の tips と同じ）
+            for (hx, hy, r), b, h, (kx, ky) in zip(v.holes[1:], bends, heads, corners):
                 start, end = b["pts"][0], b["pts"][-1]
                 assert math.dist(start, (hx, hy)) <= r + 2.0, (q, start, (hx, hy))  # 角の穴のすぐ外から
                 assert ring < math.dist(end, (c, c)) < math.dist(start, (c, c)), (q, end)  # 中心へ向かい、輪の外で止まる
+                # 矢じりは、線から見て切り込み（中心から角への線）と反対の側へ開く
+                side = lambda pt: (end[0] - start[0]) * (pt[1] - start[1]) - (end[1] - start[1]) * (pt[0] - start[0])
+                assert side(h["pts"][-1]) * side(((c + kx) / 2, (c + ky) / 2)) < 0, (q, (kx, ky), "矢じりが切り込みの側へ開く")
             assert not v.valley and not v.mountain, q
             assert check_art([v]) == [], (q, [f.line() for f in check_art([v])])
-assert seen >= 5, seen
+assert seen >= 100, seen
 _, layout, fails = compose("spinner", pin, load_source(s.SOURCE))
 assert not fails, [f.line() for f in fails]
 assert any("位置の印" in t.text for t in layout["texts"]), "凡例に位置の印の行が無い"
