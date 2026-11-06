@@ -66,6 +66,10 @@ assert seen >= 10 and hangable >= 1, (seen, hangable)
 low = dict(neck, axle_height=30, weight_below_axle=15, weight_g=15, weight_behind=0)
 assert any("粘土の玉の下が底に当たる" in f.message for f in check_physics(low)), [f.line() for f in check_physics(low)]
 # 検査に通る首の形の寸法では、粘土の玉の下が底から 3mm 以上離れる（上の組で見た通る組の全部）
+# 玉が軸にかかり、底にも当たる寸法（4 回目の検品の指摘の例）は、玉の決まりの行を 1 つだけ出す
+both = dict(neck, axle_height=15, weight_below_axle=5, weight_g=15, weight_behind=0)
+ball_lines = [f for f in check_physics(both) if "粘土の玉" in f.message]
+assert len(ball_lines) == 1 and "軸の竹串にかかる" in ball_lines[0].message, [f.line() for f in check_physics(both)]
 # 浅い重りに重い玉（検品の指摘の例）は、玉が軸の竹串にかかるので検査で落とす
 shallow = dict(neck, weight_below_axle=1, weight_g=15, weight_behind=0)
 assert any("軸の竹串にかかる" in f.message for f in check_physics(shallow)), [f.line() for f in check_physics(shallow)]
