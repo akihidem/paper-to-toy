@@ -85,6 +85,7 @@ TABLE_CLEAR = 10  # 玉の下と机の間の余裕 mm
 MIN_TIP_T = 1.0  # 支点の先の紙の厚みの下限 mm（串の先が座る見込みの厚み）
 PAD = 8  # 当て紙の 1 枚の大きさ mm（貼ってから V の線で切りそろえる）
 SLIT_W, SLIT_KEEP = 0.5, 1.5  # 起き上がり小法師の帯のくし形の切り込みの口の幅と、赤道の折り線の手前に残す長さ mm
+SLIT_EDGE = 0.2  # 継ぎ目の糊代の端と切り込みの間に残す紙の幅 mm。これより近い切り込みは、糊代の端の角を落とす形にする
 MIN_MARGIN = 0.25  # 起き上がりの重心が曲がりの中心より下にあるべき量（半径の割合）
 MAX_CLAY_FILL = 0.5  # 粘土の高さの上限（半径の割合）
 
@@ -411,11 +412,19 @@ def _dome_part(p):
         top += [(xs - SLIT_W / 2, 0), (xs, depth), (xs + SLIT_W / 2, 0)]
     # 継ぎ目の糊代にも、帯の頭の g mm にある切り込みと同じ所（C + xs）に切り込みを入れる。輪にすると糊代が帯の頭に重なるので、
     # 切り込みの無い糊代だと、重なった所の切り込みを塞いで沿わせにくくなる（検品の指摘: 半径 15・切れ 12・糊代 10 で 2 本塞いだ）
+    # 糊代の端に SLIT_EDGE より近い切り込みは、細い V にすると端との間に紙の筋が残るので、糊代の端の角を切り込みの深さまで斜めに落とす
+    # （2 回目の検品の指摘: 前の条件 xs < g − SLIT_W は、糊代に収まる切り込みまで落としていた。半径 15・切れ 7・糊代 7 で 1 本）
+    end = (C + g, 0)
     for j in range(1, 2 * n):
         xs = j * w / 2
-        if xs < g - SLIT_W:
-            top += [(C + xs - SLIT_W / 2, 0), (C + xs, depth), (C + xs + SLIT_W / 2, 0)]
-    pts = top + [(C + g, 0), (C + g, b)]
+        lo, hi = xs - SLIT_W / 2, xs + SLIT_W / 2
+        if hi + SLIT_EDGE <= g:
+            top += [(C + lo, 0), (C + xs, depth), (C + hi, 0)]
+        elif lo < g:
+            top.append((C + lo, 0))
+            end = (C + g, depth)
+            break
+    pts = top + ([end] if end[1] else [(C + g, 0)]) + [(C + g, b)]
     for i in reversed(range(n)):
         pts += _gore(p, (i + 0.5) * w, b)[:-1] if i else _gore(p, (i + 0.5) * w, b)
     # 札に部品の名を入れ、どちらが底かを紙で分かるようにする（作る前のレビューの指摘から採った案 EP-0001、2026-11-06:

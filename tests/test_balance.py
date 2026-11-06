@@ -161,21 +161,23 @@ assert any("赤道の山折りの線" in x and "内へ折り" in x for x in st) 
 # 切り込みは赤道の折り線の手前で止める。帯の糊代は切り込みを除いた形（斜線が切り込みを隠さない）。組み方の文が切り込みを言う
 # 継ぎ目の糊代にも、帯の頭の g mm にある切り込みと同じ所に切り込みを入れる（重ねた時に切り込みを塞がない。検品の指摘の組
 # 半径 15・切れ 12・糊代 10 も見る）
+# 切れの数は範囲の全部、糊代の長さは 1mm 刻みで見る（2 回目の検品の指摘の組 半径 15・切れ 7・糊代 7 を含む）
 checked_seam = 0
 for R in (t.RANGES["base_r"][0], O["base_r"], t.RANGES["base_r"][1]):
-    for n in (t.RANGES["gores"][0], O["gores"], t.RANGES["gores"][1]):
+    for n in range(t.RANGES["gores"][0], t.RANGES["gores"][1] + 1):
         for b in (t.RANGES["band"][0], O["band"], t.RANGES["band"][1]):
-          for g in (O["seam_glue"], t.RANGES["seam_glue"][1]):
+          for g in range(t.RANGES["seam_glue"][0], t.RANGES["seam_glue"][1] + 1):
             q = {**O, "base_r": R, "gores": n, "band": b, "seam_glue": g}
             if t.check_range(q) or t.check_physics(q):
                 continue
             dome = next(x for x in t.parts(q) if x.key == "dome")
             w = 2 * math.pi * R / n
-            under = [j * w / 2 for j in range(1, 2 * n) if j * w / 2 < g - t.SLIT_W]  # 糊代が重なる帯の頭の切り込み
+            under = [j * w / 2 for j in range(1, 2 * n) if j * w / 2 - t.SLIT_W / 2 < g]  # 糊代が少しでも重なる帯の頭の切り込み
             tips = [pt for pt in dome.outline if abs(pt[1] - (b - t.SLIT_KEEP)) < 1e-9]
             assert len(tips) == 2 * n - 1 + len(under), (q, len(tips))
             C = 2 * math.pi * R
-            assert all(any(abs(x - (C + xs)) < 1e-9 for x, _ in tips) for xs in under), q
+            # 糊代の中の切り込みは同じ所（C + xs）に V があり、糊代の端に近い 1 本は、端の角を切り込みの深さまで落とした所（C + g）がある
+            assert all(any(abs(x - (C + xs)) < 1e-9 or abs(x - (C + g)) < 1e-9 for x, _ in tips) for xs in under), q
             checked_seam += bool(under)
             assert Polygon(dome.outline).is_valid and all(Polygon(dome.outline).buffer(1e-6).contains(Polygon(gl)) for gl in dome.glue), q
             assert check_art([dome]) == [], (q, [f.line() for f in check_art([dome])])
