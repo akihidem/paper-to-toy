@@ -35,10 +35,14 @@ RANGES = {
     "head_w": (15, 45), "head_h": (15, 45),
     "weight_g": (0.2, 15), "weight_below_axle": (-20, 60), "weight_behind": (-10, 40),
     "leg_height": (0, 15), "body_round": (0, 10),
-    "head_sides": (1, 2),
     "paper_gsm": (40, 400),
 }
 MOUNTS = ("neck", "hang")
+# 頭の顔の数は選ぶ値（1 か 2）。連続の範囲（RANGES）で出すと、間の 1.5 も通るように読めた（見直しの指摘）ので、mount と同じく
+# spec() に選ぶ値として出し、check_range もこの値のどれかかで見る
+HEAD_SIDES = (1, 2)
+# 両面の頭で、首の帯の上と下に残す貼り代 mm。帯を 2 枚の間に挟んで裏どうしを貼るので、帯の外に紙どうしが貼れる幅が要る
+HEAD_GLUE_MIN = 1
 # 刷る形を決める寸法（頭の支え方）。仮説の違いそのものなので、寸法を直に渡す入口（python -m omochae --params）では既定に頼らず必ず書かせる。
 FORM = "mount"
 FORMS = MOUNTS  # 刷る形の値の一覧（作りうる部品を数える時に使う）
@@ -81,7 +85,7 @@ def title(p):
 
 
 def spec():
-    return {"template_id": ID, "defaults": DEFAULTS, "ranges": RANGES, "mount": MOUNTS}
+    return {"template_id": ID, "defaults": DEFAULTS, "ranges": RANGES, "mount": MOUNTS, "head_sides": HEAD_SIDES}
 
 
 def check_range(p):
@@ -90,13 +94,14 @@ def check_range(p):
         if k == "mount":
             if v not in MOUNTS:
                 out.append(Failure("F5.range", k, f"{v} は {MOUNTS} のどれでもない"))
+        elif k == "head_sides":
+            # True は 1 と等しく読めるので、真偽の値は別に落とす
+            if isinstance(v, bool) or v not in HEAD_SIDES:
+                out.append(Failure("F5.range", k, f"{v} は {HEAD_SIDES} のどれでもない（顔の数）"))
         elif k not in RANGES:
             out.append(Failure("F5.range", k, "知らない寸法の名前"))
         elif not isinstance(v, (int, float)) or isinstance(v, bool) or not RANGES[k][0] <= v <= RANGES[k][1]:
             out.append(Failure("F5.range", k, f"{v} は範囲 {RANGES[k]} の外"))
-        elif k == "head_sides" and not float(v).is_integer():
-            # 範囲 (1, 2) の間の 1.5 などは、刷る頭の形が無い（顔は 1 つか 2 つ）
-            out.append(Failure("F5.range", k, f"{v} は 1 か 2 でない（顔の数は整数）"))
     return out
 
 
@@ -202,6 +207,14 @@ def check_physics(p):
         need = NECK_BACK * math.tan(t) + p["strip_width"] / (2 * math.cos(t))
         if need > p["opening"] / 2:
             out.append(Failure("F5.pivot", "首", f"首の帯（幅 {p['strip_width']}）が穴（{p['opening']}）の縁に当たるまで {MIN_SWING}° 揺れない"))
+        # 両面の頭は、首の帯の先を 2 枚の間の真ん中まで挟んで裏どうしを貼る（組み方の文）。頭の真ん中の高さに、帯の幅と上下の貼り代が
+        # 入らないと、帯が頭の外に出て貼れない（見直しの指摘: 頭の高さ 15・帯の幅 20 が通っていた）。頭の後ろの端の近くは頭が細く、
+        # 帯は必ず頭の外へ出る（胴へ続く首の所）ので、帯の先が来る真ん中で見る
+        if p["head_sides"] == 2:
+            span = head_span_mm(p)
+            if p["strip_width"] + 2 * HEAD_GLUE_MIN > span:
+                out.append(Failure("F5.pivot", "頭", f"首の帯（幅 {p['strip_width']}mm）を両面の頭の 2 枚の間に挟めない"
+                                                     f"（頭の真ん中の高さ {span:.1f}mm に、帯と上下の貼り代 {HEAD_GLUE_MIN}mm ずつが入らない）"))
         # 首の形の頭は前の壁より前にあり、胴の下の脚には当たらないので、脚がある時は床までが脚の高さだけ遠い
         if p["head_h"] / 2 > ax + p["leg_height"] - 3:
             out.append(Failure("F5.pivot", "頭", "頭の下端が床に近すぎる"))
@@ -246,6 +259,16 @@ _HEAD_LINES = [[(100, 275), (120, 300)], [(125, 262), (140, 285)], [(155, 285), 
 # 最初の点 (172, 250) は輪郭の点、最後の点 (125, 250) は輪郭の辺 (95, 265)〜(135, 245) の上で、最後と最初を結ぶ辺が平らな頭の上。
 # 顔の絵（縞・斑・目・口）は y 262 より下にあり、外す所にかからない
 _HEAD_FLAT = [(172, 250), (195, 265), (235, 320), (245, 385), (215, 415), (150, 420), (100, 445), (70, 425), (58, 390), (40, 345), (60, 300), (95, 265), (125, 250)]
+
+
+def head_span_mm(p):
+    """両面の頭の、頭の幅の真ん中の縦の高さ mm（外形 _HEAD_FLAT を、頭の高さに合わせて縮めた物）。首の帯の先はここまで挟む
+    （組み方の文の「2 枚の間の真ん中まで」）。頭の幅の真ん中は、揺れの式が頭の真ん中を帯の先に置く所。"""
+    xm = (40 + 245) / 2  # 絵の点の x で、頭の幅の真ん中
+    pts = _HEAD_FLAT
+    ys = [y1 + (y2 - y1) * (xm - x1) / (x2 - x1) for (x1, y1), (x2, y2) in zip(pts, pts[1:] + pts[:1])
+          if x1 != x2 and min(x1, x2) <= xm <= max(x1, x2)]
+    return (max(ys) - min(ys)) * p["head_h"] / (445 - 232)
 # 実物の頭の差し色（写真）: 赤い斑・白目の黒い瞳・口の先の白い歯。頭の絵と同じ点の座標で置く
 _HEAD_SPOTS = [(185, 300, 9), (212, 348, 7)]
 _PUPILS = [(85, 307), (129, 337)]

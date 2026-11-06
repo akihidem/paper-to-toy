@@ -7,8 +7,11 @@
 3. 3D: 山折りの線で 180° 折ると、後ろの半分は前の半分にぴったり重なり、口も同じ所に来る（反対の側からも、口が前を向いた顔が見える）。
    180° では谷と山の向きが見分けられないので、170° でも折り、どちらの半分も相手の裏の側に来る（刷った面の顔が両側の外を向く）事を見る。
 4. 組み方の文: 手順の数と番号は変えず、頭を貼る 1 行だけが替わる。
-5. 寸法: head_sides は 1 か 2（1.5・3 は落とす）。吊る形の両面の頭は落とす（頭の裏に粘土を貼るため）。
+5. 寸法: head_sides は選ぶ値の 1 か 2（spec() に mount と同じく選ぶ値で出す。1.5・3・0・True は落とす）。吊る形の両面の頭は
+   落とす（頭の裏に粘土を貼るため）。
 6. 揺れの式: 両面の頭は頭の紙が 2 倍。見本 examples/tora_v6.json は v5 の見本に head_sides 2 を足しただけで、検査を全部通る。
+7. 首の帯: 両面の頭の 2 枚の間に挟むので、頭の真ん中の高さに帯の幅と上下の貼り代 1mm ずつが入らない寸法は落とす（見直しの指摘:
+   頭の高さ 15・帯の幅 20 が通っていた）。頭の真ん中の高さは、刷る部品の前の半分の外形で測った高さと同じ。境の両側を見る。
 面は硬い板、折り線は蝶番と見る（fold3d と同じ）。帯を挟んだ厚みと糊は入れない。通っても、紙で組める保証ではない。
 """
 import json
@@ -102,9 +105,10 @@ assert pc.materials(v5) == pc.materials(v6) and pc.bom(v5) == pc.bom(v6)
 
 # 5. 寸法: 1 か 2 だけ。吊る形の両面の頭は落とす
 assert pc.check_range(v6) == [] and pc.check_range(dict(v6, head_sides=2.0)) == []
-for bad in (1.5, 3, 0, True):
+for bad in (1.5, 3, 0, True, "2"):
     fails = pc.check_range(dict(v6, head_sides=bad))
     assert [f.where for f in fails] == ["head_sides"] and fails[0].floor == "F5.range", (bad, [f.line() for f in fails])
+assert pc.spec()["head_sides"] == pc.HEAD_SIDES == (1, 2) and "head_sides" not in pc.RANGES  # 連続の範囲でなく、選ぶ値
 hang = dict(pc.DEFAULTS, mount="hang", axle_height=pc.DEFAULTS["body_height"] - pc.HOLE_MARGIN)
 assert pc.check_physics(hang) == [], [f.line() for f in pc.check_physics(hang)]
 fails = pc.check_physics(dict(hang, head_sides=2))
@@ -117,4 +121,28 @@ assert pc.check_physics(v6) == [], [f.line() for f in pc.check_physics(v6)]
 _, _, fails = compose("pivot_counterweight", v6, load_source(ex["tora_v6"]["source_id"]))
 assert not fails, [f.line() for f in fails]
 assert [x.key for x in pc.parts(v6)] == [x.key for x in pc.parts(v5)]
-print("ok 虎 v6 の両面の頭（形・3D で折る・組み方の文・寸法・見本）")
+
+# 7. 首の帯が両面の頭に挟めるか
+from shapely.geometry import LineString  # noqa: E402
+
+
+def drawn_span(q):
+    """刷る部品の前の半分（折り線より下）の、頭の幅の真ん中の縦の高さ。"""
+    hd = head(q)
+    y0 = hd.mountain[0][0][1]
+    half = Polygon(hd.outline).intersection(Polygon([(-1, y0), (99, y0), (99, 999), (-1, 999)]))
+    return half.intersection(LineString([(q["head_w"] / 2, -999), (q["head_w"] / 2, 999)])).length
+
+
+for q in (v6, dict(v6, head_h=15), dict(v6, head_h=45, head_w=15)):
+    assert abs(pc.head_span_mm(q) - drawn_span(q)) < 1e-6, (q["head_h"], pc.head_span_mm(q), drawn_span(q))
+assert v6["strip_width"] + 2 * pc.HEAD_GLUE_MIN <= pc.head_span_mm(v6)  # 見本は挟める（帯 10・頭の真ん中 約 19.6）
+bad = dict(v6, head_h=15, strip_width=20, opening=30)  # 見直しの指摘の寸法
+lines = [f.line() for f in pc.check_physics(bad)]
+assert lines == [f"FAIL F5.pivot [頭] 首の帯（幅 20mm）を両面の頭の 2 枚の間に挟めない（頭の真ん中の高さ {pc.head_span_mm(bad):.1f}mm に、"
+                 f"帯と上下の貼り代 {pc.HEAD_GLUE_MIN}mm ずつが入らない）"], lines
+assert pc.check_physics(dict(bad, head_sides=1)) == []  # 片面の頭は帯の横の面に貼るので、この決まりは無い
+edge = pc.head_span_mm(dict(v6, head_h=20)) - 2 * pc.HEAD_GLUE_MIN  # 境: 帯の幅がちょうど入る所は通り、少し広いと落ちる
+assert not any("挟めない" in f.message for f in pc.check_physics(dict(v6, head_h=20, strip_width=round(edge - 0.05, 2))))
+assert any("挟めない" in f.message for f in pc.check_physics(dict(v6, head_h=20, strip_width=round(edge + 0.05, 2))))
+print("ok 虎 v6 の両面の頭（形・3D で折る・組み方の文・寸法・見本・首の帯）")
