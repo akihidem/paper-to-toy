@@ -538,7 +538,7 @@ def parts(p):
         # 紙の頭は軽いので、重りは軸の真下に下げる。下げる腕が無いと寸法どおりに作れない。
         drop_len = max(p["weight_below_axle"] + 8, 20)
         label, lines = _drop_label(p)
-        drop = Part(5, "drop", "重りの腕", [(0, 0), (DROP_W, 0), (DROP_W, drop_len), (0, drop_len)], label_xy=(1, 8), label=label,
+        drop = Part(5, "drop", "重りの腕", [(0, 0), (DROP_W, 0), (DROP_W, drop_len), (0, drop_len)], label_xy=DROP_LABEL_XY, label=label,
                     label_lines=lines, holes=[(4, 4, 1.0)])
         if p["weight_below_axle"] >= LOWER_HOLE_MIN:
             # 下の穴（重りの位置。EP-0011）と、粘土を付ける高さの点の線（EP-0016）。
@@ -557,6 +557,9 @@ def parts(p):
 DROP_W = 8  # 5 重りの腕の幅 mm。軸の穴は真ん中（前と後ろに 4mm）で、軸は前の壁の NECK_BACK 後ろなので、前へ広げると壁に当たる
 LABEL_LINE = 1.25  # 札の行送りの倍率（compose.LINE と同じ。雛形から compose を読むと読み込みの輪になるので、値を写す）
 DROP_LABEL_TOP = 4 + 1.0 + 0.6  # 縦に並べる札の上の端（軸の穴の真ん中 4・半径 1.0 の下に 0.6mm 空ける）
+# 「5 腕」の 1 行の札の所（前と同じ、軸の穴の 4mm 下）。部品の label_xy と、行の並びの 1 行の所を、この 1 か所から取る（見直しの指摘:
+# 2 か所に同じ値を書くと、片方だけ直した時に札の所がずれる）
+DROP_LABEL_XY = (1, 8)
 
 
 def _drop_label(p):
@@ -578,10 +581,10 @@ def _drop_label(p):
     wb = p["weight_below_axle"]
     band = THREAD_R + 1.0  # 下の穴の半径と、点の線との空き
     if wb < LOWER_HOLE_MIN or bottom > 4 + wb - band:
-        y = 8
+        y = DROP_LABEL_XY[1]
         if wb >= LOWER_HOLE_MIN and y + pitch >= 4 + wb - band - 1e-9:  # 境（ちょうど触れる所）も下へ
             y = 4 + wb + band
-        return "5 腕", [("5 腕", 1, y)]
+        return "5 腕", [("5 腕", DROP_LABEL_XY[0], y)]
     x0 = (DROP_W - text_width(head, LABEL_SIZE)) / 2
     xc = x0 + text_width("5 ", LABEL_SIZE)  # 下の字は「重」の列にそろえる
     return "5 重りの腕", [(head, x0, DROP_LABEL_TOP)] + [(c, xc, DROP_LABEL_TOP + (i + 1) * pitch) for i, c in enumerate(rest)]
