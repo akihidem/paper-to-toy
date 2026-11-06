@@ -157,4 +157,18 @@ st = t.steps(O)
 assert any("刷った面を外にして" in x and "輪" in x for x in st), st
 assert any("点の線" in x and "粘土" in x for x in st), st
 assert any("赤道の山折りの線" in x and "内へ折り" in x for x in st) and not any("赤道の破線" in x for x in st), st
+# EP-0001 に足した声（曲線の胴に直線の 2 番を貼るのが難しい）: 帯の上の縁に、切れの半分ごとのくし形の切り込みを入れ、
+# 切り込みは赤道の折り線の手前で止める。帯の糊代は切り込みを除いた形（斜線が切り込みを隠さない）。組み方の文が切り込みを言う
+for R in (t.RANGES["base_r"][0], O["base_r"], t.RANGES["base_r"][1]):
+    for n in (t.RANGES["gores"][0], O["gores"], t.RANGES["gores"][1]):
+        for b in (t.RANGES["band"][0], O["band"], t.RANGES["band"][1]):
+            q = {**O, "base_r": R, "gores": n, "band": b}
+            if t.check_range(q) or t.check_physics(q):
+                continue
+            dome = next(x for x in t.parts(q) if x.key == "dome")
+            tips = [pt for pt in dome.outline if abs(pt[1] - (b - t.SLIT_KEEP)) < 1e-9]
+            assert len(tips) == 2 * n - 1, (q, len(tips))
+            assert Polygon(dome.outline).is_valid and Polygon(dome.outline).buffer(1e-6).contains(Polygon(dome.glue[0])), q
+            assert check_art([dome]) == [], (q, [f.line() for f in check_art([dome])])
+assert any("切り込み" in x and "重ねて" in x for x in t.steps(O)), t.steps(O)
 print("ok 起き上がり小法師の印と向き")
