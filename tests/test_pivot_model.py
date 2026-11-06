@@ -15,8 +15,8 @@ assert any("傾く" in f.message for f in check_physics(seesaw))
 assert mass_points(DEFAULTS)[0][0] < 0.2 and not check_physics(DEFAULTS)
 print(round(period_s(mass_points(DEFAULTS)), 2))
 
-# EP-0011（作成動画の札から採った案。2026-11-06）: 首の形の 5 重りの腕に下の穴（重りの位置）と点の丸を足し、腕は試してから貼る順にした。
-# - 下の穴は、軸の穴から weight_below_axle 下（釣り合いの式の重りの位置）。点の丸（位置の印）で囲む。粘土はこの穴の所に付ける
+# EP-0011（作成動画の札から採った案。2026-11-06）: 首の形の 5 重りの腕に下の穴（重りの位置）を足し、腕は試してから貼る順にした。
+# - 下の穴は、軸の穴から weight_below_axle 下（釣り合いの式の重りの位置）。粘土を付ける高さを点の線（位置の印）で示す（EP-0016 で丸から替えた）
 # - 糸で玉を下げる形は、玉（粘土 weight_g の球）の下が胴の底から 3mm 以上離れる寸法の時だけ、組み方の文と部品表に出す。
 #   釣り合いの式は変えない: 糸で下げた玉の重さは、糸を通した穴にかかる（玉の所ではない）。糸の長さは、玉が底に当たるかだけに効く
 # - 組み方の文: 腕は帯に仮に留め、頭の傾きを見て位置を決めてから貼る（手順の数と番号は変えない）
@@ -44,8 +44,9 @@ for wba in (pc.RANGES["weight_below_axle"][0], 0.5, 1, 2, 3, 3.6, 4, 5, 12, 20, 
             assert wba + pc.clay_r(wg) <= ax - 3 + 1e-9, q  # 玉の下が底から 3mm 以上
             (ax_x, ax_y, _), (hx, hy, hr) = drop.holes[0], drop.holes[1]
             assert hx == ax_x and abs((hy - ax_y) - wba) < 1e-9, (q, drop.holes)  # 軸の穴の真下、weight_below_axle の所
-            ring = [a for a in drop.art if a["kind"] == "mark" and a.get("mark") == "weight"]
-            assert len(ring) == 1 and math.dist(tuple(Polygon(ring[0]["pts"]).centroid.coords[0]), (hx, hy)) < 0.05, (q, ring)
+            # 粘土の高さの点の線は、穴の左右の 2 本で、穴の高さにあり、穴にかからない（check_art）
+            marks = [a for a in drop.art if a["kind"] == "mark" and a.get("mark") == "weight"]
+            assert len(marks) == 2 and all(y == hy for a in marks for _, y in a["pts"]), (q, marks)
             assert check_art([drop]) == [], (q, [f.line() for f in check_art([drop])])
             assert mass_points(q)[-1] == (wg, -q["weight_behind"], wba), "釣り合いの式の重りの位置は変えない"
             L = pc.hang_thread_mm(q)
@@ -59,7 +60,7 @@ for wba in (pc.RANGES["weight_below_axle"][0], 0.5, 1, 2, 3, 3.6, 4, 5, 12, 20, 
                 # 長さの幅（下限 HANG_MIN と上限）を書く。上限だけだと、結ぶ間の無い短さでも文に合ってしまう
                 assert L >= pc.HANG_MIN and any("糸" in s and f"玉の上は穴から {pc.HANG_MIN}〜{L}mm" in s for s in st), (q, st)
                 assert any(f"玉の上は穴から {pc.HANG_MIN}〜{L}mm" in m for m in mat), (q, mat)
-            assert any("下の穴（点の丸）の所に粘土" in s and "仮に留め" in s for s in st), st
+            assert any("下の穴（点の線）の所に粘土" in s and "仮に留め" in s for s in st), st
             assert any("頭の傾きを見て" in s and "貼る" in s for s in st), st
 assert seen >= 10 and hangable >= 1, (seen, hangable)
 # 重い玉の下が底に当たる寸法（検品の指摘の例）は、玉の下の端で落とす。玉の真ん中だけ見ると通っていた
@@ -83,3 +84,34 @@ _, layout, fails = compose("pivot_counterweight", neck, load_source(pc.SOURCE))
 assert not fails, [f.line() for f in fails]
 assert any("位置の印" in x.text for x in layout["texts"]), "凡例に位置の印の行が無い"
 print("ok 重りの腕の下の穴と試してから貼る順")
+
+
+# EP-0016（本人のレビューから採った案。2026-11-06）
+# 1. 胴の 2 枚目の側面の絵は y だけを裏返す。2 枚の側面の虎の頭（図の鼻先＝_BODY の x の一番小さい点）が、どちらも箱の前の端
+#    （軸の穴の側）に来る。前は 180° 回していて、2 枚目の頭が後ろの端に来た（前にも言われて直っていなかった所）
+# 2. 2〜5 番に部品の名を刷る（札は部品の枠の内。compose の F5.text_overlap が見る）
+# 3・4. 首の形では、胴の上の面に軸の竹串が横切る所の点の線、用意する物に竹串と粘土の置き所・丸い印は穴・4 尾だけ色がある理由
+nose = min(range(len(pc._BODY)), key=lambda i: pc._BODY[i][0])
+for mount in ("neck", "hang"):
+    q = dict(DEFAULTS, mount=mount, **({"axle_height": 50} if mount == "hang" else {}))
+    body = next(x for x in pc.parts(q) if x.key == "body")
+    sides = [a for a in body.art if a["kind"] == "poly" and a.get("fill") == pc.TIGER and a.get("stroke") == pc.STRIPE]
+    assert len(sides) == 2, (mount, len(sides))
+    noses = [a["pts"][nose][0] for a in sides]
+    hx = body.holes[0][0]
+    H, L = q["body_height"], q["body_length"]
+    # 2 枚とも鼻先は同じ x で、軸の穴の側（前の端 H の近く）。後ろの端 H + L からは遠い
+    assert abs(noses[0] - noses[1]) < 1e-9 and all(abs(n - hx) < abs(n - (H + L)) for n in noses), (mount, noses, hx)
+    _, layout, fails = compose("pivot_counterweight", q, load_source(pc.SOURCE))
+    assert not fails, (mount, [f.line() for f in fails])
+labels = {x.key: x.label for x in pc.parts(neck)}
+assert labels == {"body": "1 胴", "head": "2 頭", "strip": "3 首の帯", "tail": "4 尾", "drop": "5 腕"}, labels
+body = next(x for x in pc.parts(neck) if x.key == "body")
+axle = [a for a in body.art if a["kind"] == "mark" and a.get("mark") == "axle"]
+assert len(axle) == 1 and all(x == body.holes[0][0] for x, _ in axle[0]["pts"]), axle  # 2 つの軸の穴と同じ x
+assert check_art([body]) == [], [f.line() for f in check_art([body])]
+mat = pc.materials(neck)
+assert any("5 腕の上の穴に通す" in m and "点の線の下を通る" in m for m in mat), mat
+assert any("5 腕の下の穴の、点の線の所に付ける" in m for m in mat), mat
+assert any("丸い印は穴" in m and "4 尾は外に見えるので色を刷り" in m for m in mat), mat
+print("ok 虎の側面の向き・部品の名・竹串と粘土の印")

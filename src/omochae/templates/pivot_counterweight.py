@@ -203,7 +203,12 @@ def _scale(pts, x0, y0, sx, sy, ox, oy):
 
 
 def _flip(pts, x, y, w, h):
-    return [(2 * x + w - a, 2 * y + h - b) for a, b in pts]
+    """2 枚目の側面の絵。y だけを裏返す（本人のレビューから採った案 EP-0016、2026-11-06。前にも言われて直っていなかった所）。
+
+    前は x も裏返し（180° 回していた）、組むとその側の虎は後ろを向き、軸の穴が尾の側に来た。2 枚目の側面は箱の中で上が頁の下に
+    なるので、y だけ裏返すと外から見て立ち、頭が 1 枚目と同じ前の端（軸の穴の側）に来る（鼠車の胴と同じ）。
+    """
+    return [(a, 2 * y + h - b) for a, b in pts]
 
 
 def _side_art(x, y, L, H, flip):
@@ -232,7 +237,8 @@ def _head_part(p):
     art = [{"kind": "poly", "pts": outline, "fill": TIGER, "stroke": STRIPE, "sw": 0.2}, {"kind": "poly", "pts": scale(_MOUTH), "fill": MOUTH}]
     art += [{"kind": "poly", "pts": scale(e), "fill": EYE, "stroke": STRIPE, "sw": 0.2} for e in _EYES]
     art += [{"kind": "line", "pts": scale(line), "stroke": STRIPE, "sw": 0.35} for line in _HEAD_LINES]
-    return Part(2, "head", "頭", outline, label_xy=(w * 0.5, h * 0.6), label="2", art=art)
+    # 2〜5 番にも部品の名を刷る（EP-0016: 1 番だけ名があり、ほかは番号だけだった）
+    return Part(2, "head", "頭", outline, label_xy=(w * 0.5, h * 0.6), label="2 頭", art=art)
 
 
 def parts(p):
@@ -267,6 +273,8 @@ def parts(p):
     else:
         back = NECK_BACK  # 前の壁の少し後ろに軸を通す。首の帯が壁に当たらないように
         body.holes = [(H + back, top1 + H - ax, 1.2), (H + back, bottom - (H - ax), 1.2)]
+        # 軸の竹串が胴を横切る所の線（EP-0016: 竹串を通す位置の線）。上の面の、2 つの穴と同じ x に横切る点の線（位置の印）
+        body.art.append({"kind": "mark", "pts": [(H + back, top0 + 0.6), (H + back, top1 - 0.6)], "mark": "axle"})
         op = p["opening"]
         cy = (b0 + b1) / 2
         body.cuts = [(H - ax - op / 2, cy - op / 2, op, op)]
@@ -276,21 +284,27 @@ def parts(p):
     sw = p["strip_width"]
     length = (p["neck_length"] + 12) if not hang else STRIP_HOLE + axle_to_head_top(p) + HEAD_OVERLAP
     # 帯は半分に折って 2 枚にする。1 枚では頭を支えるには柔らかいと見込むため。
-    strip = Part(3, "strip", "首の帯", [(0, 0), (2 * sw, 0), (2 * sw, length), (0, length)], label_xy=(1, 1.5), label="3",
+    # 札は軸の穴の下に置く（穴の上の 1.5mm からだと、名の札が穴にかかる）
+    strip = Part(3, "strip", "首の帯", [(0, 0), (2 * sw, 0), (2 * sw, length), (0, length)], label_xy=(1, STRIP_HOLE + 2.5), label="3 首の帯",
                  valley=[((sw, 0), (sw, length))], holes=[(sw / 2, STRIP_HOLE, 1.0), (1.5 * sw, STRIP_HOLE, 1.0)])
-    tail = Part(4, "tail", "尾", [(0, 0), (8, 0), (8, 56), (0, 56)], label_xy=(1, 1.5), label="4",
+    tail = Part(4, "tail", "尾", [(0, 0), (8, 0), (8, 56), (0, 56)], label_xy=(1, 1.5), label="4 尾",
                 art=[_panel(0.1, 0.1, 7.9, 55.9, TIGER)] + [{"kind": "line", "pts": [(0.3, y), (7.7, y)], "stroke": STRIPE, "sw": 0.5} for y in range(10, 54, 8)])
     out = [body, head, strip, tail]
     if not hang:
         # 紙の頭は軽いので、重りは軸の真下に下げる。下げる腕が無いと寸法どおりに作れない。
         drop_len = max(p["weight_below_axle"] + 8, 20)
-        drop = Part(5, "drop", "重りの腕", [(0, 0), (8, 0), (8, drop_len), (0, drop_len)], label_xy=(1, 8), label="5", holes=[(4, 4, 1.0)])
+        # 札は「5 腕」（幅 8mm に「5 重りの腕」は入らない。札は部品の枠の内に置く決まり）
+        drop = Part(5, "drop", "重りの腕", [(0, 0), (8, 0), (8, drop_len), (0, drop_len)], label_xy=(1, 8), label="5 腕", holes=[(4, 4, 1.0)])
         if p["weight_below_axle"] >= LOWER_HOLE_MIN:
-            # 下の穴（重りの位置）と、それを囲む点の丸（EP-0011）。丸は穴の縁から 1.2mm 離す（印が穴にかかると、切った時に消える）。
+            # 下の穴（重りの位置。EP-0011）と、粘土を付ける高さの点の線（EP-0016）。
             # 前は「下の端に粘土を付ける」だけで、腕が 20mm の下限で長い寸法では、式の位置（軸から weight_below_axle）より下に付いた
             wy = 4 + p["weight_below_axle"]
             drop.holes.append((4, wy, THREAD_R))
-            drop.art.append({"kind": "mark", "pts": _ring(4, wy, THREAD_R + 1.2), "closed": True, "mark": "weight"})
+            # 粘土を付ける高さの線（EP-0016: 点の丸は「赤い斑点」に見え、何の印か分からなかった）。起き上がり小法師の粘土の線と同じ
+            # 位置の印の点の線で、腕を横切る。穴の左右で切る（印が穴にかかると切った時に消える）
+            gap = THREAD_R + 1.0
+            drop.art += [{"kind": "mark", "pts": [(0.6, wy), (4 - gap, wy)], "mark": "weight"},
+                         {"kind": "mark", "pts": [(4 + gap, wy), (7.4, wy)], "mark": "weight"}]
         out.append(drop)
     return out
 
@@ -346,7 +360,15 @@ def materials(p):
     # 首の形は、重りの腕をテープで仮に留めて試してから貼る（EP-0011）ので、セロハンテープも書く（検品の指摘: 手順にあって用意する物に無かった）
     # カッターは行の終わりに置く（中を切り抜く所がある形の行は「、カッター」で終わる、と試験が見る）
     tools = "のり、はさみ、定規" + ("、セロハンテープ、カッター" if p["mount"] == "neck" else "")
-    return [f"{by['body']['material']}を 1 枚", tools, by["axle"]["material"], by["weight"]["material"]]
+    if p["mount"] != "neck":
+        return [f"{by['body']['material']}を 1 枚", tools, by["axle"]["material"], by["weight"]["material"]]
+    # 首の形: 紙でない材料の置き所と、丸い印・色の意味を字で書く（EP-0016: 本人に分からなかった）。手順は刷らないので、刷る紙の字で言う
+    L = hang_thread_mm(p)
+    hang = f"。糸で下げる時は、たこ糸も。玉の上は穴から {HANG_MIN}〜{L}mm" if L is not None else ""
+    return [f"{by['body']['material']}を 1 枚", tools,
+            f"{by['axle']['material']}（胴の 2 つの穴・3 首の帯の穴・5 腕の上の穴に通す。胴の上の面の点の線の下を通る）",
+            f"油粘土 {p['weight_g']:g}g（5 腕の下の穴の、点の線の所に付ける{hang}）",
+            "丸い印は穴（竹串の先であける）。4 尾は外に見えるので色を刷り、3 首の帯と 5 腕は胴の中に入るので白"]
 
 
 def steps(p):
@@ -361,7 +383,7 @@ def steps(p):
         hang = f"か、下の穴に糸を通して粘土の玉を下げる（玉の上は穴から {HANG_MIN}〜{L}mm）" if L is not None else ""
         # 下の穴は weight_below_axle が LOWER_HOLE_MIN 以上の時だけある（軸の穴と近すぎる時は開けない）。無い時は、粘土の位置を軸の穴からの深さで言う
         # （検品の指摘: 穴の無い寸法でも「下の穴」と言っていた）
-        clay = (f"下の穴（点の丸）の所に粘土を付ける{hang}" if p["weight_below_axle"] >= LOWER_HOLE_MIN
+        clay = (f"下の穴（点の線）の所に粘土を付ける{hang}" if p["weight_below_axle"] >= LOWER_HOLE_MIN
                 else f"粘土の真ん中を、上の穴の {p['weight_below_axle']:g}mm 下に付ける")
         out += ["3 首の帯の前の端に 2 頭を貼る", "帯を前の壁の穴に入れ、竹串を胴の穴と帯の穴に通す",
                 f"5 重りの腕の上の穴にも竹串を通す。{clay}。腕は 3 首の帯に添えて、テープで仮に留める（まだ貼らない）",
