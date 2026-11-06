@@ -1,5 +1,7 @@
 # paper-to-toy — 紙で試すための型紙（papercraft）のエンジン
 
+Paper to toy は、内部構造のある機構を、紙のような2次元素材を中心とした原材料で作る設計ができるエンジン。
+
 型紙（papercraft）を作るエンジン。江戸の玩具を紙で試すために、寸法から型紙の PDF を作り、刷れる・組めるかを機械で検査する。**Built with Claude: Japan 2026（ハッカソン）で作っている。**
 
 A papercraft template engine: generates printable PDF patterns from dimensions and checks them before and after rendering. Being built at Built with Claude: Japan 2026 (hackathon).
