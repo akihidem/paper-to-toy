@@ -7,6 +7,68 @@
    "proposals": [],
    "sheet_sets": {},
    "note": "輪を足す前からの形。刷った組との結び付きは、次の版から刻む"
+  },
+  {
+   "version": 2,
+   "commit": "034ecbed2168bdeb93c89d309f5554d7e58180bf",
+   "at": "2026-11-06",
+   "proposals": [
+    {
+     "id": "EP-0011",
+     "target": {
+      "kind": "template",
+      "name": "pivot_counterweight"
+     },
+     "title": "pivot_counterweight（紙 NDL-1187053-R0000014-R.H-A）: 作った人の工夫（直した点と思いつき）を、雛形に入れるか見る",
+     "numbers": {
+      "fixes": 0,
+      "ideas": 0,
+      "craft_talks": 3,
+      "keeps": 0,
+      "reports": 1
+     },
+     "finding": "重りを 5 腕の穴から糸で下げる形を手順と部品表に入れる。腕の先に糸を留める所と位置の印を刷る。胴を閉じる前に重りの位置を試してから貼る順にする"
+    },
+    {
+     "id": "EP-0016",
+     "target": {
+      "kind": "template",
+      "name": "pivot_counterweight"
+     },
+     "title": "pivot_counterweight（紙 neck）: 作る前のレビューの指摘を、雛形に入れるか見る",
+     "numbers": {
+      "reviews": 4,
+      "reports": 0
+     },
+     "finding": "前にも言われて直っていない所を先に: 胴の 2 枚目の側面の絵を、回して付けるのでなく裏返し（左右反転）にし、首の穴と絵の向きを合わせる。2〜5 番に部品の名を刷り、5 番の印が何の印かを示す。4 番だけの色の意味を示す。竹串と重りを貼る位置の線と、糸と竹串を通す穴の印を刷る"
+    },
+    {
+     "id": "EP-0017",
+     "target": {
+      "kind": "template",
+      "name": "slider_fan"
+     },
+     "title": "slider_fan（紙 tube）: 作る前のレビューの指摘を、雛形に入れるか見る",
+     "numbers": {
+      "reviews": 6,
+      "reports": 0
+     },
+     "finding": "扇は糸を一切使わない。扇の通し穴の印と縛るための出っぱりを消す。8 番の帯に替えて、台と扇の間に入り扇の底と側にのりで留め、扇の両端を付けて基本は開いた形にする小さい紙の部品を足す（しまう時は閉じる形がよい）。この形で開けば、下から押す仕組みと竹串と穴の案内の丸は要らない"
+    }
+   ],
+   "sheet_sets": {
+    "slider_fan": "goraigo-v11",
+    "pivot_counterweight": "tora-v4"
+   },
+   "sources": {
+    "slider_fan": [
+     "NDL-1187053-R0000005-L"
+    ],
+    "pivot_counterweight": [
+     "NDL-1187053-R0000014-R"
+    ]
+   },
+   "note": "虎 tora-v4（#106・合体 173b8fa1）と御来迎 goraigo-v11（#107・合体 034ecbed）。この版の御来迎の紙は push_part lift の形（表の 1 枚は tab のまま）。EP-0012 は溝の印が残るので次の版の予定に残す"
   }
  ],
  "next": [
@@ -150,52 +212,7 @@
     "keeps": 0,
     "reports": 1
    },
-   "finding": "開く糸の段は本人のレビューで取り下げ（扇は糸なし・EP-0017）。溝が下の端から切り込む形だと紙で分かる印を刷る。扇の足が曲がって傾かない形は、EP-0017 の台と扇の間の部品と一緒に見る",
-   "adopted_at": "2026-11-06"
-  },
-  {
-   "id": "EP-0011",
-   "target": {
-    "kind": "template",
-    "name": "pivot_counterweight"
-   },
-   "title": "pivot_counterweight（紙 NDL-1187053-R0000014-R.H-A）: 作った人の工夫（直した点と思いつき）を、雛形に入れるか見る",
-   "numbers": {
-    "fixes": 0,
-    "ideas": 0,
-    "craft_talks": 3,
-    "keeps": 0,
-    "reports": 1
-   },
-   "finding": "重りを 5 腕の穴から糸で下げる形を手順と部品表に入れる。腕の先に糸を留める所と位置の印を刷る。胴を閉じる前に重りの位置を試してから貼る順にする",
-   "adopted_at": "2026-11-06"
-  },
-  {
-   "id": "EP-0016",
-   "target": {
-    "kind": "template",
-    "name": "pivot_counterweight"
-   },
-   "title": "pivot_counterweight（紙 neck）: 作る前のレビューの指摘を、雛形に入れるか見る",
-   "numbers": {
-    "reviews": 4,
-    "reports": 0
-   },
-   "finding": "前にも言われて直っていない所を先に: 胴の 2 枚目の側面の絵を、回して付けるのでなく裏返し（左右反転）にし、首の穴と絵の向きを合わせる。2〜5 番に部品の名を刷り、5 番の印が何の印かを示す。4 番だけの色の意味を示す。竹串と重りを貼る位置の線と、糸と竹串を通す穴の印を刷る",
-   "adopted_at": "2026-11-06"
-  },
-  {
-   "id": "EP-0017",
-   "target": {
-    "kind": "template",
-    "name": "slider_fan"
-   },
-   "title": "slider_fan（紙 tube）: 作る前のレビューの指摘を、雛形に入れるか見る",
-   "numbers": {
-    "reviews": 6,
-    "reports": 0
-   },
-   "finding": "扇は糸を一切使わない。扇の通し穴の印と縛るための出っぱりを消す。8 番の帯に替えて、台と扇の間に入り扇の底と側にのりで留め、扇の両端を付けて基本は開いた形にする小さい紙の部品を足す（しまう時は閉じる形がよい）。この形で開けば、下から押す仕組みと竹串と穴の案内の丸は要らない",
+   "finding": "開く糸の段と扇の根元の帯は本人のレビューで取り下げ（扇は糸なしで、台と扇の間の部品にした。EP-0017 で版 2 に入った）。残りは、溝が下の端から切り込む形だと紙で分かる印（つまみの形の紙）",
    "adopted_at": "2026-11-06"
   }
  ]
