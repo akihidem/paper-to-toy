@@ -691,19 +691,17 @@ def check_rise(parts, p):
     rest = H - s  # 静かな時の、台の上の面の外筒の底からの高さ。開いた位置では H（口の高さ）
     stand = max(t + h, fh)
     inside = min(L, rest)  # 静かな時に、内筒が外筒の中に入っている長さ（下の端が外筒の下に出る時は、外筒の底から台まで）
-    top_depth = p["base_glue"] + sf.CHOPSTICK_GAP  # 割り箸の上の端の、台の上の面からの深さ
-    below = sf.CHOPSTICK_LEN - (H - top_depth)  # 開いた位置で、割り箸が外筒の下へ出る長さ
+    _, below = sf.chopstick_lengths(L, H, p["base_glue"])  # 開いた位置で、割り箸が外筒の下へ出る長さ（所見の文に言う）
     bad = []
     if rest + stand >= H - EPS:
         bad.append(f"静かな時に、台の上の物（扇 {t + h:g}・像 {fh:g}）の上の端が口から {rest + stand - H:.1f}mm 出る")
     if inside < a - EPS:
         bad.append(f"静かな時に、内筒が外筒に {inside:.1f}mm しか入らず、一辺 {a:.1f} より短い")
-    # 割り箸を内筒に貼れる長さ（台の糊代の下から内筒の下の端まで）も、折った内筒の長さで見る（型紙の床と同じ。3D の確かめだけを
-    # 呼んだ時に判定が食い違わないように。見直しの指摘）
-    if L - top_depth < sf.CHOPSTICK_GLUE - EPS:
-        bad.append(f"割り箸を内筒に貼れる長さが {L - top_depth:.1f}mm で、{sf.CHOPSTICK_GLUE}mm に足りない")
-    if below < sf.CHOPSTICK_GRIP - EPS:
-        bad.append(f"開いた位置で、割り箸（長さ {sf.CHOPSTICK_LEN}mm の見込み）が外筒の下へ {below:.1f}mm しか出ず、{sf.CHOPSTICK_GRIP}mm 残らない")
+    # 割り箸の決まり（貼れる長さ・開いた位置で外筒の下に残る長さ）は、型紙の床と同じ式と同じ順（雛形の chopstick_problem）で、
+    # 折った形の筒の高さと内筒の長さで見る（2 つに書くと判定がずれた。見直しの指摘）
+    problem = sf.chopstick_problem(L, H, p["base_glue"])
+    if problem:
+        bad.append(problem)
     if bad:
         failures.extend(Failure("3D.stroke", inner_label, m) for m in bad)
         return notes, failures

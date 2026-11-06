@@ -77,6 +77,10 @@ CHOPSTICK_W = 5  # 割った割り箸 1 本の太さ mm の見込み。内筒に
 CHOPSTICK_GRIP = 30  # 開いた位置でも、割り箸を外筒の下へ残す長さの下限 mm。指で持って押し引きする所（見込み。未確認）
 CHOPSTICK_GLUE = 20  # 割り箸を内筒に貼る長さの下限 mm。短いと押した時に外れる見込み（未確認）
 CHOPSTICK_GAP = 1  # 台の糊代（内筒の上の口の内に貼る）の下の端と、割り箸の上の端の間 mm
+# 割り箸は内筒の 1 つの壁に沿って貼るので、押す力は内筒の軸から約（一辺の半分 − 割り箸の太さの半分）ずれ、内筒を傾ける力になる
+# （見直しの指摘）。引き出しの引っかかりの見込み（押す力のずれ e、支える長さ L、紙どうしの摩擦の係数 μ で、μ > L / (2e) なら
+# 引っかかる）では、v13 の一番短い支え（静かな時に外筒に入る長さの下限＝内筒の一辺 22）と e ≈ 8.5 で L / (2e) ≈ 1.3。紙どうしの
+# μ の見込み（0.3〜0.6）より大きいので、今の「内筒の一辺以上入る」決まりで引っかからない見込み（紙で確かめていない）
 # 次の組の寸法の見本は examples/goraigo_v13.json。v12 の寸法のまま、内筒の長さを半分（115 → 57.5）にした（v12 の見本の場面は、v13 の形
 # では割り箸の行と両側の像の分だけ A4 の刷る域から出るので外した）。
 # v12 で選んだ事（実物の写真の比に、A4 の 1 枚と床が許す所まで寄せた）はそのまま:
@@ -565,6 +569,27 @@ def thread_mm(p):
 RESULTS = ("動いた", "動かない", "わからない")
 
 
+def chopstick_lengths(L, H, base_glue):
+    """割り箸を内筒に貼れる長さと、開いた位置で外筒の下へ出る長さ（mm）。
+
+    割り箸は台の糊代（深さ base_glue）の下 CHOPSTICK_GAP から貼る。開いた位置では台の上の面が口の高さなので、割り箸の上の端は
+    口から base_glue + CHOPSTICK_GAP 下、下の端はそこから CHOPSTICK_LEN 下。型紙の床（_check_rise）と 3D の確かめ（fold3d.check_rise）が
+    この 1 つの式を使う（2 つに書くと判定がずれるため。見直しの指摘）。
+    """
+    top_depth = base_glue + CHOPSTICK_GAP
+    return L - top_depth, CHOPSTICK_LEN - (H - top_depth)
+
+
+def chopstick_problem(L, H, base_glue):
+    """割り箸の決まりの、先の 1 つの崩れの文（無ければ None）。貼れる長さを先に見る（貼れなければ、出る長さを言っても直らない）。"""
+    glued, below = chopstick_lengths(L, H, base_glue)
+    if glued < CHOPSTICK_GLUE:
+        return f"割り箸を内筒に貼る長さ {glued:g}mm が {CHOPSTICK_GLUE}mm に足りず、押すと外れる"
+    if below < CHOPSTICK_GRIP:
+        return f"割り箸（長さ {CHOPSTICK_LEN}mm の見込み）が、開いた位置で外筒の下へ {below:g}mm しか出ず、{CHOPSTICK_GRIP}mm 残らないので押し引きできない"
+    return None
+
+
 def _check_rise(p):
     """内筒を下から押し上げる形の床。床の名は今の物を使う（凍結の基準の一覧にある名だけを使う）。
 
@@ -578,7 +603,7 @@ def _check_rise(p):
     - 台は、印の面を上にして糊代を下へ山折りし、内筒の上の口に差し込んで、糊代を内筒の内の面に貼る（蓋をする）。山折りの糊代は
       刷った面（糊代の斜線）が外を向くので、口に差し込むと斜線の面が内筒の壁に付く（かぶせると斜線の裏が壁に付き、斜線に糊を付けると
       貼れない。見直しの指摘）。台の一辺は、内筒の一辺より糊代の紙 2 枚分以上小さく、1mm より小さくない（F5.base_size）。
-    - 扇の下の端（要）は台の上の面にあり、開いた位置で口の高さに来る（押し当てた位置では口より上）。扇は台の縁と口の角より下へは開けないので、開く角の見込みの
+    - 扇の下の端（要）は台の上の面にあり、開いた位置で口の高さに来る（押し過ぎると口より上）。扇は台の縁と口の角より下へは開けないので、開く角の見込みの
       上限（帯の長さ ÷ 板の高さ）が、要から台の縁・口の角を見た角（ほぼ 180°）に収まる（F5.fan_clearance）。
       実物の写真の扇（約 300° 開く）は、要が像の首の高さにある。要を上げる柱の部品（案 B）は、この形を紙で確かめた後に入れる。
     """
@@ -596,14 +621,9 @@ def _check_rise(p):
         out.append(Failure("F5.stroke", "内筒", f"押し上げる量 {s} が筒の高さ {H} を超え、静かな時に台が筒の下に出る"))
     elif min(L, H - s) < a:
         out.append(Failure("F5.stroke", "内筒", f"静かな時に内筒が外筒に {min(L, H - s):g}mm しか入らず、一辺 {a} より短いので傾く"))
-    # 割り箸は台の糊代（深さ base_glue）の下 CHOPSTICK_GAP から貼る。開いた位置では台の上の面が口の高さなので、割り箸の上の端は口から
-    # base_glue + CHOPSTICK_GAP 下、下の端はそこから CHOPSTICK_LEN 下。外筒の下へ出る長さは CHOPSTICK_LEN − (H − base_glue − CHOPSTICK_GAP)
-    top_depth = p["base_glue"] + CHOPSTICK_GAP
-    glued, below = L - top_depth, CHOPSTICK_LEN - (H - top_depth)
-    if glued < CHOPSTICK_GLUE:
-        out.append(Failure("F5.stroke", "割り箸", f"割り箸を内筒に貼る長さ {glued:g}mm が {CHOPSTICK_GLUE}mm に足りず、押すと外れる"))
-    elif below < CHOPSTICK_GRIP:
-        out.append(Failure("F5.stroke", "割り箸", f"割り箸（長さ {CHOPSTICK_LEN}mm の見込み）が、開いた位置で外筒の下へ {below:g}mm しか出ず、{CHOPSTICK_GRIP}mm 残らないので押し引きできない"))
+    problem = chopstick_problem(L, H, p["base_glue"])
+    if problem:
+        out.append(Failure("F5.stroke", "割り箸", problem))
     if not a < A - 1:
         out.append(Failure("F5.slide_clearance", "内筒", f"内筒 {a} は外筒 {A} − 1 より小さくない"))
     # 台は内筒の上の口に差し込み、糊代を内筒の内の面に貼る。口に入る（糊代の紙 2 枚の分だけ小さい）と、糊代が内筒の壁に届く（1mm より
@@ -623,7 +643,7 @@ def _check_rise(p):
     if p["figure_w"] > A - 2:
         out.append(Failure("F5.figure_base", "像", f"像の幅 {p['figure_w']} が筒の一辺 {A}−2 を超え、筒に入らない"))
     # 要は台の上の面から受けの底の紙の厚さ t 上。開いた位置で台の上の面が口の高さに来るので、台の縁（一辺 b）も口の角（一辺 A）も要の t 下。
-    # 押し当てた位置では口の角は要よりさらに下になり、開ける角は台の縁で決まるので、開いた位置で見れば足りる
+    # 止めが無いので押し過ぎると台は口より上へ出るが、その時は口の角が要よりさらに下になり、開ける角は台の縁で決まるので、開いた位置で見れば足りる
     bound = opening_bound_deg(p["fold_count"], p["fold_width"], h)
     limit = min(clearance_limit_deg(A, t), clearance_limit_deg(b, t))
     if bound > limit:
