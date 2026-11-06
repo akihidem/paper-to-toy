@@ -112,7 +112,8 @@ for mount in ("neck", "hang"):
     _, layout, fails = compose("pivot_counterweight", q, load_source(pc.SOURCE))
     assert not fails, (mount, [f.line() for f in fails])
 labels = {x.key: x.label for x in pc.parts(neck)}
-assert labels == {"body": "1 胴", "head": "2 頭", "strip": "3 首の帯", "tail": "4 尾", "drop": "5 腕"}, labels
+# 5 は「5 重りの腕」（制作者の決定 2026-11-06「部品の名前は案3: 型紙を「5 重りの腕」にそろえる。」。札の並べ方は test_pivot_arm_label.py が見る）
+assert labels == {"body": "1 胴", "head": "2 頭", "strip": "3 首の帯", "tail": "4 尾", "drop": "5 重りの腕"}, labels
 # 3 首の帯の札: 真ん中の谷折りの線（x = sw）が、字の「3」と「首」の間の空きを通る（字が折り線にかからない）。細い帯は「3 帯」で、
 # どの帯の幅でも札が帯の枠に収まる（範囲の下限 5mm で「3 首の帯」が枠からはみ出し、配置の検査で落ちていた。見直しの指摘）
 from omochae.compose import LABEL_SIZE
@@ -135,8 +136,8 @@ axle = [a for a in body.art if a["kind"] == "mark" and a.get("mark") == "axle"]
 assert len(axle) == 1 and all(x == body.holes[0][0] for x, _ in axle[0]["pts"]), axle  # 2 つの軸の穴と同じ x
 assert check_art([body]) == [], [f.line() for f in check_art([body])]
 mat = pc.materials(neck)
-assert any("5 腕の上の穴に通す" in m and "点の線の下を通る" in m for m in mat), mat
-assert any("5 腕の下の穴の、点の線の所に付ける" in m for m in mat), mat
+assert any("5 重りの腕の上の穴に通す" in m and "点の線の下を通る" in m for m in mat), mat
+assert any("5 重りの腕の下の穴の、点の線の所に付ける" in m for m in mat), mat
 assert any("丸い印は穴" in m and "4 尾は外に見えるので色を刷り" in m for m in mat), mat
 print("ok 虎の側面の向き・部品の名・竹串と粘土の印")
 
