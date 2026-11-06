@@ -43,6 +43,7 @@ for A in (sf.RANGES["tube_side"][0], 30, sf.RANGES["tube_side"][1]):
         x0, y0, x1, y1 = sf.label_box(A, H)
         assert 1 <= x0 and x1 <= A - 1.2 - 1, (A, H, x0, x1)  # 左の折り線（筒の端）と、右の角の 2 本線（一辺−1.2）から 1mm 以上
         assert 4.5 + 1 <= y0 and y1 <= H - 5 - 1, (A, H, y0, y1)  # 上の帯（部品の札もここ）と下の帯から 1mm 以上
+        assert y1 - y0 >= x1 - x0, (A, H, x1 - x0, y1 - y0)  # 札は縦長（太く短い筒でも横長にしない。検品の指摘）
 for form in sf.PUSH_PARTS:
     p = {**sf.DEFAULTS, "push_part": form, **({"pusher_height": 84} if form in ("tube", "stick") else {})}
     tube = {q.key: q for q in sf.parts(p)}["tube"]
@@ -51,4 +52,9 @@ for form in sf.PUSH_PARTS:
     assert all(cx >= x1 for cx, _, _, _ in [(c[0], c[1], c[2], c[3]) for c in tube.cuts]), form
     # 外形の切れ込み（つまみの形の溝）は 2 面目にある
     assert all(x >= p["tube_side"] or not (x0 < x < x1 and y0 < y < y1) for x, y in tube.outline), form
+# 3. 範囲の上限: 筒の高さを 130 まで書ける形は、内筒も同じ高さまで書ける（内筒を下から押す形と柄の形は、内筒が筒より短いと落とす）
+assert sf.RANGES["pusher_height"][1] >= sf.RANGES["tube_height"][1]
+for form in ("tube", "stick"):
+    tall = {**sf.DEFAULTS, "push_part": form, "tube_height": 130, "pusher_height": 130}
+    assert sf.check_range(tall) == [] and not [f for f in sf.check_physics(tall) if "押し切れない" in f.message], form
 print("ok 御来迎の色（白木・金）と筒の札")
