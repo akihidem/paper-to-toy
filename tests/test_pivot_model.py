@@ -107,7 +107,10 @@ labels = {x.key: x.label for x in pc.parts(neck)}
 assert labels == {"body": "1 胴", "head": "2 頭", "strip": "3 首の帯", "tail": "4 尾", "drop": "5 腕"}, labels
 # 3 首の帯の札: 真ん中の谷折りの線（x = sw）が、字の「3」と「首」の間の空きを通る（字が折り線にかからない）。細い帯は「3 帯」で、
 # どの帯の幅でも札が帯の枠に収まる（範囲の下限 5mm で「3 首の帯」が枠からはみ出し、配置の検査で落ちていた。検品の指摘）
+from omochae.compose import LABEL_SIZE
 from omochae.textfit import text_width
+# 雛形が写した札の字の大きさは、描く所（compose）と同じ（違うと、置き場の計算が刷る字の幅とずれる。検品の指摘）
+assert pc.LABEL_SIZE == LABEL_SIZE, (pc.LABEL_SIZE, LABEL_SIZE)
 for sw in range(pc.RANGES["strip_width"][0], pc.RANGES["strip_width"][1] + 1):
     q = dict(neck, strip_width=sw)
     strip = next(x for x in pc.parts(q) if x.key == "strip")
