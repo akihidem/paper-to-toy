@@ -1,5 +1,5 @@
 {
- "criteria.md": "1441a06ee655961960e2cc2335d98a55c0435b731e2c9f28cd5c9fc63c710dbb",
+ "criteria.md": "bd65208afd1336b254ea8f6894877c99457edcaa95ff80462db2a3d9202374ee",
  "scenarios": {
   "balance_neg.json": {
    "floors": [
@@ -416,6 +416,18 @@
    ],
    "rc": 3,
    "sha256": "53e0e06834823dce98915899d00949ed06133d0457ee36b28a068cefb2c9f9e2"
+  },
+  "pendulum_wave_neg.json": {
+   "floors": [
+    "F5.range"
+   ],
+   "rc": 3,
+   "sha256": "ec50ec20a802c5a50e24b21d25be73fb0eb512eb2fc77a8e6dda2934a909da1f"
+  },
+  "pendulum_wave_pos.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "7c765bf98532f6cfffcfffd49e08173ea9699c6283f2cb4954a8528145550434"
   },
   "popup_jar_neg.json": {
    "floors": [
@@ -1145,6 +1157,7 @@
   "test_frozen_manifest",
   "test_goraigo_rise",
   "test_goraigo_rise_3d",
+  "test_goraigo_v14",
   "test_guards",
   "test_init_python",
   "test_intake",
@@ -1154,9 +1167,12 @@
   "test_paper_words",
   "test_path_confine",
   "test_pdf_repeatable",
+  "test_pendulum_wave",
   "test_pivot_3d",
+  "test_pivot_arm_label",
   "test_pivot_fold3d",
   "test_pivot_hang_model",
+  "test_pivot_head_sides",
   "test_pivot_model",
   "test_pivot_neck_opening",
   "test_popup_jar",

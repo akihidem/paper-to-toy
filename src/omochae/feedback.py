@@ -63,6 +63,8 @@ FLOORS = {
     "spinner": "F5.spin", "whistle": "F5.sound", "popup_jar": "F5.popup・F5.jar_seat", "slide_box": "F5.slide",
     "wheel_cart": "F5.wheel", "balance": "F5.balance", "twist_drum": "F5.drum", "float": "F5.float",
     "pull_nod": "F5.pull_nod", "lever_link": "F5.link", "launcher": "F5.launch", "stand_figure": "F5.stand",
+    # 試作の作例（江戸の玩具でない）。寸法の決まりを範囲の床で落とすので、直しの行き先も範囲の床
+    "pendulum_wave": "F5.range（振り子の波の寸法の決まり）",
 }
 ALLOWED = {"template", "form", "params", "source_id", "built", "moved", "finish", "motion_notes", "finish_notes",
            "problems", "reported_at", "reviewed_at",
