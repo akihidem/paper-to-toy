@@ -530,7 +530,8 @@ def bom(p):
             {"number": 7, "key": "arm", "name": "腕", "qty": 2, "material": f"竹串（1 本 {p['arm_length'] + p['arm_insert']}mm に切る）", "substituted": True, "original_guess": "竹か針金（図の細い線による推定）", "reason": "家にあり、まっすぐで切りやすいため"},
             {"number": 8, "key": "ball", "name": "玉", "qty": 2, "material": f"油粘土 {p['ball_g']:g}g（直径 約 {2 * ball_r(p['ball_g']):.0f}mm）", "substituted": True, "original_guess": "不明（図では白い玉）", "reason": "量を変えて試しやすいため"},
             {"number": 9, "key": "stand", "name": "台の柱", "qty": 1, "material": f"竹串（{SKEWER_LEN}mm の見込み）", "substituted": True, "original_guess": "棒の上の板と人形（図による）", "reason": "台の人形を作る手間を省き、先の尖った支えにするため"},
-            {"number": 10, "key": "base", "name": "台の土台", "qty": 1, "material": "油粘土 30g ほどか消しゴム", "substituted": True, "original_guess": "不明", "reason": "竹串をまっすぐ立てるため"},
+            # 台の代わりの物に消しゴムを書かない（材料の前提で樹脂の側。油粘土は使ってよい。設計の条件・2026-11-07）
+            {"number": 10, "key": "base", "name": "台の土台", "qty": 1, "material": "油粘土 30g ほど", "substituted": True, "original_guess": "不明", "reason": "竹串をまっすぐ立てるため"},
             {"number": 11, "key": "center", "name": "真ん中の軸", "qty": 1, "material": f"竹串（{center_len(p):.0f}mm に切る）", "substituted": True,
              "original_guess": "無し（図には描かれていない。作る前のレビューの声で足した）", "reason": "重りの重さで体の紙が V の所で曲がらないよう、真ん中を支えるため"},
         ]

@@ -89,8 +89,10 @@ assert "割ピン" in sumo["prep"]["metal"] and sumo["within"] is False, sumo  #
 pin = pr[("spinner", "pinwheel")]
 assert {"ストロー", "セロハンテープ"} <= set(pin["bom"]["resin"] + pin["prep"]["resin"]), pin  # ストローとテープは樹脂
 assert "梱包テープ" in pr[("float", "none")]["bom"]["resin"] + pr[("float", "none")]["prep"]["resin"]
-assert "消しゴム" in pr[("balance", "yajirobe")]["prep"]["resin"]
-assert "ビーズ" in pr[("twist_drum", "kiku")]["bom"]["resin"]
+# 代わりの物の字（消しゴム・ビーズ）を外した 4 形は、前提の内になる（2026-11-08 の型紙の直し・材料の前提の答えの ①）
+for k in (("balance", "yajirobe"), ("twist_drum", "kiku"), ("twist_drum", "tori"), ("whistle", "rattle")):
+    assert pr[k]["within"] is True, (k, pr[k])
+assert not any("ビーズ" in p[w]["resin"] or "消しゴム" in p[w]["resin"] for p in pr.values() for w in ("bom", "prep"))
 # 虎（首の形）: 竹串と重りの油粘土は使ってよい（制作者の言葉「油粘土も使ってよい」）。セロハンテープは用意する物の文にだけ出る
 # （腕を仮に留める、作る途中だけの物）。境目は既定のまま（制作者の言葉「境目は既定のままで」）: テープは樹脂の側
 tiger = pr[("pivot_counterweight", "neck")]
