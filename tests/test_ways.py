@@ -103,6 +103,10 @@ assert ways._premise_of(["樹脂粘土"], True) == {"metal": [], "resin": ["樹�
 # 頭の語（樹脂・ビニール・金属・アルミなど）で始まる名は、書き方が揺れても 1 つの材料として頭の語の分けに入る
 assert ways._premise_of(["樹脂ねんど（直径 8mm）"], True) == {"metal": [], "resin": ["樹脂ねんど"], "unlisted": []}
 assert ways._premise_of(["金属の軸"], True) == {"metal": ["金属の軸"], "resin": [], "unlisted": []}
+# 頭の語の名は、数字・記号・空白と、もう一方の避ける側の語の手前で止まる（見直しの指摘）
+for name in ("樹脂＋針金", "樹脂/針金", "樹脂の針金"):
+    assert ways._premise_of([name], True) == {"metal": ["針金"], "resin": ["樹脂"], "unlisted": []}, name
+assert ways._premise_of(["樹脂粘土3g", "樹脂粘土5g"], True) == {"metal": [], "resin": ["樹脂粘土"], "unlisted": []}
 for name in ("樹脂粘土", "樹脂ねんど", "樹脂の粘土", "ビニールテープ", "発泡スチロールの玉", "アルミの針金", "金属の軸", "紙と針金",
              "油ねんどの玉か木の玉"):
     got = ways._premise_of([name], True)
