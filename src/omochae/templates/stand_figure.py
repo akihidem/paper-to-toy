@@ -56,6 +56,7 @@ from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.polygon import orient
 from shapely.ops import polylabel, unary_union
 
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（制作者の指示 2026-11-05）
 from ..model import Failure, Part
 
 ID = "stand_figure"
@@ -1148,7 +1149,7 @@ def place(by_key, page, top, gap):
 
 @_filling
 def bom(p):
-    paper = f"紙（厚さ {p['paper_thickness']}mm 前後）"
+    paper = paper_name(thickness=p['paper_thickness'])
     why = "家庭のプリンタで刷って作るため"
     f = FIGURES[p["figure"]]
     rows = [{"number": 1, "key": "front", "name": "表の姿", "qty": 1, "material": paper, "substituted": True,

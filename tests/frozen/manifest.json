@@ -1,5 +1,5 @@
 {
- "criteria.md": "e8675ba5c3a33bb615b76ca0eacf7fe4713db6b563f103dc4ff6cbe4fda6e2d1",
+ "criteria.md": "b7b6c82093edf94725081b21044a82c5076176fac05ba9a566b83e5533157c10",
  "scenarios": {
   "balance_neg.json": {
    "floors": [
@@ -354,6 +354,20 @@
    "rc": 3,
    "sha256": "2162d5bca1e27ea2b66474f4d8d502a09ec4c7e4ed915cfdab607bf3bd680715"
   },
+  "neg_pivot_fit.json": {
+   "floors": [
+    "F5.pivot"
+   ],
+   "rc": 3,
+   "sha256": "1ab62f0caf14866fe4bd0af713d5f78780b116800583f21e1fdeea691b7c1180"
+  },
+  "neg_pivot_fit_swing.json": {
+   "floors": [
+    "F5.pivot"
+   ],
+   "rc": 3,
+   "sha256": "d0f9b50f55841a285c19b7c7915d5d885a8e7628382cc7187132d7d7ad6fdb20"
+  },
   "neg_pivot_floor.json": {
    "floors": [
     "F5.pivot"
@@ -498,6 +512,11 @@
    "floors": [],
    "rc": 0,
    "sha256": "8738d0b65c80385d67fc60aaab370afd4e3e82892f9ae215f531e9551edb5a49"
+  },
+  "pos_tiger_v7.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "a2520f62c332974035713b279b35561c834a0e53099e197a6611e43a8949d274"
   },
   "pos_tube.json": {
    "floors": [],
@@ -1133,7 +1152,10 @@
   }
  },
  "tests": [
+  "test_assembly3d",
   "test_balance",
+  "test_check3d",
+  "test_color_out",
   "test_engine_loop",
   "test_exit_codes",
   "test_fan_model",
@@ -1142,15 +1164,23 @@
   "test_fold3d",
   "test_foldsim",
   "test_frozen_manifest",
+  "test_goraigo_rise",
+  "test_goraigo_rise_3d",
+  "test_goraigo_v14",
   "test_guards",
   "test_init_python",
   "test_intake",
   "test_launcher",
   "test_lever_link",
   "test_neg_exact_fails",
+  "test_paper_words",
   "test_path_confine",
   "test_pdf_repeatable",
+  "test_pivot_3d",
+  "test_pivot_arm_label",
+  "test_pivot_fold3d",
   "test_pivot_hang_model",
+  "test_pivot_head_sides",
   "test_pivot_model",
   "test_pivot_neck_opening",
   "test_popup_jar",
@@ -1158,13 +1188,16 @@
   "test_readme_commands",
   "test_run_floors",
   "test_sheet_v8",
+  "test_sheet_version",
   "test_sheets",
   "test_slide_box",
+  "test_slider_fan_colors",
   "test_slider_tube_stroke",
   "test_spinner",
   "test_stand_figure",
   "test_template_contract",
   "test_tool_timeouts",
+  "test_tora_v7",
   "test_twist_drum",
   "test_ways",
   "test_wheel_cart",

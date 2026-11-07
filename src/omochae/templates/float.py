@@ -61,6 +61,7 @@ import math
 from shapely.geometry import LineString, Polygon, box
 from shapely.ops import unary_union
 
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（制作者の指示 2026-11-05）
 from ..model import Failure, Part
 
 ID = "float"
@@ -111,7 +112,7 @@ TAPE_FOLD = 5  # 水よけのテープをふちから内へ折り返す幅（mm�
 LABEL_W, LABEL_H = 6, 3.5
 CUP_ABOVE = 5  # 風受けが壁の上に出る長さの下限（mm）。壁の陰では息を受けない
 STIR_TURNS = 5  # 風受けの無い形で、渦を作るために水をかき回す回数の見込み。少ないと舟が回らず、速いと波でふちから水が入る（未確認）
-# 組み方の文の行数の上限。手順の紙は廃止し（本人の決まり 2026-11-06「文章のプリントは廃止。組み立て用のページだけでいい。」）、文はサイトの組み立ての頁に出す。
+# 組み方の文の行数の上限。手順の紙は廃止し（制作者の決まり 2026-11-06「文章のプリントは廃止。組み立て用のページだけでいい。」）、文はサイトの組み立ての頁に出す。
 # 画面でも短い方が読みやすいので、上限は残す。上限を決めた時の理由（前のサイトの手順の紙（A4）は、左の列 144mm に字 3.6mm で組み方を刷り、
 # その下に予想・試した事・問いの欄が続いた）:
 # 前の版は、風受けつきの既定で 20 行あり、紙の印字域の下へ 5.2mm はみ出していた。16 行で 2.8mm 余り、今の 15 行で 7.2mm 余る
@@ -588,7 +589,7 @@ def place(by_key, page, top, gap):
 
 
 def bom(p):
-    paper = f"紙（厚さ 0.15mm 前後・{p['paper_gsm']}g/m² の見込み）"
+    paper = paper_name(gsm=p['paper_gsm'])
     why = "家庭のプリンタで刷って作るため"
     rows = [
         {"number": 1, "key": "tray", "name": "舟", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（図では葉が直に浮く。木か葉の浮きと推定）", "reason": "紙で浮きを作るため、箱にして水をはじく"},

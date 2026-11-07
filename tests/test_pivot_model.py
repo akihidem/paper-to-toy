@@ -27,7 +27,7 @@ from omochae.compose import compose
 from omochae.floors import check_art
 from omochae.templates import pivot_counterweight as pc
 neck = dict(DEFAULTS, mount="neck")
-# 下の穴の境（LOWER_HOLE_MIN）の前後も見る。重りが後ろへずれない（weight_behind 0）と、浅い重りでも検査を通る（検品の指摘: 前の組は -20 の次が 5 だった）
+# 下の穴の境（LOWER_HOLE_MIN）の前後も見る。重りが後ろへずれない（weight_behind 0）と、浅い重りでも検査を通る（見直しの指摘: 前の組は -20 の次が 5 だった）
 seen = hangable = 0
 for wba in (pc.RANGES["weight_below_axle"][0], 0.5, 1, 2, 3, 3.6, 4, 5, 12, 20, DEFAULTS["weight_below_axle"], 40, pc.RANGES["weight_below_axle"][1]):
     for wg in (pc.RANGES["weight_g"][0], 1.0, DEFAULTS["weight_g"], pc.RANGES["weight_g"][1]):
@@ -62,15 +62,15 @@ for wba in (pc.RANGES["weight_below_axle"][0], 0.5, 1, 2, 3, 3.6, 4, 5, 12, 20, 
             assert any("下の穴（点の線）の所に粘土" in s and "仮に留め" in s for s in st), st
             assert any("頭の傾きを見て" in s and "貼る" in s for s in st), st
 assert seen >= 10 and hangable >= 1, (seen, hangable)
-# 重い玉の下が底に当たる寸法（検品の指摘の例）は、玉の下の端で落とす。玉の真ん中だけ見ると通っていた
+# 重い玉の下が底に当たる寸法（見直しの指摘の例）は、玉の下の端で落とす。玉の真ん中だけ見ると通っていた
 low = dict(neck, axle_height=30, weight_below_axle=15, weight_g=15, weight_behind=0)
 assert any("粘土の玉の下が底に当たる" in f.message for f in check_physics(low)), [f.line() for f in check_physics(low)]
 # 検査に通る首の形の寸法では、粘土の玉の下が底から 3mm 以上離れる（上の組で見た通る組の全部）
-# 玉が軸にかかり、底にも当たる寸法（4 回目の検品の指摘の例）は、玉の決まりの行を 1 つだけ出す
+# 玉が軸にかかり、底にも当たる寸法（見直しの指摘の例）は、玉の決まりの行を 1 つだけ出す
 both = dict(neck, axle_height=15, weight_below_axle=5, weight_g=15, weight_behind=0)
 ball_lines = [f for f in check_physics(both) if "粘土の玉" in f.message]
 assert len(ball_lines) == 1 and "軸の竹串にかかる" in ball_lines[0].message, [f.line() for f in check_physics(both)]
-# 浅い重りに重い玉（検品の指摘の例）は、玉が軸の竹串にかかるので検査で落とす
+# 浅い重りに重い玉（見直しの指摘の例）は、玉が軸の竹串にかかるので検査で落とす
 shallow = dict(neck, weight_below_axle=1, weight_g=15, weight_behind=0)
 assert any("軸の竹串にかかる" in f.message for f in check_physics(shallow)), [f.line() for f in check_physics(shallow)]
 # 下の穴の無い寸法（検査では落ちる）でも、組み方の文は無い穴を言わず、粘土の位置を上の穴からの深さで言う
@@ -85,7 +85,7 @@ assert any("位置の印" in x.text for x in layout["texts"]), "凡例に位置�
 print("ok 重りの腕の下の穴と試してから貼る順")
 
 
-# EP-0016（本人のレビューから採った案。2026-11-06）
+# EP-0016（制作者のレビューから採った案。2026-11-06）
 # 1. 胴の 2 枚目の側面の絵は y だけを裏返す。2 枚の側面の虎の頭（図の鼻先＝_BODY の x の一番小さい点）が、どちらも箱の前の端
 #    （軸の穴の側）に来る。前は 180° 回していて、2 枚目の頭が後ろの端に来た（前にも言われて直っていなかった所）
 # 2. 2〜5 番に部品の名を刷る（札は部品の枠の内。compose の F5.text_overlap が見る）
@@ -112,12 +112,13 @@ for mount in ("neck", "hang"):
     _, layout, fails = compose("pivot_counterweight", q, load_source(pc.SOURCE))
     assert not fails, (mount, [f.line() for f in fails])
 labels = {x.key: x.label for x in pc.parts(neck)}
-assert labels == {"body": "1 胴", "head": "2 頭", "strip": "3 首の帯", "tail": "4 尾", "drop": "5 腕"}, labels
+# 5 は「5 重りの腕」（制作者の決定 2026-11-06「部品の名前は案3: 型紙を「5 重りの腕」にそろえる。」。札の並べ方は test_pivot_arm_label.py が見る）
+assert labels == {"body": "1 胴", "head": "2 頭", "strip": "3 首の帯", "tail": "4 尾", "drop": "5 重りの腕"}, labels
 # 3 首の帯の札: 真ん中の谷折りの線（x = sw）が、字の「3」と「首」の間の空きを通る（字が折り線にかからない）。細い帯は「3 帯」で、
-# どの帯の幅でも札が帯の枠に収まる（範囲の下限 5mm で「3 首の帯」が枠からはみ出し、配置の検査で落ちていた。検品の指摘）
+# どの帯の幅でも札が帯の枠に収まる（範囲の下限 5mm で「3 首の帯」が枠からはみ出し、配置の検査で落ちていた。見直しの指摘）
 from omochae.compose import LABEL_SIZE
 from omochae.textfit import text_width
-# 雛形が写した札の字の大きさは、描く所（compose）と同じ（違うと、置き場の計算が刷る字の幅とずれる。検品の指摘）
+# 雛形が写した札の字の大きさは、描く所（compose）と同じ（違うと、置き場の計算が刷る字の幅とずれる。見直しの指摘）
 assert pc.LABEL_SIZE == LABEL_SIZE, (pc.LABEL_SIZE, LABEL_SIZE)
 for sw in range(pc.RANGES["strip_width"][0], pc.RANGES["strip_width"][1] + 1):
     q = dict(neck, strip_width=sw)
@@ -135,13 +136,13 @@ axle = [a for a in body.art if a["kind"] == "mark" and a.get("mark") == "axle"]
 assert len(axle) == 1 and all(x == body.holes[0][0] for x, _ in axle[0]["pts"]), axle  # 2 つの軸の穴と同じ x
 assert check_art([body]) == [], [f.line() for f in check_art([body])]
 mat = pc.materials(neck)
-assert any("5 腕の上の穴に通す" in m and "点の線の下を通る" in m for m in mat), mat
-assert any("5 腕の下の穴の、点の線の所に付ける" in m for m in mat), mat
+assert any("5 重りの腕の上の穴に通す" in m and "点の線の下を通る" in m for m in mat), mat
+assert any("5 重りの腕の下の穴の、点の線の所に付ける" in m for m in mat), mat
 assert any("丸い印は穴" in m and "4 尾は外に見えるので色を刷り" in m for m in mat), mat
 print("ok 虎の側面の向き・部品の名・竹串と粘土の印")
 
 
-# 実物の写真の直し（本人の決定 2026-11-06「実物の写真と照らした直しは、御来迎・虎とも全部入れる。次の版へ」）
+# 実物の写真の直し（制作者の決定 2026-11-06「実物の写真と照らした直しは、御来迎・虎とも全部入れる。次の版へ」）
 # A. 首の穴は丸い切り抜きで、縁は赤。穴の真ん中は軸の高さ（前の壁は x = H が床の辺）。四角い切り込みは無い
 import json
 import pathlib
@@ -151,7 +152,10 @@ q5 = dict(DEFAULTS, **v5["params"])
 for q in (neck, q5):
     body = next(x for x in pc.parts(q) if x.key == "body")
     H, W, g = q["body_height"], q["body_width"], q["glue"]
-    cy = g + W + H + W / 2
+    # 前の壁の幅の真ん中。胴の角を落とした形（body_round）では、上の面が 2d 細く、側面が d 低く、角の面 c が 2 つ入る
+    c = q["body_round"]
+    d = c / math.sqrt(2)
+    cy = g + (W - 2 * d) + c + (H - d) + W / 2
     assert body.cuts == [] and body.round_cuts == [(H - q["axle_height"], cy, q["opening"] / 2)], body.round_cuts
     rims = [a for a in body.art if a["kind"] == "poly" and a.get("fill") == pc.RIM]
     assert len(rims) == 1 and all(abs(math.hypot(x - (H - q["axle_height"]), y - cy) - (q["opening"] / 2 + pc.RIM_W)) < 1e-6 for x, y in rims[0]["pts"])

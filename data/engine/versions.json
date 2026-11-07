@@ -69,6 +69,151 @@
     ]
    },
    "note": "虎 tora-v4（#106・合体 173b8fa1）と御来迎 goraigo-v11（#107・合体 034ecbed）。この版の御来迎の紙は push_part lift の形（表の 1 枚は tab のまま）。EP-0012 は溝の印が残るので次の版の予定に残す"
+  },
+  {
+   "version": 3,
+   "commit": "5edeb4937c5aff9e7f1fb32a269dc6d398ae75ad",
+   "at": "2026-11-06",
+   "proposals": [
+    {
+     "id": "EP-0045",
+     "target": {
+      "kind": "template",
+      "name": "slider_fan"
+     },
+     "title": "slider_fan（紙 rise）: 作る前のレビューの指摘を、雛形に入れるか見る",
+     "numbers": {
+      "reviews": 2,
+      "reports": 0
+     },
+     "finding": "制作者の決定で、御来迎の形を rise（内筒を下から押し上げる・糸なし）にし、型紙の 1 枚にする。lift と側面のつまみの形はやめる。実物の写真と照らした直し A・C・D（扇を細かく小さく・筒を細長く・白木と金と札）を入れる（paper-to-toy #117・#122）"
+    }
+   ],
+   "sheet_sets": {
+    "slider_fan": "goraigo-v12"
+   },
+   "sources": {
+    "slider_fan": [
+     "NDL-1187053-R0000005-L"
+    ]
+   },
+   "note": "御来迎 goraigo-v12（#117・合体 13479c0 と #122・合体 5edeb49）。形は rise（内筒を下から押し上げる）で、型紙の 1 枚も rise。虎の tora-v5 は 1 本目だけが入った所なので、この版に入れない"
+  },
+  {
+   "version": 4,
+   "commit": "41c90b6875a53600547b14aaf786f6fd81a88926",
+   "at": "2026-11-06",
+   "proposals": [
+    {
+     "id": "EP-0046",
+     "target": {
+      "kind": "template",
+      "name": "pivot_counterweight"
+     },
+     "title": "pivot_counterweight（紙 neck）: 作る前のレビューの指摘を、雛形に入れるか見る",
+     "numbers": {
+      "reviews": 1,
+      "reports": 0
+     },
+     "finding": "実物の写真と照らした直しを、虎にも全部入れる: 丸い赤縁の首の穴・明るい黄と紺の縞・白い下と脚・長い頭・上の面の尾（paper-to-toy #119）と、立体の脚と角を落とした胴・糊代の根元・札（#124）"
+    }
+   ],
+   "sheet_sets": {
+    "pivot_counterweight": "tora-v5"
+   },
+   "sources": {
+    "pivot_counterweight": [
+     "NDL-1187053-R0000014-R"
+    ]
+   },
+   "note": "虎 tora-v5（#119・合体 4fad8f3 と #124・合体 41c90b6）。写真と照らした直しの 1 本目と 2 本目"
+  },
+  {
+   "version": 5,
+   "commit": "e7cf5f7085020652fe9125188b781870b9961df2",
+   "at": "2026-11-06",
+   "proposals": [
+    {
+     "id": "EP-0047",
+     "target": {
+      "kind": "template",
+      "name": "pivot_counterweight"
+     },
+     "title": "pivot_counterweight（紙 neck）: 作る前のレビューの指摘を、雛形に入れるか見る",
+     "numbers": {
+      "reviews": 1,
+      "reports": 0
+     },
+     "finding": "見える平らな部品は、頭の上で折り返した鏡写しと 1 枚にし、裏どうしを貼ると両側に絵が出る（御来迎 v13 の像と虎 v6 の頭で同じ作り）。虎は頭を両側から見た顔の 1 枚にした（paper-to-toy #129）"
+    }
+   ],
+   "sheet_sets": {
+    "pivot_counterweight": "tora-v6"
+   },
+   "sources": {
+    "pivot_counterweight": [
+     "NDL-1187053-R0000014-R"
+    ]
+   },
+   "note": "虎 tora-v6（#129・合体 e7cf5f7）。首の形。見本は examples/tora_v6.json（v5 の見本に head_sides 2）"
+  },
+  {
+   "version": 6,
+   "commit": "de4c5840cd20205afc29491f78887b13fb9a1b89",
+   "at": "2026-11-06",
+   "proposals": [
+    {
+     "id": "EP-0048",
+     "target": {
+      "kind": "template",
+      "name": "slider_fan"
+     },
+     "title": "slider_fan（紙 rise）: 作る前のレビューの指摘を、雛形に入れるか見る",
+     "numbers": {
+      "reviews": 3,
+      "reports": 0
+     },
+     "finding": "蛇腹の扇の開く角は帯の長さ ÷ 高さで決まり、大きくする時は両方を同じ割合で伸ばすと形が保てる。御来迎は扇をまるごと倍にし、内筒と外筒の隙間を狭めて抵抗を持たせた（paper-to-toy #132）"
+    }
+   ],
+   "sheet_sets": {
+    "slider_fan": "goraigo-v14"
+   },
+   "sources": {
+    "slider_fan": [
+     "NDL-1187053-R0000005-L"
+    ]
+   },
+   "note": "御来迎 goraigo-v14（#132・合体 de4c584）。形は rise。見本は examples/goraigo_v14.json で、必須の紙もこれ。前の組 goraigo-v13（#127）は版を刻んでおらず、v14 はその上に積んだ直し"
+  },
+  {
+   "version": 7,
+   "commit": "43b8a1d7c5f69c1036b6e2152604d4b48b115fc1",
+   "at": "2026-11-07",
+   "proposals": [
+    {
+     "id": "EP-0049",
+     "target": {
+      "kind": "template",
+      "name": "pivot_counterweight"
+     },
+     "title": "pivot_counterweight（紙 neck）: 作る前のレビューの指摘を、雛形に入れるか見る",
+     "numbers": {
+      "reviews": 4,
+      "reports": 0
+     },
+     "finding": "首振りの重りは、静かな時に重心が軸の真下に来るので、下の穴を後ろへ刷っても粘土の玉は軸の下へ戻る。揺れても前の壁に当たらないように竹串を前の壁から離し（axle_back 9mm）、当たりは静かな時の傾きのまわりの ±10° で見る（paper-to-toy #138）"
+    }
+   ],
+   "sheet_sets": {
+    "pivot_counterweight": "tora-v7"
+   },
+   "sources": {
+    "pivot_counterweight": [
+     "NDL-1187053-R0000014-R"
+    ]
+   },
+   "note": "虎 tora-v7（#138・合体 43b8a1d）。首の形。見本は examples/tora_v7.json（v6 の見本に axle_back 9・首の帯 23・clay_back 2.5・weight_behind 0・fit_check 1）。直しの出所は、サイトの作り方の 3D の試験で見つかった当たりと、制作者の決定"
   }
  ],
  "next": [
@@ -212,7 +357,7 @@
     "keeps": 0,
     "reports": 1
    },
-   "finding": "開く糸の段と扇の根元の帯は本人のレビューで取り下げ（扇は糸なしで、台と扇の間の部品にした。EP-0017 で版 2 に入った）。残りは、溝が下の端から切り込む形だと紙で分かる印（つまみの形の紙）",
+   "finding": "開く糸の段と扇の根元の帯は制作者のレビューで取り下げ（扇は糸なしで、台と扇の間の部品にした。EP-0017 で版 2 に入った）。残りは、溝が下の端から切り込む形だと紙で分かる印（つまみの形の紙）",
    "adopted_at": "2026-11-06"
   },
   {

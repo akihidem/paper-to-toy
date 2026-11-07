@@ -4,7 +4,7 @@
 うずくまり、板がどいた箱の前の所に鼠が立って、上を見上げている。板の前の縁の下の箱の中に、仕切りらしい線がある。
 【解釈】板は箱の上を前後に滑る。板を前へ戻すと鼠が隠れ（猫に捕まる）、後ろへ引くと鼠が出る。どれが昔の作り方かは
 図から決まらないので、刷る形（form）で 2 つを描き分ける。玩具の型紙は 1 枚で、lid がたたき台、sleeve は試行錯誤のヒント
-（本人の決定 2026-11-05「玩具 1 つに型紙 1 枚」・omochae.sheets）。
+（制作者の決定 2026-11-05「玩具 1 つに型紙 1 枚」・omochae.sheets）。
 - lid（既定・図にいちばん近い読み）: 箱の上の蓋の板が滑る。蓋の左右の縁を下へ折った袴が、箱の側の壁の外を挟んで道になる。
   蓋の裏の前に貼った止め（舌）が、前では箱の前の壁に、後ろでは仕切りに当たり、蓋は落ちない。猫は蓋に載って一緒に動く。
 - sleeve（2 つ目の読み・推定）: マッチ箱の形。猫を載せた外箱（筒）は止まったまま、中箱を前へ引き出すと鼠が出る。
@@ -27,6 +27,7 @@
 """
 from shapely.geometry import LineString, Polygon, box as rect
 
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（制作者の指示 2026-11-05）
 from ..model import Failure, Part
 
 ID = "slide_box"
@@ -372,7 +373,7 @@ def place(by_key, page, top, gap):
 
 
 def bom(p):
-    paper = f"紙（厚さ {p['paper_thickness']}mm 前後）"
+    paper = paper_name(thickness=p['paper_thickness'])
     why = "家庭のプリンタで刷って作るため"
     lid = p["form"] == "lid"
     rows = [

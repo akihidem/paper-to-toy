@@ -60,6 +60,7 @@ from shapely import affinity
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import unary_union
 
+from ..paper_words import BOARD as CARD_BOARD, paper_name  # 紙の書き方は 4 つの名前だけ（制作者の指示 2026-11-05）
 from ..model import Failure, Part
 
 ID = "lever_link"
@@ -876,17 +877,17 @@ def _pin_count(kind):
 
 
 def bom(p):
-    paper = f"紙（厚さ {p['paper_thickness']}mm 前後）"
+    paper = paper_name(thickness=p['paper_thickness'])
     kind = p["kind"]
     rows = []
     origin = {"sumo": "木か紙（図の平たい人形と棒）", "saru_take": "紙か薄い木（図の平たい猿）", "saru_sao": "紙か薄い木（推定）",
               "ebako": "木の箱と紙の絵（推定）", "karakuri": "木（推定・図の柱と箱）", "hashigo": "木か竹（推定）", "yakko": "紙か木（推定）"}[kind]
     for q in parts(p):
         # 登る板は厚紙に貼って厚くする（噛む角の窓を広げるため・床が plate_t で見る）
-        mat = f"{paper}を厚紙（厚さ {p['plate_t']:g}mm 前後）に貼った物" if q.key.endswith("bar") and kind in ("saru_take", "saru_sao") else paper
+        mat = f"{paper}を{CARD_BOARD}に貼った物" if q.key.endswith("bar") and kind in ("saru_take", "saru_sao") else paper
         if kind == "karakuri" and q.key == "frame":
             # 枠は四節の台（O と A の間 d）。紙 1 枚だと回すうちに曲がり d が保てないので、厚紙に貼る（要る厚さは実物で未確認）
-            mat = f"{paper}を厚紙（厚さ {FRAME_CARD_T:g}mm 前後）に貼った物"
+            mat = f"{paper}を{CARD_BOARD}に貼った物"
         rows.append({"number": q.number, "key": q.key, "name": q.name, "qty": 1, "material": mat, "substituted": True,
                      "original_guess": f"不明（{origin}）", "reason": PAPER_WHY})
     n = 10
@@ -924,14 +925,14 @@ def _has_holes(p):
 
 def materials(p):
     by = {r["key"]: r for r in bom(p)}
-    out = [f"紙（厚さ {p['paper_thickness']}mm 前後）を 1 枚", "のり、はさみ、定規",
+    out = [f"{paper_name(thickness=p['paper_thickness'])}を 1 枚", "のり、はさみ、定規",
            f"{by['pin']['material']}を {by['pin']['qty']} 本"]
     k = p["kind"]
     if k in ("saru_take", "saru_sao"):
         # 登る板を貼る厚紙。部品表では板の行の素材に入るが、用意する物は 1 行目の紙だけを見ると漏れた（5 回目の見直し）
-        out.append(f"厚紙（厚さ {p['plate_t']:g}mm 前後・菓子箱など）を、登る板が入る大きさ")
+        out.append(f"{CARD_BOARD}を、登る板が入る大きさ")
     if k == "karakuri":
-        out.append(f"厚紙（厚さ {FRAME_CARD_T:g}mm 前後・菓子箱など）を、門の枠と箱が入る大きさ")
+        out.append(f"{CARD_BOARD}を、門の枠と箱が入る大きさ")
     if _needs_cutter(p):
         # 中の溝・窓・門の口ははさみでは切り抜けず、厚紙ははさみで切ると潰れる。大人が下敷きの上でする（6・7 回目の見直し）
         out.append("カッター（中の溝・窓・門の口を切り抜く、厚紙を切るのは大人が下敷きの上でする）")

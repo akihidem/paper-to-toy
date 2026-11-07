@@ -1,20 +1,20 @@
 """型紙の部品を 3D の中で折って組み、刷る部品の形が組み方と合うかを確かめる（最小の 1 本: 御来迎 つまみの形）。
 
-本人の考え（2026-11-05「手順をAIが3Dで組み立てて、その過程を手順書にする」）の最初の 1 本。本人の決定で、提出の前は御来迎 つまみの形だけを見る:
+制作者の考え（2026-11-05「手順をAIが3Dで組み立てて、その過程を手順書にする」）の最初の 1 本。制作者の決定で、提出の前は御来迎 つまみの形だけを見る:
 - 3D.close: 外筒を、型紙の折り線で 90° ずつ折ると角筒に閉じ、糊代が帯の反対の端の面（1 面目）に重なる。内筒も同じく見る
   （竹串の線の前提なので）。糊代 1 つが 1 面である事、折り線が面を分けていない・長さ 0・つながらない面・自分と交わる外形も、
   同じ床で落とす（式と絵のずれそのものなので）
-- 3D.face: 見える面の部品（折り線を刷らず色の境で折る外筒）の刷った面（色の面）が、閉じた筒の外を向く。本人の答え（2026-11-06
+- 3D.face: 見える面の部品（折り線を刷らず色の境で折る外筒）の刷った面（色の面）が、閉じた筒の外を向く。制作者の答え（2026-11-06
   「色がついている所が外を向くよう折った」）で足した。隠れる部品（破線を刷る内筒）は、向きが組み立てに効かないので見ない
 - 3D.fan: 押し上げて扇が口から出て開く所（最後の手順の後半）。台と扇は折らずに置き、静かな時に扇が隠れる・押し上げると要が口より上に出る・
-  開いた扇形が横の面の口の縁に当たらない、を見る（本人の追加 2026-11-06）
+  開いた扇形が横の面の口の縁に当たらない、を見る（制作者の追加 2026-11-06）
 - 3D.skewer: 折った内筒が外筒の中に入り、内筒の 2 つの穴が向かい合い（高さも横もずれない）、穴を通す竹串が水平で、
   内筒を外筒に入れて静かな時から押し上げ切るまで、外筒の溝の中を通る
 判断の芯:
 - 寸法の式（check_physics・slot_span）でなく、刷る部品（外形・折り線・糊代・穴・溝の切り込み）から形を組む。式と絵がずれた時に見つけるため
 - 面は硬い板、折り線は蝶番と見る。紙の厚み・たわみ・摩擦は入れないので、通っても紙で動く保証ではない
 - 入口は python -m omochae.fold3d だけで、型紙の検査（compose）には繋がない。3D.close・3D.face・3D.skewer・3D.fan は凍結の基準
-  （tests/frozen/criteria.md）の床（2026-11-05 と 11-06 の本人の決定で足した。試験は tests/test_fold3d.py）
+  （tests/frozen/criteria.md）の床（2026-11-05 と 11-06 の制作者の決定で足した。試験は tests/test_fold3d.py）
 前提と限り:
 - 谷と山の向き（どちらの面が筒の外を向くか）は、見える面の部品だけを 3D.face で見る。3D.close は向きを見ない（谷を全部山に替えても、
   鏡に映した角筒として閉じる）
@@ -27,6 +27,10 @@
   押し上げる量は寸法から、筒の高さは折った形から取る
 - 竹串の長さと端の位置は見ない（竹串は刷る部品でなく、型紙に長さが無い）。見るのは、竹串の線が溝を通るかだけ
 終了: 0 = 確かめて通った / 3 = 落ちた / 4 = 確かめられない（まだ組めない形・読めない）。
+
+内筒を下から押し上げる形（rise）の外筒と内筒は check_rise で確かめる。制作者の決定（2026-11-06）「御来迎 v12 と虎 v5 に、3D の確かめを
+試験として足す。」による（試験 tests/test_goraigo_rise_3d.py）。入口 python -m omochae.fold3d も rise を組む（rise は型紙の 1 枚なので、
+入口で「確かめられない」と言わないため。見直しの指摘）。つまみの形の確かめと凍結の基準の床は変えない（3D.fit・3D.stroke は凍結の基準に無い）。
 """
 import math
 import sys
@@ -58,7 +62,7 @@ FOLD_DEG = 90  # 角筒は 4 面なので、折り線ごとに 90°
 OUTER, INNER, FAN = "tube", "pusher", "fan"
 # 扇が開く面は、外筒の開く糸の穴のある 2 つの面（向かい合う面）に垂直な向き（扇の両端をその 2 つの面へ糸でつなぐので）を、
 # 型紙のデータから読む。今の型紙では 2・4 面目に穴があり、1 面目に平行（雛形の注「扇は 1 面目に平行に開く」と同じ）。
-# 穴が無い時だけ、この面に平行と置き、その事を所見で言う。この向きは本人が実物どおりと確かめた（2026-11-06）
+# 穴が無い時だけ、この面に平行と置き、その事を所見で言う。この向きは制作者が実物どおりと確かめた（2026-11-06）
 FAN_PLANE_PANEL = 1
 
 
@@ -155,9 +159,11 @@ class FoldError(Exception):
     """型紙の折り線と外形が合わず、折れない（3D.close で落とす。確かめられない 4 にはしない。式と絵のずれそのものなので）。"""
 
 
-def fold(part, deg=FOLD_DEG):
+def fold(part, deg=FOLD_DEG, angles=None):
     """部品を折り線で面に分け、外形の始めの点を持つ面を動かさずに、折り線ごとに deg° 折る。谷は刷った面の側へ、山は裏へ折る。
 
+    angles は折り線（((x1, y1), (x2, y2))。部品の valley・mountain と同じ形）から角（°）への表で、表に無い線は deg° 折る。
+    角を落とした箱（虎の胴の角の面は 45°）のように、折り線ごとに角が違う形を組むため。渡さなければ、どの線も deg°（今までと同じ）。
     Returns 面の並び（list of Face）。親の面を子より先に並べる。最初の面が動かない面（筒なら 1 面目）。
     外形が自分と交わる・長さ 0 の折り線・外形の縁まで届かない折り線・ほかの折り線と重なる折り線・面をちょうど 2 つに分けない
     折り線・折り線でつながらない面がある時は FoldError（黙って飛ばしたり、例外の 4 にしたりすると、崩れた型紙が
@@ -204,7 +210,7 @@ def fold(part, deg=FOLD_DEG):
                 continue
             o, e = parent.at(a), parent.at(b)
             d = _unit(_sub(e, o))
-            ang = math.radians(deg)
+            ang = math.radians(angles.get((a, b), deg) if angles else deg)
             c = polys[j].centroid.coords[0]
             c0 = parent.at(c)
             # 回す向きは、子の面の真ん中が親の刷った面の側（谷）か裏（山）へ動く方。線の向きで符号が変わるので、動きで決める
@@ -320,7 +326,7 @@ def _face(part, faces):
     """見える面の部品の刷った面（色の面）が、閉じた筒の外を向くか。Returns (所見の文, 失敗)。
 
     側の面ごとに、刷った面の向き（折る前の z の正を今の向きへ写した物）と、軸から面の真ん中への向きが同じ側かを見る。
-    谷折り（凡例の、刷った面がへこむ向き）で筒にすると、色の面が内に入る。本人の答え（2026-11-06「色がついている所が外を向くよう
+    谷折り（凡例の、刷った面がへこむ向き）で筒にすると、色の面が内に入る。制作者の答え（2026-11-06「色がついている所が外を向くよう
     折った」）で、型紙の外筒を山折りに直した時に足した。
     """
     up, c, _, _ = tube_axis(faces)
@@ -606,7 +612,7 @@ def check(parts, p):
     """
     by = {q.key: q for q in parts}
     if OUTER not in by or INNER not in by:
-        raise ToolMissing("外筒と内筒が無い（最小の 1 本は、御来迎 つまみの形だけを組む）")
+        raise ToolMissing("外筒と内筒が無い（組めるのは、御来迎 つまみの形と、内筒を下から押し上げる形だけ）")
     nums = _step_numbers(p)
     st = {"by": by, "p": p, "folded": {}}
     notes, failures = [], []
@@ -620,6 +626,91 @@ def check(parts, p):
     return notes, failures
 
 
+def _fit(outer, inner):
+    """折った内筒の断面が、折った外筒の断面に収まる時のすき間 mm（負なら、はみ出す長さ）。紙の厚みは入れない。"""
+    up_o, c_o, _, _ = tube_axis(outer)
+    up_i, c_i, _, _ = tube_axis(inner)
+    sec_o, sec_i = _section(outer, up_o, c_o), _section(inner, up_i, c_i)
+    if sec_i.within(sec_o):
+        return sec_o.exterior.distance(sec_i), sec_i
+    return -max(sec_o.distance(Point(pt)) for pt in sec_i.exterior.coords), sec_i
+
+
+def check_rise(parts, p):
+    """内筒を下から押し上げる形（rise）の外筒と内筒を、刷る部品から折って組み、確かめる。Returns (所見の文の並び, 失敗の並び)。
+
+    試験だけが呼ぶ（凍結の基準の床ではない。床の名は、つまみの形と同じ事を見る 3D.close・3D.face と、この形だけの 3D.fit・3D.stroke）。
+    つまみの形の確かめ（check）と同じ部品（fold・_close・_face・tube_axis・_section）を使い、面は硬い板・折り線は蝶番と見る。
+    - 3D.close: 外筒と内筒が、型紙の折り線で 90° ずつ折ると角筒に閉じ、糊代が帯の反対の端の面に重なる
+    - 3D.face: 外筒（色の境で折る見える部品）の色の面が筒の外を向く。内筒は隠れる部品なので向きを見ない（3D.face と同じ決まり）
+    - 3D.fit: 折った内筒の断面が外筒の断面に収まる（すき間が 0 より大きい）
+    - 3D.stroke: 内筒を外筒の真ん中に入れ、台の上の面（内筒の上の端）を、静かな時（口から押し上げる量 s だけ下）から開いた位置
+      （口の高さ）まで動かす。静かな時に、台の上に立つ物（受けの底の紙＋扇の高さ・像の高さ）の上の端が口より下（口と同じ高さは落とす）、
+      内筒が外筒に内筒の一辺（折った断面の幅）以上入っている（静かな時が一番短い。傾かない）。割り箸（刷る部品でないので、雛形の
+      見込みの長さ CHOPSTICK_LEN で置く）は台の糊代の下から下へ伸び、内筒に CHOPSTICK_GLUE 以上貼れて、開いた位置でも外筒の下へ
+      CHOPSTICK_GRIP 以上残る（押し引きする所）。
+      筒の高さと内筒の長さ・一辺は折った形から、押し上げる量・扇と像の高さ・紙の厚さ・台の糊代は寸法から取る（つまみの形の 3D.fan と同じ取り方）
+    見ない事: 扇が開く所（受けと蛇腹の折り目のばねで開く仕組みで、蝶番ではないので、面と蝶番の 3D では組めない）・台（蓋）と受けと
+    像は折らない・紙の厚み・たわみ・摩擦。
+    """
+    by = {q.key: q for q in parts}
+    if OUTER not in by or INNER not in by:
+        raise ToolMissing("外筒と内筒が無い")
+    notes, failures, folded = [], [], {}
+    for key in (OUTER, INNER):
+        q = by[key]
+        try:
+            faces = fold(q)
+        except FoldError as e:
+            failures.append(Failure("3D.close", q.label, str(e)))
+            continue
+        note, fail = _close(q, faces)
+        if fail:
+            failures.append(fail)
+            continue
+        notes.append(note)
+        folded[key] = faces
+        if q.hide_folds:
+            note, fail = _face(q, faces)
+            notes.append(note) if note else failures.append(fail)
+    if len(folded) < 2:
+        return notes, failures  # 閉じない筒は、入れる・押し上げるを見ない（1 つの崩れに 1 行）
+    fit, sec_i = _fit(folded[OUTER], folded[INNER])
+    inner_label = by[INNER].label
+    if fit <= EPS:
+        failures.append(Failure("3D.fit", inner_label, f"内筒の断面が外筒の断面に収まらず（すき間 {fit:.1f}mm）、外筒に入らない"))
+        return notes, failures
+    notes.append(f"入れる {inner_label}: 内筒は外筒の中に入る（断面のすき間 {fit:.2f}mm）")
+    _, _, bot_o, top_o = tube_axis(folded[OUTER])
+    _, _, bot_i, top_i = tube_axis(folded[INNER])
+    H, L = top_o - bot_o, top_i - bot_i
+    x0, y0, x1, y1 = sec_i.bounds
+    a = max(x1 - x0, y1 - y0)
+    s, t, h, fh = p["push_amount"], p["paper_thickness"], p["fold_height"], p["figure_h"]
+    sf = TEMPLATES["slider_fan"]
+    rest = H - s  # 静かな時の、台の上の面の外筒の底からの高さ。開いた位置では H（口の高さ）
+    stand = max(t + h, fh)
+    inside = min(L, rest)  # 静かな時に、内筒が外筒の中に入っている長さ（下の端が外筒の下に出る時は、外筒の底から台まで）
+    _, below = sf.chopstick_lengths(L, H, p["base_glue"])  # 開いた位置で、割り箸が外筒の下へ出る長さ（所見の文に言う）
+    bad = []
+    if rest + stand >= H - EPS:
+        bad.append(f"静かな時に、台の上の物（扇 {t + h:g}・像 {fh:g}）の上の端が口から {rest + stand - H:.1f}mm 出る")
+    if inside < a - EPS:
+        bad.append(f"静かな時に、内筒が外筒に {inside:.1f}mm しか入らず、一辺 {a:.1f} より短い")
+    # 割り箸の決まり（貼れる長さ・開いた位置で外筒の下に残る長さ）は、型紙の床と同じ式と同じ順（雛形の chopstick_problem）で、
+    # 折った形の筒の高さと内筒の長さで見る（2 つに書くと判定がずれた。見直しの指摘）
+    problem = sf.chopstick_problem(L, H, p["base_glue"])
+    if problem:
+        bad.append(problem)
+    if bad:
+        failures.extend(Failure("3D.stroke", inner_label, m) for m in bad)
+        return notes, failures
+    notes.append(f"押し上げる {inner_label}: 台の上の面は底から {rest:.1f}mm（静かな時。扇と像は口の {H - rest - stand:.1f}mm 下に隠れ、内筒は外筒に "
+                 f"{inside:.1f}mm 入る）から {H:.1f}mm（開いた位置。口の高さ）まで {s:g}mm 上がる。割り箸（{sf.CHOPSTICK_LEN}mm）は、開いた位置でも"
+                 f"外筒の下へ {below:.1f}mm 出る")
+    return notes, failures
+
+
 def run(template_id, params, source, title=None, inject=None):
     """型紙と同じ検査（compose）を通ってから、3D で組んで確かめる。Returns (所見, 失敗)。
 
@@ -629,18 +720,21 @@ def run(template_id, params, source, title=None, inject=None):
     p, layout, failures = compose(template_id, params, source, title=title, inject=inject or {})
     if failures:
         return [], failures
-    if template_id != "slider_fan" or p.get(TEMPLATES[template_id].FORM) != "tab":
-        raise ToolMissing("まだ 3D で組めない形（最小の 1 本は、御来迎 つまみの形の外筒と竹串だけ）")
+    form = p.get(TEMPLATES[template_id].FORM) if template_id == "slider_fan" else None
+    if form == "rise":
+        return check_rise(layout["parts"], p)
+    if form != "tab":
+        raise ToolMissing("まだ 3D で組めない形（組めるのは、御来迎 つまみの形と、内筒を下から押し上げる形だけ）")
     return check(layout["parts"], p)
 
 
 def main(argv=None):
-    ap = Parser(prog="omochae.fold3d", description="型紙の部品を 3D の中で折って組み、外筒が閉じるか・溝と竹串が並ぶかを確かめる（最小の 1 本: 御来迎 "
-                                                 "つまみの形）。先に型紙と同じ検査を通す。終了: 0 通った / 3 落ちた / 4 確かめられない")
+    ap = Parser(prog="omochae.fold3d", description="型紙の部品を 3D の中で折って組み、外筒が閉じるか・溝と竹串が並ぶかを確かめる（御来迎 "
+                                                 "つまみの形と、内筒を下から押し上げる形）。先に型紙と同じ検査を通す。終了: 0 通った / 3 落ちた / 4 確かめられない")
     ap.add_argument("--scenario", help="場面の JSON（python -m omochae と同じ形）。渡すと --template・--source・--params は使わない")
     ap.add_argument("--template", default="slider_fan", help="雛形（今は slider_fan だけ組める。既定 slider_fan）")
     ap.add_argument("--source", help="data/sources/ の出典の記録の名前（既定は雛形ごと）")
-    ap.add_argument("--params", help="寸法の JSON。push_part（今は tab だけ組める）が要る")
+    ap.add_argument("--params", help="寸法の JSON。push_part（今は tab と rise を組める）が要る")
     args = ap.parse_args(argv)
     try:
         sc = scenario_from_args(args)

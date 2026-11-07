@@ -52,15 +52,15 @@ for p in (tab, stick, rim):
     assert all(a != b for a, b in zip(fills, fills[1:])), "隣の板は色が違う（色の境が折り目）"
     tube_grounds = [a["fill"] for a in k["tube"].art if a["kind"] == "poly" and a["pts"][0][1] == 4.5]
     assert len(set(tube_grounds)) == 2, "外筒は 1 面おきに地の色を変える"
-    # 外筒は色の面を外にして角筒にするので、刷った面から見て山折り（本人の答え 2026-11-06「色がついている所が外を向くよう折った」）。
+    # 外筒は色の面を外にして角筒にするので、刷った面から見て山折り（制作者の答え 2026-11-06「色がついている所が外を向くよう折った」）。
     # 谷折り（刷った面がへこむ向き）だと色が内に入る。線は刷らないので、型紙の PDF は変わらない
     assert len(k["tube"].mountain) == 4 and not k["tube"].valley, (len(k["tube"].mountain), len(k["tube"].valley))
 assert any("色の境" in s for s in steps(tab))
-# 組み方の文も 1 語だけ（谷折り → 山折り）替えた。それより大きく文を変える時は本人の確認を取る
+# 組み方の文も 1 語だけ（谷折り → 山折り）替えた。それより大きく文を変える時は制作者の確認を取る
 assert "1 外筒を色の境で山折りし、糊代で貼って角筒にする" in steps(tab), steps(tab)
-# 内筒は隠れる部品で破線を谷折りで刷るので、手順 2 は本人の決定（2026-11-06）の文。「同じように」だと山折りと読めて、刷った破線と食い違った
+# 内筒は隠れる部品で破線を谷折りで刷るので、手順 2 は制作者の決定（2026-11-06）の文。「同じように」だと山折りと読めて、刷った破線と食い違った
 assert "2 内筒は破線で谷折りし、糊代で貼って角筒にする" in steps(tab) and not any("同じように角筒にする" in s for s in steps(tab)), steps(tab)
-# 用意する物の道具（本人の確認 2026-11-06）: 穴があるのに竹串の行が無い形（内筒を下から押す・柄）は、穴をあける竹串を書く。
+# 用意する物の道具（制作者の確認 2026-11-06）: 穴があるのに竹串の行が無い形（内筒を下から押す・柄）は、穴をあける竹串を書く。
 # つまみの形は竹串の行がもう有る。穴の無い形（内筒を下から押す・口の台）には書かない
 for form, want in (("tab", "のり、はさみ、定規"), ("tube", "のり、はさみ、定規、竹串（穴あけ）"), ("stick", "のり、はさみ、定規、竹串（穴あけ）")):
     assert materials({**DEFAULTS, "push_part": form})[1] == want, (form, materials({**DEFAULTS, "push_part": form}))
@@ -72,16 +72,16 @@ for form in ("tab", "tube", "stick"):
         q = {**DEFAULTS, "push_part": form, "hub": hub}
         by_parts = any(x.holes for x in parts(q)) and not any("竹串" in r["material"] for r in bom(q))
         assert materials(q)[1].endswith("、竹串（穴あけ）") == by_parts, (form, hub, materials(q)[1])
-# 柄の形の手順 2 も、手順 2 と同じ型の文（本人の確認 2026-11-06）。「同じように」だと、山折りの外筒と同じと読めた
+# 柄の形の手順 2 も、手順 2 と同じ型の文（制作者の確認 2026-11-06）。「同じように」だと、山折りの外筒と同じと読めた
 stick_steps = steps({**DEFAULTS, "push_part": "stick"})
 assert "2 土台は破線で谷折りし、糊代で貼って角筒にし、割り箸の先を下から差し込んで貼る" in stick_steps, stick_steps
 print("ok v9")
 
-# EP-0017（本人のレビューから採った案。2026-11-06）: 御来迎の次の版（goraigo-v11）は、筒を外す形（push_part lift）を足す。
+# EP-0017（制作者のレビューから採った案。2026-11-06）: 御来迎の次の版（goraigo-v11）は、筒を外す形（push_part lift）を足す。
 # 今の組 goraigo-v10 の形（つまみ・内筒・柄）は変えない（凍結の場面の刷った紙は前と 1 バイトも違わない。run.sh の刷り比べで見る）。
-# - 扇は糸を一切使わない（本人「糸なしでやります」）。どの部品にも穴が無く、部品表・用意する物・組み方に糸と竹串が無い
+# - 扇は糸を一切使わない（制作者「糸なしでやります」）。どの部品にも穴が無く、部品表・用意する物・組み方に糸と竹串が無い
 # - 4 扇は足（出っぱり）が無い長方形。2 受け（U の字。底と左右の面が糊代）で、扇の下の端と両端の板を束ねる
-# - 内筒・竹串・溝は無い（本人「この形で開くなら、内筒を下から押す仕組みも竹串も要らない」）。3D の確かめ（fold3d）は、
+# - 内筒・竹串・溝は無い（制作者「この形で開くなら、内筒を下から押す仕組みも竹串も要らない」）。3D の確かめ（fold3d）は、
 #   つまみの形だけを組むので、この形は「確かめられない」（4）
 # - 床は、筒がかぶさる事と受けが台に乗る事だけを見る。行程・内筒の遊び・足・筒の口の角・穴の床は、この形には出ない
 import subprocess
@@ -117,10 +117,10 @@ for extra in ({"pusher_height": 50}, {"pusher_side": 29}, {"pivot_above_rim": 0,
     assert got <= lift_floors, (extra, got)
 # 筒がかぶさらない寸法は落とす（台の高さ＋扇の高さが筒の高さ − 2 を超える）
 short = {**lift, "fold_height": 60, "tube_height": 50, "base_glue": 10}  # 範囲の内: 台 10 + 扇 60 > 筒 50 − 2
-# 受けの底の紙の厚さも高さに入れる（境で、紙の厚さの分だけ足りない組を落とす。検品の指摘）
+# 受けの底の紙の厚さも高さに入れる（境で、紙の厚さの分だけ足りない組を落とす。見直しの指摘）
 edge = {**lift, "tube_height": 70, "base_glue": 10, "fold_height": 58, "paper_thickness": 1.5}  # 10 + 1.5 + 58 = 69.5 > 68
 assert any(f.floor == "F5.fan_height" for f in sf.check_physics(edge)), [f.line() for f in sf.check_physics(edge)]
-# 像の幅も筒の内に入る（検品の指摘の例: 筒 20・台 15・像の幅 30 は、足の糊代 12 で台には乗るが、筒をかぶせられない）
+# 像の幅も筒の内に入る（見直しの指摘の例: 筒 20・台 15・像の幅 30 は、足の糊代 12 で台には乗るが、筒をかぶせられない）
 wide = {**lift, "tube_side": 20, "base_side": 15, "figure_w": 30}
 assert any(f.floor == "F5.figure_base" and "筒をかぶせられない" in f.message for f in sf.check_physics(wide)), [f.line() for f in sf.check_physics(wide)]
 assert not sf.check_range(short) and any(f.floor == "F5.fan_height" for f in sf.check_physics(short)), "筒がかぶさらない寸法を通した"
