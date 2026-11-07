@@ -110,6 +110,8 @@ PYTHONPATH=src .venv/bin/python -m omochae --scenario examples/fan_tab.json --ou
 }
 ```
 
+型紙の題に刷る版の番号（`版 N`）は、`--version` か、場面の `version`（型紙の版。見本の虎 `examples/tora_v7.json` は 7、御来迎 `examples/goraigo_v14.json` は 14）。どちらも無ければ 1。撮影中の虎 v6 の見本は番号を持たない（刷った紙の題は「版 1」のまま）。決める側の決定（2026-11-07）「紙の題の版も見本に番号を持たせる形で」による。前は見本から版を渡さず、どの版の紙も「版 1」だった。型紙の版は、エンジンの版（`data/engine/versions.json`。どの型紙の版をどのエンジンの版で刷ったか）と別の番号（試験 `tests/test_sheet_version.py`）。
+
 寸法の JSON を直に渡す時は `--params`（`--template` で雛形を選ぶ。出典は雛形ごとに既定がある）:
 
 ```bash

@@ -1187,6 +1187,7 @@
   "test_readme_commands",
   "test_run_floors",
   "test_sheet_v8",
+  "test_sheet_version",
   "test_sheets",
   "test_slide_box",
   "test_slider_fan_colors",
