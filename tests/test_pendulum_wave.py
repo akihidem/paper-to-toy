@@ -91,6 +91,8 @@ _, layout, fails = compose("pendulum_wave", p, src)
 assert not fails, [f.line() for f in fails]
 st = pw.steps(p)
 assert len(st) == 9 and f"{p['cycle_s']:g} 秒でまた全部がそろう" in st[-1], st[-1]
+# 長さの式（点の重り）の前提: 糸が玉の真ん中を、梁と同じ向き（揺れの軸と平行）に通る事を、手順の文が言う（見直しの指摘）
+assert "玉の真ん中を横に通る" in st[5] and "梁と同じ向き" in st[5], st[5]
 sc = json.loads((ROOT / "tests/frozen/scenarios/pendulum_wave_neg.json").read_text(encoding="utf-8"))
 assert lines(**{k: v for k, v in sc["params"].items() if k != "kind"}) == lines(spacing=14, v_span=6)
 
