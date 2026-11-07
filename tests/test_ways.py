@@ -101,8 +101,22 @@ assert pr[("slide_box", "lid")]["within"] is True  # 紙だけ
 assert pr[("launcher", "crossbow")]["prep"]["metal"] == [] and pr[("twist_drum", "kiku")]["prep"]["metal"] == []
 # 当時の材料と別の軸: 鈴は当時の物でも金属、厚紙は今の物でも紙
 assert ways._premise_of(["鈴"], True)["metal"] == ["鈴"] and ways._premise_of(["空き箱の厚紙"], True) == {"metal": [], "resin": [], "unlisted": []}
-# 部品表の、どの語にも当たらない材料は、丸ごと一覧に無い物に出す（知らない材料を見落とさない）
+# 部品表の、どの語にも当たらない材料は、丸ごと一覧に無い物に出す。限り（README）: 用意する物の文の中の知らない材料は見落とす
 assert ways._premise_of(["ガラスの玉"], True)["unlisted"] == ["ガラスの玉"] and ways._premise_of(["ガラスの玉"], False)["unlisted"] == []
+# 今の型紙の部品表に、どの語にも当たらない行は無い（within を「知っている語の中に前提の外が無い」と読める根拠）
+for (t, f), p in pr.items():
+    tp = TEMPLATES[t]
+    rows_ = tp.bom(ways._params(tp, f))
+    assert all(ways._PREMISE.search(ways.PREMISE_TOOLS.sub(" ", str(r.get("material", "")))) for r in rows_ if str(r.get("material", "")).strip()), (t, f)
+# 部品表は紙の行も含めて全部を当てる（「紙と針金」の針金を、紙の見分けで先に外して見落とさない。見直しの指摘）
+tpl = TEMPLATES["slider_fan"]
+keep = tpl.bom, tpl.materials
+try:
+    tpl.bom, tpl.materials = (lambda p: [{"name": "x", "material": "紙と針金"}]), (lambda p: ["のり、はさみ、定規"])
+    got = ways.premise("slider_fan", "tab")
+    assert got["bom"]["metal"] == ["針金"] and got["within"] is False, got
+finally:
+    tpl.bom, tpl.materials = keep
 # 落とさない: 前提の外の形も型紙のまま（相撲は型紙）。前の欄（サイトと同じ名）は変えない
 assert any(r["sheet"] for r in table if (r["template"], r["form"]) == ("lever_link", "sumo"))
 assert set(ways.details("slider_fan", "tab")) == {"one_sheet", "fold_only", "period", "other_materials", "modern_substitutes"}

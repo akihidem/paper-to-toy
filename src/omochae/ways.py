@@ -89,10 +89,15 @@ def _premise_of(texts, unknown_unlisted):
 
 def premise(template_id, form):
     """材料の前提の印。部品表（bom）と用意する物（prep）を別の一覧で出す。今のデータでは、作る途中だけ使う物（仮に留めるテープ
-    など）と玩具に残る物を見分けられないので、どちらに書かれたかだけを出す。within は、どちらにも金属・樹脂・一覧に無い物が無い時。"""
+    など）と玩具に残る物を見分けられないので、どちらに書かれたかだけを出す。
+    within は、知っている語の中に金属・樹脂・一覧に無い物が無い時（見直しの指摘で、意味をこう決めた）。知らない材料は、部品表の
+    行がどの語にも当たらない時だけ丸ごと一覧に無い物に出す。知っている語と同じ行に混ざった知らない材料と、用意する物の文の中の
+    知らない材料は見落とす（自由な文から材料を全部は拾えない。今の型紙の部品表に、どの語にも当たらない行が無い事は試験で見る）。"""
     tpl = TEMPLATES[template_id]
     p = _params(tpl, form)
-    bom = _premise_of([r.get("material", "") for r in tpl.bom(p) if not _is_paper(r.get("material", ""))], True)
+    # 部品表は紙の行も含めて全部を当てる。紙の見分け（_is_paper）は紙一枚の印の古い語の一覧を使うので、先に外すと
+    # 「紙と針金」のような混ざった行の針金を見落とした（見直しの指摘）。紙だけの行は「紙」に当たり、何も出さない
+    bom = _premise_of([r.get("material", "") for r in tpl.bom(p)], True)
     prep = _premise_of(tpl.materials(p), False)
     return {"within": not any(d[k] for d in (bom, prep) for k in d), "bom": bom, "prep": prep}
 
