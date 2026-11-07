@@ -56,6 +56,7 @@ from shapely.geometry import LineString, Point, Polygon, box
 from shapely.geometry.polygon import orient
 from shapely.ops import polylabel, unary_union
 
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（制作者の指示 2026-11-05）
 from ..model import Failure, Part
 
 ID = "stand_figure"
@@ -1148,7 +1149,7 @@ def place(by_key, page, top, gap):
 
 @_filling
 def bom(p):
-    paper = f"紙（厚さ {p['paper_thickness']}mm 前後）"
+    paper = paper_name(thickness=p['paper_thickness'])
     why = "家庭のプリンタで刷って作るため"
     f = FIGURES[p["figure"]]
     rows = [{"number": 1, "key": "front", "name": "表の姿", "qty": 1, "material": paper, "substituted": True,
@@ -1177,7 +1178,7 @@ def steps(p):
     作った人の報告は、困った所を手順の番号で言う）。
     表と裏は、粗く切って貼り合わせてから実線で 2 枚いっしょに切る。先に 1 枚ずつ実線で切ると、貼る時に縁がずれて白い縁が出て、
     台の形では 2 枚の舌の幅がそろわず溝に合わない。粗く切る余白は 2mm（部品の間は 4mm 空けて並べてある）。
-    文はサイトの手順の紙に収まる行数に詰める（float の STEP_LINES_MAX と同じ上限。試験で見る）。"""
+    文は float の STEP_LINES_MAX と同じ行数に詰める（前はサイトの手順の紙に収めるため。手順の紙は廃止し、組み立ての頁に出す。試験で見る）。"""
     base = p["stand"] == "base"
     # 舌と姿のつながりは細い姿で 4mm ほどしか無いので、付け根の内の角を切り過ぎないように言う
     shoulder = "。舌の付け根の内の角は、両側から切って角で止める" if base else ""

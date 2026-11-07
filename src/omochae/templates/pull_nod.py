@@ -31,6 +31,7 @@ import math
 from shapely import affinity
 from shapely.geometry import LineString, Point, Polygon, box
 
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（制作者の指示 2026-11-05）
 from ..model import Failure, Part
 
 ID = "pull_nod"
@@ -484,7 +485,7 @@ def _peck_parts(p):
     # 1 藁苞: 上の面・横・底・横・糊代の順に並べた箱。両端は開けたまま（藁の束の切り口に見立てる）。
     rows = [0, W, W + Hs, 2 * W + Hs, 2 * W + 2 * Hs, 2 * W + 2 * Hs + g]
     # 苞は色の面（藁の色）を外にして角の筒にするので、刷った面から見て山折り。谷折り（凡例の、刷った面がへこむ向き）のままだと
-    # 色の面が筒の内に入った。本人の決定（2026-11-06「今のうちに4つ直す」）で、御来迎の外筒・虎の胴と同じ線で直した。
+    # 色の面が筒の内に入った。制作者の決定（2026-11-06「今のうちに4つ直す」）で、御来迎の外筒・虎の胴と同じ線で直した。
     # 線は破線で刷るので、刷る線の形が山折りの形に変わる。穴と溝の高さは筒の向きに依らない（2 つの横の穴はどちらも上の面から d）
     straw = Part(1, "straw", "藁苞", [(0, 0), (L, 0), (L, rows[5]), (0, rows[5])], label_xy=(2, 1), label="1",
                  mountain=[((0, y), (L, y)) for y in rows[1:5]], glue=[[(0, rows[4]), (L, rows[4]), (L, rows[5]), (0, rows[5])]])
@@ -698,7 +699,7 @@ def place(by_key, page, top, gap):
 
 
 def bom(p):
-    paper = f"紙（厚さ 0.15mm 前後・{p['paper_gsm']}g/m² の見込み）"
+    paper = paper_name(gsm=p['paper_gsm'])
     why = "家庭のプリンタで刷って作るため"
     if p["kind"] == "bow":
         rows = [

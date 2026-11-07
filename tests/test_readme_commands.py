@@ -32,6 +32,11 @@ SELF = ("./init.sh", "./run.sh")
 FORMS = (f"{PY} ", f"PYTHONPATH=src {PY} ")
 # 人が決める字の置き換え。<ID> は形の合った、受付箱に無い番号。
 PLACEHOLDER = {"<人>": "試す人", "<番号>": "abc1234", "<組の名>": "goraigo-test", "<ID>": "B-00000000-000000-00000000"}
+# <案の番号> は、README の束を受けた時に起きる最初の案の番号。案の番号は台帳（git の中）の番号の次から振るので、台帳から数える
+# （台帳に採った案がある間は EP-0001 にならない。決まった番号を README に書くと、台帳が育つたびに例が外れる）。
+_LEDGER = json.loads((ROOT / "data/engine/versions.json").read_text(encoding="utf-8"))
+_TAKEN = [int(p["id"][3:]) for v in _LEDGER["versions"] for p in v.get("proposals", [])] + [int(p["id"][3:]) for p in _LEDGER.get("next", [])]
+PLACEHOLDER["<案の番号>"] = f"EP-{max(_TAKEN, default=0) + 1:04d}"
 # 受け入れは端末で人が ID を打つ。端末の無いこの試験では、断るのが正しい。
 RC = {"omochae.intake review accept": 3}
 WRITES = ("out/fan_tab.svg", "out/fan_tab.pdf", "out/fan_tab.png", "out/tiger.pdf",

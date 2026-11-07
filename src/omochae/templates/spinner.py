@@ -40,6 +40,7 @@ import math
 from shapely.geometry import LineString, Point, Polygon, box
 from shapely.ops import unary_union
 
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（制作者の指示 2026-11-05）
 from ..model import Failure, Part
 
 ID = "spinner"
@@ -625,7 +626,7 @@ def place(by_key, page, top, gap):
 # ---- 部品表・組み方 ----
 
 def bom(p):
-    paper = f"紙（厚さ {thickness(p):.2f}mm 前後・{p['paper_gsm']}g/m² の見込み）"
+    paper = paper_name(gsm=p['paper_gsm'])
     why = "家庭のプリンタで刷って作るため"
     k = p["kind"]
     if k in ("top", "cone", "screen"):
