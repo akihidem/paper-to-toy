@@ -54,6 +54,7 @@ def to_svg(layout):
             else:
                 d.append(dw.Lines(*pts, close=False, fill="none", stroke=item["stroke"], stroke_width=item["sw"]))
     # 呼ぶ側が渡した画像（元の repo では手順の紙の完成のイメージ、v8）。型紙の部品には貼らない（刷った後の検査 F5.image_count が 0 枚を見る）。
+    # 手順の紙は廃止した（制作者の決まり 2026-11-06「文章のプリントは廃止。組み立て用のページだけでいい。」）。この口と下の塗り・物差しの無い紙の口は、サイトが呼ばなくなったと確かめてから外す。
     for im in layout.get("images", []):
         d.append(dw.Image(im["x"], im["y"], im["w"], im["h"], data=im["data"], mime_type="image/jpeg"))
     if layout.get("paste_image"):
@@ -73,6 +74,9 @@ def to_svg(layout):
                 d.append(dw.Line(q.x + x1, q.y + y1, q.x + x2, q.y + y2, stroke="black", stroke_width=0.18, stroke_dasharray=dash))
         for x, y, w, h in q.cuts:
             d.append(dw.Rectangle(q.x + x, q.y + y, w, h, stroke_width=0.25, **STROKE))
+        # 丸い切り抜きは、切る線（外形・矩形の切り込み）と同じ太さの実線の円で刷る
+        for x, y, r in q.round_cuts:
+            d.append(dw.Circle(q.x + x, q.y + y, r, stroke_width=0.25, **STROKE))
         for x, y, r in q.holes:
             d.append(dw.Circle(q.x + x, q.y + y, r, stroke_width=0.25, **STROKE))
     for s in layout.get("shapes", []):
@@ -114,13 +118,23 @@ class _RepeatablePDF(PDFSurface):
         return surface, width, height
 
 
+def data_only_fetcher(url, resource_type):
+    """SVG から PDF を作る時の取り出し口。data: の URL（自分で埋めた絵）のほかは読まずに断る。cairosvg の既定の取り出し口は、
+    unsafe を立てなくても file: の URL の手元のファイルを読みに行った（セキュリティの点検 2026-11-07 で確かめた）。今の SVG は自分で作り、
+    字は escape して書くので外の URL は入らないが、入る道ができた時のために閉じておく。"""
+    if not str(url).startswith("data:"):
+        raise ValueError("SVG の中の外の URL は読まない")
+    from cairosvg.url import fetch
+    return fetch(url, resource_type)
+
+
 def write_all(layout, out_stem):
     stem = pathlib.Path(out_stem)
     stem.parent.mkdir(parents=True, exist_ok=True)
     svg = to_svg(layout)
     stem.with_suffix(".svg").write_text(svg, encoding="utf-8")
     pdf = stem.with_suffix(".pdf")
-    _RepeatablePDF.convert(bytestring=svg.encode("utf-8"), write_to=str(pdf))
+    _RepeatablePDF.convert(bytestring=svg.encode("utf-8"), write_to=str(pdf), url_fetcher=data_only_fetcher)
     return pdf
 
 

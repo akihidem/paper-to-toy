@@ -33,6 +33,7 @@ import math
 
 from shapely.geometry import LineString, Point, Polygon
 
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（制作者の指示 2026-11-05）
 from ..model import Failure, Part
 from ..pivot_model import center, paper_mass, rest_tilt_deg
 
@@ -481,7 +482,7 @@ def place(by_key, page, top, gap):
 
 
 def bom(p):
-    paper = f"紙（厚さ {p['paper_thickness']}mm 前後・{p['paper_gsm']}g/m² の見込み）"
+    paper = paper_name(gsm=p['paper_gsm'])
     why = "家庭のプリンタで刷って作るため"
     if p["kind"] == "yajirobe":
         return [

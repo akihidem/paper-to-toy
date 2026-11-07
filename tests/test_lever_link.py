@@ -216,9 +216,12 @@ st = t.steps({**P, "kind": "karakuri"})
 assert any("机に立て" in x and "押さえ" in x for x in st), st
 assert any("机" in f.message for f in t.check_physics({**P, "kind": "karakuri", "crank": 12}))
 
-# 5 回目の見直し 4: 用意する物に、登る板を貼る厚紙が厚さ付きで載る
+# 5 回目の見直し 4: 用意する物に、登る板を貼る厚紙が載る。紙の書き方の決まり（omochae.paper_words・制作者の指示 2026-11-05）で
+# 厚さの mm は書かず「空き箱の厚紙」の名前で言う。板の厚さの範囲（plate_t）の下の端でも、その名前に当たる事を見る
+from omochae.paper_words import BOARD, paper_name  # noqa: E402
 m = t.materials({**P, "kind": "saru_take"})
-assert any("厚紙" in x and f"{P['plate_t']:g}mm" in x for x in m), m
+assert any(x.startswith(BOARD) for x in m), m
+assert paper_name(thickness=t.RANGES["plate_t"][0]) == BOARD and paper_name(thickness=t.FRAME_CARD_T) == BOARD
 
 # 5 回目の見直し 5: 竹串や厚紙を刃物で切る形は、道具・「大人がする」・ささくれと尖りの始末を言う
 for k in ("karakuri", "hashigo", "saru_take", "saru_sao", "yakko"):

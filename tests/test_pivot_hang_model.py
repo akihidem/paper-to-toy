@@ -36,17 +36,18 @@ assert any(f.floor == "F5.pivot" and "頭" in f.where + f.message and "貼れな
 print("ok")
 
 # 胴は色の面（虎の地・縞・横の絵）を外にして箱にするので、10 本とも刷った面から見て山折り（首の形・吊る形とも）。
-# 谷折り（刷った面がへこむ向き）だと色が箱の内に入る。御来迎の外筒への本人の答え（2026-11-06）と同じ線で直した。組み方の文は 1 語だけ替えた
+# 谷折り（刷った面がへこむ向き）だと色が箱の内に入る。御来迎の外筒への制作者の答え（2026-11-06）と同じ線で直した。組み方の文は 1 語だけ替えた
 for form in ({**DEFAULTS, "mount": "neck"}, hang):
     b = next(q for q in parts(form) if q.key == "body")
     assert len(b.mountain) == 10 and not b.valley, (form["mount"], len(b.mountain), len(b.valley))
     assert "1 胴を破線で山折りし、糊代で貼って箱にする。上の面は後で閉じる" in steps(form), steps(form)
 print("ok 胴の折る向き")
-# 用意する物の道具（本人の確認 2026-11-06）: 首の形は前の壁の四角い穴を切るので、カッターを書く。吊る形には書かない
+# 用意する物の道具（制作者の確認 2026-11-06）: 首の形は前の壁の丸い穴を切るので、カッターを書く。吊る形には書かない
 from omochae.templates.pivot_counterweight import materials
-assert materials({**DEFAULTS, "mount": "neck"})[1] == "のり、はさみ、定規、カッター", materials({**DEFAULTS, "mount": "neck"})
+# 首の形は、重りの腕をテープで仮に留めて試してから貼るので、セロハンテープも書く（EP-0011、2026-11-06）
+assert materials({**DEFAULTS, "mount": "neck"})[1] == "のり、はさみ、定規、セロハンテープ、カッター", materials({**DEFAULTS, "mount": "neck"})
 assert materials(hang)[1] == "のり、はさみ、定規", materials(hang)
 # カッターは部品を組まずに形の値で決める。部品から決めた答え（胴に中を切り抜く所がある）と、首の形・吊る形で同じ事を見る
 for form in ({**DEFAULTS, "mount": "neck"}, hang):
-    assert materials(form)[1].endswith("、カッター") == any(x.cuts for x in parts(form)), form["mount"]
+    assert materials(form)[1].endswith("、カッター") == any(x.cuts or x.round_cuts for x in parts(form)), form["mount"]
 print("ok 用意する物")

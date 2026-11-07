@@ -15,6 +15,7 @@ import math
 
 from shapely.geometry import LineString, Polygon, box
 
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（制作者の指示 2026-11-05）
 from ..model import Failure, Part
 from ..pivot_model import paper_mass
 
@@ -327,7 +328,7 @@ def _rat_body(p):
            (2, b0 - g), (H, b0 - g), (H, g)]
     body = Part(1, "body", "胴（鼠）", pts, label_xy=(H + 2, top0 + 2), label="1 胴")
     # 胴は色の面（鼠の絵・板の色・顔・人形を貼る印）を外にして箱にするので、刷った面から見て山折り（下の側面の絵も「外から見て」描いてある）。
-    # 谷折り（凡例の、刷った面がへこむ向き）のままだと色の面が箱の内に入った。本人の決定（2026-11-06「今のうちに4つ直す」）で、
+    # 谷折り（凡例の、刷った面がへこむ向き）のままだと色の面が箱の内に入った。制作者の決定（2026-11-06「今のうちに4つ直す」）で、
     # 同じ十字形の虎の胴と同じ線で直した。線は破線で刷るので、刷る線の形が山折りの形に変わる
     body.mountain = [((H, top0), (H + L, top0)), ((H, top1), (H + L, top1)), ((H, b0), (H + L, b0)), ((H, b1), (H + L, b1)), ((H, b0), (H, b1)),
                      ((H + L, b0), (H + L, b1)), ((0, b0), (H, b0)), ((0, b1), (H, b1)), ((H + L, b0), (H + L + H, b0)), ((H + L, b1), (H + L + H, b1))]
@@ -375,7 +376,7 @@ def _rider(p):
     """人形。下に台へ貼る耳を付け、耳の付け根で山折りして胴の上の面に立てる。
 
     山折り（刷った面の裏へ折る）なので、耳は人形の後ろへ折れ、耳に刷った糊の印が胴の上の面を向く。前の谷折りでは、耳が絵の面の前へ
-    出て、糊の印が上を向いた。本人の決定（2026-11-06「今のうちに4つ直す」）で、ほかの色の面の部品と一緒に直した。
+    出て、糊の印が上を向いた。制作者の決定（2026-11-06「今のうちに4つ直す」）で、ほかの色の面の部品と一緒に直した。
     """
     fw, fh, tab = p["figure_w"], p["figure_h"], 7
     bb = (236, 585, 505, 960)
@@ -454,7 +455,7 @@ def _drum(p):
             art.append(_poly(_rect(x0, L * y0, x1, L * y1), DARK))
     st = p["stick_t"]
     # 頭は色の面（木の色と黒い帯）を外にして八角の筒にするので、刷った面から見て山折り。谷折り（凡例の、刷った面がへこむ向き）のままだと
-    # 色の面が筒の内に入った。本人の決定（2026-11-06「今のうちに4つ直す」）で、御来迎の外筒・虎の胴と同じ線で直した。
+    # 色の面が筒の内に入った。制作者の決定（2026-11-06「今のうちに4つ直す」）で、御来迎の外筒・虎の胴と同じ線で直した。
     # 線は破線で刷るので、刷る線の形が山折りの形に変わる
     return Part(1, "drum", "頭", outline, label_xy=(1, L * 0.4), label="1",
                 mountain=[((i * s, 0), (i * s, L)) for i in range(1, 9)], glue=[[(W, 0), (W + g, 1), (W + g, L - 1), (W, L)]],
@@ -465,7 +466,7 @@ def _cap(number, key, p):
     """頭の端の蓋。八角の各辺に糊代を付け、山折りして頭の内側に貼る。中心に軸の穴。絵の端の面の菊の模様を描く。
 
     山折り（刷った面の裏へ折る）なので、糊代は頭の内へ入り、菊の絵の面が頭の外を向く。前の谷折りでは、絵の面が頭の内を向いた。
-    本人の決定（2026-11-06「今のうちに4つ直す」）で、頭の筒と一緒に直した。線は破線で刷るので、刷る線の形が山折りの形に変わる。
+    制作者の決定（2026-11-06「今のうちに4つ直す」）で、頭の筒と一緒に直した。線は破線で刷るので、刷る線の形が山折りの形に変わる。
     """
     r = p["head_r"]
     side, apo = octagon(p)
@@ -552,10 +553,11 @@ def place(by_key, page, top, gap):
 
 
 def bom(p):
-    paper = f"紙（厚さ {p['paper_thickness']}mm 前後・{p['paper_gsm']}g/m² の見込み）"
+    paper = paper_name(gsm=p['paper_gsm'])
     why = "家庭のプリンタで刷って作るため"
     n = p["wheel_layers"] - 1
-    core = f"空き箱の厚紙（厚さ {p['card_thickness']}mm 前後の見込み）。刷った車輪を型にして切る"
+    # 芯の紙の名前は、計算に使う厚さ（card_thickness）から選ぶ。名前を決め打ちにすると、薄い値にした時に計算と名前が食い違う
+    core = f"{paper_name(thickness=p['card_thickness'])}。刷った車輪を型にして切る"
     if p["ride"] == "rat":
         rows = [
             {"number": 1, "key": "body", "name": "胴（鼠）", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（絵の鼠は白く塗った物で、素材は読めない）", "reason": why},
@@ -608,7 +610,7 @@ def materials(p):
         out.append(by["handle"]["material"])
     out.append(f"{by['axle']['material']} {by['axle']['qty']} 本")
     if "core" in by:
-        out.append(f"空き箱の厚紙（車輪の芯 {by['core']['qty']} 枚分）")
+        out.append(f"{paper_name(thickness=p['card_thickness'])}（車輪の芯 {by['core']['qty']} 枚分）")
     return out
 
 
@@ -619,7 +621,8 @@ def steps(p):
     cut = "部品を実線で切る。" + ("中の四角い穴はまだ切らない。" if p["ride"] in ("stick", "mallet") else "")
     out = ["刷った物差しに定規を当て、10cm か確かめる", cut + "穴は竹串の先であけ、軸の穴は竹串が回るまで広げる"]
     if n:
-        out.append(f"車輪を型にして、空き箱の厚紙から車輪 1 つに {n} 枚ずつ芯を切り、刷った車輪の裏に重ねて貼る。芯の真ん中にも穴をあける")
+        # 芯の紙の名前は、用意する物と同じく計算の厚さから選ぶ（決め打ちだと、薄い芯で用意する物と手順の名前が食い違った）
+        out.append(f"車輪を型にして、{paper_name(thickness=p['card_thickness'])}から車輪 1 つに {n} 枚ずつ芯を切り、刷った車輪の裏に重ねて貼る。芯の真ん中にも穴をあける")
     if p["ride"] == "rat":
         out += ["1 胴を破線で山折りし、糊代で貼って箱にする",
                 "竹串を 1 胴の前の 2 つの穴に通し、後ろの 2 つの穴にもう 1 本通す",
