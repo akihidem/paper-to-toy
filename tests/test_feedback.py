@@ -29,14 +29,14 @@ for pii in ({**OK, "motion_notes": "a.b@example.com まで"}, {**OK, "finish_not
 for pii in ({**OK, "motion_notes": "電話090-1234-5678"}, {**OK, "motion_notes": "住所123-4567"}, {**OK, "motion_notes": "09012345678"},
             {**OK, "motion_notes": "090 1234 5678"}, {**OK, "motion_notes": "090.1234.5678"}, {**OK, "motion_notes": "(090)1234-5678"},
             {**OK, "motion_notes": "+81-90-1234-5678"}, {**OK, "motion_notes": "〒1234567"}, {**OK, "motion_notes": "090\u20101234\u20105678"},
-            {**OK, "motion_notes": "090\u20131234\u20135678"}, {**OK, "motion_notes": "a\u200b@b.jp"},
+            {**OK, "motion_notes": "090\u20131234\u20135678"}, {**OK, "motion_notes": "a\u200b@example.invalid"},
             {**OK, "source_id": "山田太郎 090-1234-5678"}, {**OK, "params": {"name": "山田", "tel": "090-1234-5678"}},
-            {**OK, "reported_at": "a@b.jp"}, {**OK, "problems": [{"kind": "fit", "step": 1, "note": "", "tel": "090-1234-5678"}]}):
+            {**OK, "reported_at": "a@example.invalid"}, {**OK, "problems": [{"kind": "fit", "step": 1, "note": "", "tel": "090-1234-5678"}]}):
     assert any(f.floor in ("F12.pii", "F12.report") for f in fb.check(pii)), pii
 # 2b2. 区切りの違う番号・漢数字・前に数が付く番号・空白の郵便番号・崩したメール・連絡先の印も、文の欄で F12.pii で落とす
 for t in ("090/1234/5678", "090・1234・5678", "090_1234_5678", "090,1234,5678", "090～1234～5678", "090の1234の5678",
           "〇九〇-一二三四-五六七八", "2.5 090 1234 5678", "手順3 03 1234 5678", "〒123 4567", "〒 123 4567", "1234567",
-          "郵便123-4567.", "a @ b.jp", "a@b . jp", "a(at)b.jp", "山田@例え.日本", "LINE: yamada_taro", "@yamada_taro",
+          "郵便123-4567.", "a @ example.invalid", "a@example . invalid", "a(at)example.invalid", "山田@例え.日本", "LINE: yamada_taro", "@yamada_taro",
           "https://x.com/yamada"):
     assert any(f.floor == "F12.pii" for f in fb.check({**OK, "motion_notes": t})), t
 # 2b4. 3 回目のレビューのすり抜け。文の欄の数字の多い所・連絡先の語・@ は、書き方に関わらず落とす
@@ -78,10 +78,10 @@ assert any(f.floor == "F12.report" for f in fb.check({**OK, "params": {"radius":
 for fine in ("12-34mm", "羽 8 枚・半径 46mm", "0.5mm の紙で 3 回折った", "手順 4 で止まった", "2 回目で回った", "息で 10 秒回った"):
     assert not [f for f in fb.check({**OK, "motion_notes": fine}) if f.floor == "F12.pii"], fine
 # 2d. 型の崩れた入力でも落ちずに F12.report を返す。落とした報告の値は知らせに出さない
-for broken in ({**OK, "template": ["spinner"]}, {**OK, "problems": [{"kind": ["fit"]}]}, {**OK, "template": "a@b.jp"},
+for broken in ({**OK, "template": ["spinner"]}, {**OK, "problems": [{"kind": ["fit"]}]}, {**OK, "template": "a@example.invalid"},
                {**OK, "params": "x"}, {**OK, "motion_notes": 3}):
     fl = fb.check(broken)
-    assert fl and "a@b.jp" not in " ".join(f.line() for f in fl), broken
+    assert fl and "a@example.invalid" not in " ".join(f.line() for f in fl), broken
 
 # 3. 集めると、雛形・形ごとに動いた割合・仕上がりの点・多い困り事（手順つき）・直しの行き先が出る
 reports = [OK, {**OK, "moved": "moved", "finish": 5, "problems": []},
@@ -103,7 +103,7 @@ assert all("new_value" not in p for p in pw["problems"])
 with tempfile.TemporaryDirectory() as d:
     good, bad = pathlib.Path(d, "r1.json"), pathlib.Path(d, "r2.json")
     good.write_text(json.dumps({**OK, "reviewed_at": "2026-11-05T10:00:00+09:00"}, ensure_ascii=False), encoding="utf-8")
-    bad.write_text(json.dumps({**OK, "motion_notes": "x@y.jp"}, ensure_ascii=False), encoding="utf-8")
+    bad.write_text(json.dumps({**OK, "motion_notes": "x@example.invalid"}, ensure_ascii=False), encoding="utf-8")
     run = lambda *a: subprocess.run([sys.executable, "-m", "omochae.feedback", *a], cwd=ROOT, capture_output=True, text=True,
                                     env={"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin"})
     assert run("check", str(good)).returncode == 0
@@ -111,11 +111,11 @@ with tempfile.TemporaryDirectory() as d:
     assert r.returncode == 3 and "F12.pii" in r.stderr, r.stderr
     r = run("summarize", d)
     assert r.returncode == 0 and "spinner" in r.stdout and "r2.json" in r.stderr, (r.stdout, r.stderr)
-    assert "x@y.jp" not in r.stdout + r.stderr  # 落とした報告の中身を出し直さない
+    assert "x@example.invalid" not in r.stdout + r.stderr  # 落とした報告の中身を出し直さない
     leak = pathlib.Path(d, "r3.json")
-    leak.write_text(json.dumps({**OK, "template": "z@w.jp"}), encoding="utf-8")
+    leak.write_text(json.dumps({**OK, "template": "z@example.invalid"}), encoding="utf-8")
     r = run("check", str(leak))
-    assert r.returncode == 3 and "z@w.jp" not in r.stderr, r.stderr  # check も値を出し直さない
+    assert r.returncode == 3 and "z@example.invalid" not in r.stderr, r.stderr  # check も値を出し直さない
     pathlib.Path(d, "r4.json").write_text(json.dumps({**OK, "template": ["x"]}), encoding="utf-8")
     r = run("summarize", d)
     assert r.returncode == 0 and "spinner" in r.stdout, r.stderr  # 型の崩れた 1 つで集計が止まらない
@@ -206,7 +206,7 @@ with tempfile.TemporaryDirectory() as d:
 r = run("summarize", "examples/reports")
 assert r.returncode == 0 and "報告 1 件" in r.stdout and r.stderr == "", (r.stdout, r.stderr)
 
-# 10. 本物の報告の置き場は git の外。公開の repo で追跡する examples/reports に本物を置かない
+# 10. 本物の報告の置き場は git の外。この repo で追跡する examples/reports に本物を置かない
 from omochae import intake
 assert intake.BASE.relative_to(ROOT).parts[0] == "local"
 assert "local/" in (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()

@@ -312,12 +312,14 @@ assert "判定はしない" in out and "den_den（この repo の雛形の一覧
 for word in ("効いた", "改善し", "良くな", "悪くな", "増えた", "減った", "上がっ", "下がっ", "%", "％", "↑", "↓", "平均"):
     assert word not in out, word
 
-# 9. repo の台帳（git に入る物）は読めて、作った人の文の欄を持たない
+# 9. repo の台帳（git に入る物）は読めて、作った人の文の欄を持たない。知見の 1 行（finding）は採る人が自分の言葉で書いた物なので
+# 欄として持ってよいが、連絡先の形が無く、長さの上限の中にある
 os.environ.pop("OMOCHAE_ENGINE_LEDGER")
 real = el.ledger()
 assert real["versions"] and real["versions"][0]["version"] == 1
-assert all(set(p) <= {"id", "target", "title", "numbers", "adopted_at"} for v in real["versions"] for p in v["proposals"])
-assert all(set(p) <= {"id", "target", "title", "numbers", "adopted_at"} for p in real["next"])
+entries = [p for v in real["versions"] for p in v["proposals"]] + real["next"]
+assert all(set(p) <= {"id", "target", "title", "numbers", "adopted_at", "finding"} for p in entries)
+assert all(not el.has_contact(p["finding"]) and len(p["finding"]) <= el.MAX_TEXT for p in entries if "finding" in p)
 
 # 10. 呼び方の誤り（引数なし・知らない命令・要る引数が無い・知らない印）は rc 4。1 と 2 は使わない（終了の番号の決まり。#71）。--help は rc 0
 for wrong in ((), ("no_such_command",), ("take",), ("adopt",), ("release", "--no-such-flag"), ("compare", "extra")):
@@ -408,7 +410,7 @@ assert "手順 3: 3 回・2 人" in row_of(out, "tab") and "手順 3: 1 回・1 
 for word in ("効いた", "改善し", "良くな", "悪くな", "%", "％", "平均"):
     assert word not in out, word
 
-# 13. 玩具ごとの案と版（玩具 = 雛形 + 形。本人の決定 11-05「型紙は玩具ごとに 1 枚」）。工夫・レビュー・動きの床の案も紙で分ける。
+# 13. 玩具ごとの案と版（玩具 = 雛形 + 形。制作者の決定 11-05「型紙は玩具ごとに 1 枚」）。工夫・レビュー・動きの床の案も紙で分ける。
 # 紙の名の無い前の形の束は、前の鍵のまま（上の 1〜8 がそのまま通っている）
 os.environ["OMOCHAE_ENGINE_LOOP"] = str(tmp / "local3")
 os.environ["OMOCHAE_ENGINE_LEDGER"] = str(tmp / "versions3.json")
@@ -421,7 +423,8 @@ def toys(b):
     b["current_sets"] = {}
     b["groups"] = [{**copy.deepcopy(g), "paper": "pinwheel", "texts": say("pinwheel")}, {**copy.deepcopy(g), "paper": "top", "texts": say("top")},
                    {**copy.deepcopy(g), "template": "slider_fan", "sheet_set": "goraigo-v10", "paper": "tube", "texts": say("tube")},
-                   {**copy.deepcopy(g), "template": "slider_fan", "sheet_set": "goraigo-v10", "paper": "tab", "texts": say("tab")}]
+                   {**copy.deepcopy(g), "template": "slider_fan", "sheet_set": "goraigo-v10", "paper": "tab", "texts": say("tab")},
+                   {**copy.deepcopy(g), "template": "slider_fan", "sheet_set": "goraigo-v12", "paper": "rise", "texts": say("rise")}]
 
 
 (tmp / "toys.json").write_text(json.dumps(variant(toys), ensure_ascii=False), encoding="utf-8")
@@ -435,12 +438,14 @@ for kind in ("craft", "review", "motion"):
 for kind, word in (("craft", "羽"), ("review", "穴")):
     assert [t["text"] for t in toy[f"{kind}:spinner:spin-v1:pinwheel"]["evidence"]] == [f"pinwheel の{'羽を少し細くした' if word == '羽' else '軸の穴が小さく見える'}"]
 assert toy["review:spinner:spin-v1:pinwheel"]["numbers"]["reviews"] == 1 and toy["motion:spinner:spin-v1:top"]["numbers"]["not_moved"] == 2
-# 別の読みの形（ヒント）の声も案にする。機械は捨てず、型紙でない事と型紙の形を並べて、人が決める
+# 別の読みの形（ヒント）の声も案にする。機械は捨てず、型紙でない事と型紙の形を並べて、人が決める。
+# 御来迎の型紙は rise（制作者の決定 2026-11-06）。前の型紙 tab で刷った紙（goraigo-v10）の声も、別の読みとして今の型紙の形を並べる
 reading = toy["craft:slider_fan:goraigo-v10:tube"]
-assert "別の読み" in reading["why"] and "型紙は tab" in reading["why"], reading["why"]
-assert "別の読み" not in toy["craft:slider_fan:goraigo-v10:tab"]["why"] and "別の読み" not in toy["craft:spinner:spin-v1:top"]["why"]
+assert "別の読み" in reading["why"] and "型紙は rise" in reading["why"], reading["why"]
+assert "型紙は rise" in toy["craft:slider_fan:goraigo-v10:tab"]["why"], toy["craft:slider_fan:goraigo-v10:tab"]["why"]
+assert "別の読み" not in toy["craft:slider_fan:goraigo-v12:rise"]["why"] and "別の読み" not in toy["craft:spinner:spin-v1:top"]["why"]
 out = cli("compare").stdout
-assert "別の読み" in row_of(out, "tube") and "型紙は tab" in row_of(out, "tube") and "別の読み" not in row_of(out, "tab"), out
+assert "別の読み" in row_of(out, "tube") and "型紙は rise" in row_of(out, "tube") and "別の読み" not in row_of(out, "rise"), out
 # 採る時に人が書く知見の 1 行は、台帳に入る（頁が読む）。書かなければ欄が無い。連絡先の形と長すぎる文は断る。採らない案には書けない
 pin, top = toy["review:spinner:spin-v1:pinwheel"]["id"], toy["review:spinner:spin-v1:top"]["id"]
 assert cli("adopt", pin, "--by", "作る人", "--finding", f"穴の大きさは {PHONE} へ").returncode == 3
@@ -459,5 +464,61 @@ assert ver["sources"]["spinner.pinwheel"] == ["NDL-1187053-R0000014-L-spinner"] 
 assert ver["proposals"][0]["finding"] == "軸の穴は、羽の幅に合わせて大きめに取る"
 out = cli("compare").stdout
 assert "版 1" in row_of(out, "pinwheel") and "版 1" not in row_of(out, "top") and "版 1" in row_of(out, "tab") and "版 1" in row_of(out, "tube"), out
+
+# 14. 案の番号は、置き場（git の外）だけでなく台帳（git の中）の番号とも重ねない。新しい機械や空の置き場で束を受けると、
+# 番号が EP-0001 から振り直され、台帳にある案と同じ番号になって台帳が読めなくなる（README の手順の試験で見つけた）
+os.environ["OMOCHAE_ENGINE_LOOP"] = str(tmp / "local4")
+os.environ["OMOCHAE_ENGINE_LEDGER"] = str(tmp / "versions4.json")
+row = lambda pid: {"id": pid, "target": {"kind": "template", "name": "spinner"}, "title": "前の案", "numbers": {}}
+(tmp / "versions4.json").write_text(json.dumps({"versions": [{"version": 1, "commit": "abc1234", "at": "2026-11-05", "proposals": [row("EP-0002")], "sheet_sets": {}, "note": ""}],
+                                                "next": [row("EP-0005")]}, ensure_ascii=False), encoding="utf-8")
+assert cli("take", str(tmp / "toys.json")).returncode == 0
+fresh = sorted(p["id"] for p in el.proposals())
+assert fresh and fresh[0] == "EP-0006", fresh
+assert cli("adopt", fresh[0], "--by", "作る人").returncode == 0
+assert [p["id"] for p in el.ledger()["next"]] == ["EP-0005", "EP-0006"]
+
+# 15. 版に入れる案を選べる（--proposal）。直しが入った案だけを版にし、まだ直していない案は次の版の予定に残す。
+# 全部を入れると、直していない案を「この版で直した」と台帳に書く事になる（11-06、虎と御来迎の直しだけが先に入った）
+os.environ["OMOCHAE_ENGINE_LOOP"] = str(tmp / "local5")
+os.environ["OMOCHAE_ENGINE_LEDGER"] = str(tmp / "versions5.json")
+(tmp / "versions5.json").write_text(json.dumps({"versions": [], "next": [{**row(pid), "adopted_at": "2026-11-06"} for pid in ("EP-0001", "EP-0002", "EP-0003")]}, ensure_ascii=False), encoding="utf-8")
+assert cli("release", "--commit", "abc1234", "--by", "作る人", "--proposal", "EP-0009").returncode == 3, "次の版の予定に無い案は刻まない"
+assert cli("release", "--commit", "abc1234", "--by", "作る人", "--proposal", "x").returncode == 3, "案の番号の形でない"
+assert [p["id"] for p in el.ledger()["next"]] == ["EP-0001", "EP-0002", "EP-0003"] and not el.ledger()["versions"], "落ちた時は台帳に触らない"
+r = cli("release", "--commit", "abc1234", "--by", "作る人", "--proposal", "EP-0003", "--proposal", "EP-0001", "--sheet-set", "slider_fan=goraigo-v11")
+assert r.returncode == 0, r.stderr
+led5 = el.ledger()
+assert [p["id"] for p in led5["versions"][-1]["proposals"]] == ["EP-0001", "EP-0003"] and [p["id"] for p in led5["next"]] == ["EP-0002"]
+assert cli("release", "--commit", "abc1234", "--by", "作る人").returncode == 0 and [p["id"] for p in el.ledger()["versions"][-1]["proposals"]] == ["EP-0002"], "選ばなければ全部（前と同じ）"
+
+# 16. 雛形をまたぐ困り事の種類に、穴・足りない部品・手順と説明・接着を足した（11-06 のワークショップの感想 18 件で、制作者が挙げた
+# 「穴の位置と大きさ・部品・手順の少なさ・接着」が、前の語では 1 つも共有の案にならなかった）。2 つの雛形で出たら共有の案になる
+os.environ["OMOCHAE_ENGINE_LOOP"] = str(tmp / "local6")
+os.environ["OMOCHAE_ENGINE_LEDGER"] = str(tmp / "versions6.json")
+
+
+def survey(b):
+    g = {**copy.deepcopy(b["groups"][0]), "sheet_set": "", "stuck_steps": {}, "quit_steps": {}, "craft_steps": {}, "record_ids": [], "current_set": None}
+    g.pop("current_set")
+    b["current_sets"] = {}
+    b["groups"] = [{**copy.deepcopy(g), "template": "spinner", "paper": "pinwheel",
+                    "texts": [{"kind": "idea", "step": None, "text": "軸の穴の場所がわかりにくい", "count": 1},
+                              {"kind": "keep", "step": None, "text": "組み方の手順がほしい", "count": 1}]},
+                   {**copy.deepcopy(g), "template": "wheel_cart", "paper": "stick",
+                    "texts": [{"kind": "keep", "step": None, "text": "車の接着がむずかしい", "count": 1},
+                              {"kind": "idea", "step": None, "text": "車軸の穴が大きすぎる", "count": 1}]},
+                   {**copy.deepcopy(g), "template": "lever_link", "paper": "saru_take",
+                    "texts": [{"kind": "keep", "step": None, "text": "パーツが足りない気がする。作る順番を知りたい", "count": 1},
+                              {"kind": "idea", "step": None, "text": "腕が外れやすいので留め方を知りたい", "count": 1}]}]
+
+
+(tmp / "survey.json").write_text(json.dumps(variant(survey), ensure_ascii=False), encoding="utf-8")
+assert cli("take", str(tmp / "survey.json")).returncode == 0
+sk = {p["key"]: p for p in el.proposals()}
+assert "shared:hole:spinner+wheel_cart" in sk, sorted(sk)
+assert "shared:steps:lever_link+spinner" in sk and "shared:join:lever_link+wheel_cart" in sk, sorted(sk)
+assert not any(k.startswith("shared:parts:") for k in sk), "足りない部品は 1 つの雛形だけなので、共有の案にしない"
+assert [t["text"] for t in sk["shared:hole:spinner+wheel_cart"]["evidence"]] == ["軸の穴の場所がわかりにくい", "車軸の穴が大きすぎる"]
 
 print("OK test_engine_loop")

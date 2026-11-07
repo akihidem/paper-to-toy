@@ -28,6 +28,7 @@ import math
 from shapely.geometry import Polygon, box
 from shapely.ops import unary_union
 
+from ..paper_words import paper_name  # 紙の書き方は 4 つの名前だけ（制作者の指示 2026-11-05）
 from ..model import Failure, Part
 
 ID = "whistle"
@@ -417,14 +418,14 @@ PAPER_WHY = "家庭のプリンタで刷って作るため"
 
 
 def bom(p):
-    paper = f"紙（厚さ {p['paper_thickness']}mm 前後）"
+    paper = paper_name(thickness=p['paper_thickness'])
     k = p["kind"]
     if k == "horn":
         return [
             {"number": 1, "key": "horn", "name": "ラッパ", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（図では塗った漏斗の形。木か紙か分からない）", "reason": PAPER_WHY},
             {"number": 2, "key": "pipe", "name": "息の管", "qty": 1, "material": paper, "substituted": True, "original_guess": "竹か木の柄（図の色と節の形からの推定）", "reason": "丸めると息の通る管になるため"},
             {"number": 3, "key": "reed", "name": "舌の枠", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（図の継ぎの巻きの中は見えない）", "reason": PAPER_WHY},
-            {"number": 4, "key": "tongue", "name": "舌", "qty": 1, "material": f"薄い紙（厚さ {p['reed_thickness']:g}mm 前後。コピー用紙など。型紙から写して切る）", "substituted": True,
+            {"number": 4, "key": "tongue", "name": "舌", "qty": 1, "material": f"{paper_name(thickness=p['reed_thickness'])}（型紙から写して切る）", "substituted": True,
              "original_guess": "不明（ぴいぴいと鳴る物の中身。葦か薄い竹の舌かは推定）", "reason": "舌の厚みで鳴る高さが決まり、刷る紙より薄い紙が要るため"},
             {"number": 5, "key": "lip", "name": "口当て", "qty": 1, "material": paper, "substituted": True, "original_guess": "不明（図では柄の端の円盤）", "reason": PAPER_WHY},
             {"number": 6, "key": "collar", "name": "継ぎの巻き", "qty": 1, "material": paper, "substituted": True, "original_guess": "糸か紙の巻き（図の筋からの推定）", "reason": "継ぎから息が漏れないよう糊で巻くため"},
