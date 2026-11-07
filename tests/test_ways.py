@@ -93,7 +93,9 @@ assert "梱包テープ" in pr[("float", "none")]["bom"]["resin"] + pr[("float",
 # 代わりの物の字（消しゴム・ビーズ）を外した 4 形は、前提の内になる（2026-11-08 の型紙の直し・材料の前提の答えの ①）
 for k in (("balance", "yajirobe"), ("twist_drum", "kiku"), ("twist_drum", "tori"), ("whistle", "rattle")):
     assert pr[k]["within"] is True, (k, pr[k])
-assert not any("ビーズ" in p[w]["resin"] or "消しゴム" in p[w]["resin"] for p in pr.values() for w in ("bom", "prep"))
+# 4 形の材料の欄に、消しゴムとビーズが出ない（ほかの形が使う事までは禁じない。見直しの指摘で、全部の形を見る形から直した）
+assert not any("ビーズ" in pr[k][w]["resin"] or "消しゴム" in pr[k][w]["resin"]
+               for k in (("balance", "yajirobe"), ("twist_drum", "kiku"), ("twist_drum", "tori"), ("whistle", "rattle")) for w in ("bom", "prep"))
 # 虎（首の形）: 竹串と重りの油粘土は使ってよい（制作者の言葉「油粘土も使ってよい」）。腕を仮に留めるセロハンテープも、
 # 制作者の言葉（2026-11-08）「セロハンテープくらいは許す」で使ってよい（前は既定の境目で樹脂の側だった）
 tiger = pr[("pivot_counterweight", "neck")]
@@ -122,8 +124,11 @@ assert pr[("slide_box", "lid")]["within"] is True  # 紙だけ
 assert pr[("launcher", "crossbow")]["prep"]["metal"] == [] and pr[("twist_drum", "kiku")]["prep"]["metal"] == []
 # セロハンテープと、「テープ」とだけ書いた物（この型紙たちではセロハンテープの事）は使ってよい。梱包テープとビニールテープは樹脂のまま
 empty = {"metal": [], "resin": [], "unlisted": []}
-assert ways._premise_of(["セロハンテープ（軸の先に巻く）", "竹串 1 本とテープ"], True) == empty
-assert ways._premise_of(["透明の梱包テープ（60g/m² の見込み）"], True)["resin"] == ["梱包テープ"]
+assert ways._premise_of(["セロハンテープ（軸の先に巻く）", "竹串 1 本とテープ", "テープで留める", "のり、はさみ、テープ"], True) == empty
+# ほかの語が付いた「…テープ」は、決まっていないので一覧に無い側（語の一部の当たりで使ってよいと判じていた。見直しの指摘）
+for name in ("ガムテープ", "両面テープ", "梱包用テープ", "マスキングテープ"):
+    assert ways._premise_of([name], True) == {"metal": [], "resin": [], "unlisted": [name]}, (name, ways._premise_of([name], True))
+assert ways._premise_of(["透明の梱包テープ（60g/m² の見込み）"], True) == {"metal": [], "resin": ["梱包テープ"], "unlisted": []}
 assert ways._premise_of(["ビニールテープ"], True)["resin"] == ["ビニールテープ"]
 # 当時の材料と別の軸: 鈴は当時の物でも金属、厚紙は今の物でも紙
 assert ways._premise_of(["鈴"], True)["metal"] == ["鈴"] and ways._premise_of(["空き箱の厚紙"], True) == {"metal": [], "resin": [], "unlisted": []}

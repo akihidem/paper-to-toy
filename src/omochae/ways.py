@@ -72,7 +72,7 @@ PREMISE_WORDS = {
     # 油粘土は、制作者の言葉（2026-11-07）「油粘土も使ってよい」で使ってよい側（重り・台・栓・玉に広く使っている）。
     # 語は長い物から当てるので、「油粘土」は「粘土」より先に当たる
     "ok": ("竹串", "竹ぐし", "竹ひご", "楊枝", "つまようじ", "割り箸", "木", "糸", "紐", "布", "のり", "接着剤", "厚紙", "紙",
-           "油粘土", "油ねんど", "セロハンテープ", "テープ"),
+           "油粘土", "油ねんど", "セロハンテープ"),
 }
 # 材料の名の頭に付いて、その材料の分けを決める語（樹脂粘土・樹脂ねんど・ビニールテープ・アルミの針金・金属の軸など）。
 # 頭の語に続く名の字（かな・カタカナ・漢字。助詞の と・や・か・を・に・で・は・が は区切り）を 1 つの材料として、頭の語の分けに入れる。
@@ -93,14 +93,29 @@ def _head_pattern(cls, other):
     return f"(?:{_alt(heads)})(?:(?!{stop}){_NAME_CHAR})*"
 
 
+# 「テープ」の分け（制作者の言葉 2026-11-08「セロハンテープくらいは許す」）: ほかの語に付かない「テープ」（行の頭・区切り・助詞の後。
+# 「テープで留める」「竹串 1 本とテープ」など）は、この型紙たちではセロハンテープの事なので使ってよい。ほかの語が付いた「…テープ」
+# （ガムテープ・両面テープ・梱包用テープなど）は決まっていないので一覧に無い側。語の一部の当たりで、こうした物まで使ってよいと
+# 判じていた（見直しの指摘）。決まった語（セロハンテープ・梱包テープ）は語の表で先に当たる
+_TAPE_ALONE = "(?:(?<![ぁ-んァ-ヶー一-鿿々])|(?<=[とやかをにではが]))テープ"
+# 決まった「…テープ」の語（梱包テープ・セロハンテープ）の手前で止める。止めないと「透明の梱包テープ」を頭から 1 つの知らない
+# テープとして飲み込み、梱包テープ（樹脂）を一覧に無い側に出した
+_TAPE_WORDS = [w for ws in PREMISE_WORDS.values() for w in ws if w.endswith("テープ")]
+_TAPE_COMPOUND = f"(?:(?!{_alt(_TAPE_WORDS)}){_NAME_CHAR})+テープ"
 _PREMISE = re.compile(_head_pattern("resin", "metal") + "|" + _head_pattern("metal", "resin") + "|"
-                      + _alt({w for ws in PREMISE_WORDS.values() for w in ws}))
+                      + _alt({w for ws in PREMISE_WORDS.values() for w in ws}) + "|" + _TAPE_COMPOUND + "|" + _TAPE_ALONE)
 _PREMISE_CLASS = {w: k for k, ws in PREMISE_WORDS.items() for w in ws}
 
 
 def _premise_class(word):
-    """当たった語の分け。頭の語で始まる名は、頭の語の分け。"""
-    return next((k for h, k in PREMISE_HEADS.items() if word.startswith(h)), None) or _PREMISE_CLASS[word]
+    """当たった語の分け。頭の語で始まる名は、頭の語の分け。ほかの語に付かない「テープ」は使ってよい側、ほかの語が付いた
+    「…テープ」（語の表に無い物）は一覧に無い側。"""
+    head = next((k for h, k in PREMISE_HEADS.items() if word.startswith(h)), None)
+    if head:
+        return head
+    if word in _PREMISE_CLASS:
+        return _PREMISE_CLASS[word]
+    return "ok" if word == "テープ" else "unlisted"
 
 
 def _premise_name(word):
