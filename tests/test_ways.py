@@ -124,10 +124,15 @@ assert pr[("slide_box", "lid")]["within"] is True  # 紙だけ
 assert pr[("launcher", "crossbow")]["prep"]["metal"] == [] and pr[("twist_drum", "kiku")]["prep"]["metal"] == []
 # セロハンテープと、「テープ」とだけ書いた物（この型紙たちではセロハンテープの事）は使ってよい。梱包テープとビニールテープは樹脂のまま
 empty = {"metal": [], "resin": [], "unlisted": []}
-assert ways._premise_of(["セロハンテープ（軸の先に巻く）", "竹串 1 本とテープ", "テープで留める", "のり、はさみ、テープ", "上からテープ", "このテープ"], True) == empty
+assert ways._premise_of(["セロハンテープ（軸の先に巻く）", "竹串 1 本とテープ", "テープで留める", "のり、はさみ、テープ", "このテープ"], True) == empty
 # ほかの語が付いた「…テープ」は、決まっていないので一覧に無い側（語の一部の当たりで使ってよいと判じていた。見直しの指摘）
 for name in ("ガムテープ", "両面テープ", "梱包用テープ", "マスキングテープ", "OPPテープ", "3Mテープ"):
     assert ways._premise_of([name], True) == {"metal": [], "resin": [], "unlisted": [name]}, (name, ways._premise_of([name], True))
+# 助詞と同じ字（は・が）を含む名は、名の頭が切れて出る（「はがせるテープ」は「せるテープ」）。使ってよいとは判じない事だけを見る
+got = ways._premise_of(["はがせるテープ"], True)
+assert got["unlisted"] and not got["resin"] and not got["metal"], got
+# 限り: 字の形では「上からテープ」と「はがせるテープ」を見分け切れないので、迷う物は一覧に無い側（使ってよいとは判じない）
+assert ways._premise_of(["上からテープ"], True)["unlisted"] and not ways._premise_of(["上からテープ"], True)["resin"]
 assert ways._premise_of(["透明の梱包テープ（60g/m² の見込み）"], True) == {"metal": [], "resin": ["梱包テープ"], "unlisted": []}
 assert ways._premise_of(["ビニールテープ"], True)["resin"] == ["ビニールテープ"]
 # 当時の材料と別の軸: 鈴は当時の物でも金属、厚紙は今の物でも紙
