@@ -146,7 +146,7 @@ with tempfile.TemporaryDirectory() as tmp:
     r = run("tora_v7")
     assert r.returncode == 0 and json.loads((tmp / "tora_v7.json").read_text(encoding="utf-8"))["toy"] == "tora-v7", r.stderr
     assert "FAIL" not in r.stderr and "NOTE" not in r.stderr
-    (tmp / "tora_v6.json").write_text("{}", encoding="utf-8")  # 前に書いた JSON がある置き場
+    (tmp / "tora_v6.json").write_text(json.dumps({"format": "omochae-assembly-3d/1"}), encoding="utf-8")  # 前に書いた 3D の JSON がある置き場
     r = run("tora_v6")
     assert r.returncode == 3 and not (tmp / "tora_v6.json").exists() and "前の JSON を消した" in r.stderr, r.stderr
     assert "FAIL 3D.hit [clayとbody]" in r.stderr and "JSON は書かない" in r.stderr, r.stderr

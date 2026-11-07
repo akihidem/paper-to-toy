@@ -118,13 +118,23 @@ class _RepeatablePDF(PDFSurface):
         return surface, width, height
 
 
+def data_only_fetcher(url, resource_type):
+    """SVG から PDF を作る時の取り出し口。data: の URL（自分で埋めた絵）のほかは読まずに断る。cairosvg の既定の取り出し口は、
+    unsafe を立てなくても file: の URL の手元のファイルを読みに行った（セキュリティの点検 2026-11-07 で確かめた）。今の SVG は自分で作り、
+    字は escape して書くので外の URL は入らないが、入る道ができた時のために閉じておく。"""
+    if not str(url).startswith("data:"):
+        raise ValueError("SVG の中の外の URL は読まない")
+    from cairosvg.url import fetch
+    return fetch(url, resource_type)
+
+
 def write_all(layout, out_stem):
     stem = pathlib.Path(out_stem)
     stem.parent.mkdir(parents=True, exist_ok=True)
     svg = to_svg(layout)
     stem.with_suffix(".svg").write_text(svg, encoding="utf-8")
     pdf = stem.with_suffix(".pdf")
-    _RepeatablePDF.convert(bytestring=svg.encode("utf-8"), write_to=str(pdf))
+    _RepeatablePDF.convert(bytestring=svg.encode("utf-8"), write_to=str(pdf), url_fetcher=data_only_fetcher)
     return pdf
 
 

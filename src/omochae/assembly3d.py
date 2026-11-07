@@ -801,6 +801,14 @@ def assemble(scenario_path, commit=None):
     }, rules
 
 
+def _ours(path):
+    """この入口が書いた形の JSON か（format が FORMAT）。読めない・JSON でない・形が違う物は False。"""
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("format") == FORMAT
+    except (OSError, UnicodeDecodeError, ValueError, AttributeError):
+        return False
+
+
 def main(argv=None):
     from .__main__ import Parser  # 呼び方の誤りは 4（ほかの入口と同じ。README の命令の試験が見る）
     ap = Parser(prog="python -m omochae.assembly3d", description="作り方の 3D を、手順と 1 対 1 の段ごとの形にして JSON で出す")
@@ -834,9 +842,14 @@ def main(argv=None):
     if any(not h.note for h in hits):
         print("3D の組み立て検品に落ちた。JSON は書かない", file=sys.stderr)
         if args.out and pathlib.Path(args.out).exists():
-            # 前に書いた JSON を残すと、落ちた後も古い形が読まれる（見直しの指摘）。同じ置き場の前の JSON は消す
-            pathlib.Path(args.out).unlink()
-            print(f"前の JSON を消した（古い形を読ませない）: {args.out}", file=sys.stderr)
+            # 前に書いた JSON を残すと、落ちた後も古い形が読まれる（見直しの指摘）。同じ置き場の前の JSON は消す。
+            # 消すのは、この入口が書く形の JSON（format が FORMAT）の時だけ。--out を別のファイルに向けた時に、そのファイルを
+            # 消さないため（セキュリティの点検 2026-11-07）
+            if _ours(pathlib.Path(args.out)):
+                pathlib.Path(args.out).unlink()
+                print(f"前の JSON を消した（古い形を読ませない）: {args.out}", file=sys.stderr)
+            else:
+                print(f"--out の所の物は作り方の 3D の JSON でないので、消さない: {args.out}", file=sys.stderr)
         return 3
     text = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
     if args.out:
