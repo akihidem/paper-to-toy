@@ -37,9 +37,11 @@ SECURITY_HEADERS = {"X-Frame-Options": "DENY", "Content-Security-Policy": "frame
 
 
 def visible(text):
-    """端末に出す前に、見えない文字（Unicode の Cf。文の向きを変える U+202E など）を \\uXXXX の形にして見えるようにする。
-    人が全文を読む事が最後の止めなので、字の並びをごまかせる文字をそのまま出さない（セキュリティの点検 2026-11-07）。"""
-    return "".join(f"\\u{ord(ch):04x}" if unicodedata.category(ch) == "Cf" else ch for ch in text)
+    """端末に出す前に、見えない文字と制御の文字を \\uXXXX の形にして見えるようにする。人が全文を読む事が最後の止めなので、
+    字の並びをごまかせる文字（Unicode の Cf。文の向きを変える U+202E など）と、端末を動かせる制御の文字（Cc。C1 の U+009B CSI など。
+    JSON は U+0020 より下しか escape しないので、C1 と DEL は報告の JSON に生で残る）と、行と段落の区切り（U+2028・U+2029）を
+    そのまま出さない。改行とタブは読むのに要るので残す（セキュリティの点検 2026-11-07・見直しの指摘）。"""
+    return "".join(f"\\u{ord(ch):04x}" if (unicodedata.category(ch) in ("Cf", "Cc", "Zl", "Zp") and ch not in "\n\t") else ch for ch in text)
 
 
 ID_FORM = re.compile(r"B-\d{8}-\d{6}-[0-9a-f]{8}")  # 受付の ID の形。形でない物は扱わない（../ で受付箱の外を消せた）
