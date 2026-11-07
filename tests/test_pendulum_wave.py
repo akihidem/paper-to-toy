@@ -2,7 +2,8 @@
 
 制作者の指示（2026-11-07）「何個かつくってみてよ。」（物理現象などの紙のモデルの試作）による。次を見る:
 1. 長さと周期: いちばん長い振り子は Γ 秒に n0 回（longest_mm に収まる、いちばん小さい整数）、次は n0 + 1 回、…。
-   どの長さも、玉（粘土の球）を物理振り子とした周期の式で Γ / n になる。長さは短くなる向きに並び、点の玉の長さより玉の分だけ短い。
+   どの長さも、点の重りの周期の式 T = 2π√(L/g) で Γ / n になる（式は教科書の値でも見る: 1 秒の振り子は約 248.4mm）。長さは短くなる向きに並ぶ。
+   玉の回る重さは入れない（糸が玉の真ん中を揺れの軸と平行に通り、玉は糸を軸に回れる。見直しの指摘）。
 2. Γ 秒で全部がそろい、Γ / 2 秒では隣どうしが逆の向き（位相が π ずれる）。
 3. 塔の高さは、いちばん長い振り子の玉の下が机から 5mm（から 6mm まで）離れる高さ。
 4. 寸法の決まり（F5.range）: 玉が隣と当たる・穴の組の間が狭い・V が浅い・梁の端が塔に乗らない・数が整数でない、を 1 行ずつ落とす。
@@ -35,12 +36,13 @@ assert n == list(range(n[0], n[0] + p["count"])) and n[0] == pw.first_swings(p),
 point = lambda m: pw.G_MM * (p["cycle_s"] / m / (2 * math.pi)) ** 2  # 点の玉の長さ
 assert point(n[0]) <= p["longest_mm"] < point(n[0] - 1), (point(n[0]), point(n[0] - 1))  # n0 は収まる中でいちばん小さい
 for m, L in zip(n, Ls):
-    assert abs(pw.period_of(L, r) - p["cycle_s"] / m) < 1e-9, (m, L)
-    assert 0 < point(m) - L < 0.5 * r * r / L + 1e-9, (m, L, point(m))  # 玉の分（約 0.4r²/L）だけ短い
+    assert abs(pw.period_of(L) - p["cycle_s"] / m) < 1e-9, (m, L)
+    assert abs(point(m) - L) < 1e-9, (m, L, point(m))  # 点の重りの長さそのもの
+assert abs(pw.length_for(1.0) - 248.4) < 0.05 and abs(pw.length_for(2.0) - 993.6) < 0.1  # 教科書の値（g = 9.80665 m/s²）
 assert all(a > b for a, b in zip(Ls, Ls[1:])) and Ls[0] <= p["longest_mm"], Ls
 
 # 2. Γ 秒でそろい、Γ/2 秒で隣どうしが逆の向き
-phase = lambda L, t: (2 * math.pi * t / pw.period_of(L, r)) % (2 * math.pi)
+phase = lambda L, t: (2 * math.pi * t / pw.period_of(L)) % (2 * math.pi)
 for L in Ls:
     ph = phase(L, p["cycle_s"])
     assert min(ph, 2 * math.pi - ph) < 1e-6, ph
