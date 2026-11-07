@@ -86,7 +86,13 @@ lines = mark_lines(src)
 assert lines[0].startswith("出典: Watson J. D., Crick F. H. C. (1953)") and not any(s.startswith("所蔵") for s in lines)
 ndl = load_source("NDL-1187053-R0000007-L-balance")
 assert mark_lines(ndl)[0].startswith("所蔵: 国立国会図書館デジタルコレクション")  # 古い刷り物の型紙は前のまま
-short = dict(P, n_bp=12, skewer_len=120)
+# 積んだ高さは板 n 枚と筒 n − 1 本（筒は 1 段 − 板の厚さ）。前は n 段と数え、12 段が 120mm の竹串に収まるのに断った（見直しの指摘）
+for q in (P, dict(P, n_bp=12), dict(P, n_bp=6, radius=18)):
+    n_, h_ = int(q["n_bp"]), hx.rise(q)
+    stacked = n_ * hx.PLATE_T + (n_ - 1) * (h_ - hx.PLATE_T)  # 板と筒を 1 つずつ足した高さ
+    assert abs(hx.stack_height(q) - (stacked + hx.CLAY_DEPTH + hx.TOP_MARGIN)) < 1e-9, q
+assert hx.check_physics(dict(P, n_bp=12, skewer_len=120)) == []  # 12 段（既定の半径）は 120mm の竹串に収まる
+short = dict(P, n_bp=12, radius=28, skewer_len=120)  # 要る長さ約 125mm（半径 29 からは背骨の帯が A4 に入らず、別の床でも落ちる）
 assert [f.floor for f in hx.check_physics(short)] == ["F5.range"] and "竹串" in hx.check_physics(short)[0].where
 assert hx.check_physics(dict(P, n_bp=12)) == []
 neg = json.loads((ROOT / "tests/frozen/scenarios/helix_neg.json").read_text(encoding="utf-8"))

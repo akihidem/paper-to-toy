@@ -104,8 +104,10 @@ def segment(p):
 
 
 def stack_height(p):
-    """竹串に要る長さ mm（板と筒を積んだ高さ・粘土に刺す深さ・上の余り）。"""
-    return int(p["n_bp"]) * rise(p) + CLAY_DEPTH + TOP_MARGIN
+    """竹串に要る長さ mm（板と筒を積んだ高さ・粘土に刺す深さ・上の余り）。
+    積むのは板 n 枚と間の筒 n − 1 本で、筒の長さは 1 段から板の厚さを引いた物なので、積んだ高さは (n − 1)·1 段 ＋ 板の厚さ
+    （見直しの指摘: 前は n·1 段と 1 段分多く数え、収まる竹串を断っていた）。"""
+    return (int(p["n_bp"]) - 1) * rise(p) + PLATE_T + CLAY_DEPTH + TOP_MARGIN
 
 
 def check_physics(p):
