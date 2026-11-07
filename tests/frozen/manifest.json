@@ -1187,6 +1187,7 @@
   "test_pull_nod",
   "test_readme_commands",
   "test_run_floors",
+  "test_security",
   "test_sheet_v8",
   "test_sheet_version",
   "test_sheets",
