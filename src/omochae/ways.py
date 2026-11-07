@@ -101,6 +101,7 @@ def _head_pattern(cls, other):
 # （ガム・両面・梱包用・OPP・3M・はがせる など）。区切りと助詞の後の「テープ」だけを、ほかの語に付かない「テープ」と読む。
 # 限り: 字の形では「上からテープ」（ら）と「はがせるテープ」（る）を見分け切れない。迷う物は一覧に無い側に出す（使ってよいとは
 # 判じない）。前はひらがなを全部区切りにして「はがせるテープ」を使ってよいとし、その前は英字と数字を頭の字に入れていなかった（見直しの指摘）
+# 名が助詞と同じ字で切れた時の出す名は、下の _tape_name で前の区切りまで広げる
 _TAPE_PREFIX = "(?![とやかをにではがのも])[ぁ-んァ-ヶー一-鿿々A-Za-z0-9Ａ-Ｚａ-ｚ０-９]"
 _TAPE_ALONE = f"(?<!{_TAPE_PREFIX})テープ"
 # 決まった「…テープ」の語（梱包テープ・セロハンテープ）の手前で止める。止めないと「透明の梱包テープ」を頭から 1 つの知らない
@@ -126,6 +127,23 @@ def _premise_class(word):
 def _premise_name(word):
     """出す名。頭の語で始まる名の終わりの「の」は落とす（「樹脂の針金」の樹脂の側を「樹脂」と出す）。"""
     return word.rstrip("の") if any(word.startswith(h) for h in PREMISE_HEADS) else word
+
+
+_NAME_CHAR = re.compile("[ぁ-んァ-ヶー一-鿿々A-Za-z0-9Ａ-Ｚａ-ｚ０-９]")
+_HIRAGANA = re.compile("[ぁ-ん]")
+
+
+def _tape_name(text, start, word):
+    """一覧に無い「…テープ」の出す名。頭の字に助詞と同じ字（は・が など）があると、当たりはその字の後から始まる（「はがせる
+    テープ」は「せるテープ」）。ひらがなの後のひらがなで始まる当たりは、そう切れた物なので、前の区切りの字（空白・読点・括弧
+    など）まで広げて出す。字の形だけでは名の頭を決め切れないので、切れた名より、前の字ごと出す方が人が読める（見直しの指摘）。
+    分け（一覧に無い側）は変えない。助詞の後のカタカナ・漢字で始まる名（「竹串とガムテープ」のガムテープ）は、そのまま出す。"""
+    if start == 0 or not (_HIRAGANA.match(word) and _HIRAGANA.match(text[start - 1])):
+        return word
+    i = start
+    while i > 0 and _NAME_CHAR.match(text[i - 1]):
+        i -= 1
+    return text[i:start] + word
 # 道具の語は、材料の前提に数えない（玩具の材料でない）。10 円玉は、腕や弓の硬さを確かめる重りで、玩具に入らない
 PREMISE_TOOLS = re.compile(r"はさみ|定規|カッター|ニッパー|目打ち|下敷き|まち針|えんぴつ|鉛筆|ペン|紙やすり|時計|洗面器|皿|10 円玉|硬貨")
 
@@ -137,11 +155,14 @@ def _premise_of(texts, unknown_unlisted):
     out = {"metal": [], "resin": [], "unlisted": []}
     for text in texts:
         t = PREMISE_TOOLS.sub(" ", str(text))
-        words = _PREMISE.findall(t)
-        if not words and unknown_unlisted and t.strip():
+        hits = list(_PREMISE.finditer(t))
+        if not hits and unknown_unlisted and t.strip():
             out["unlisted"].append(str(text))
-        for w in words:
+        for m in hits:
+            w = m.group(0)
             k, name = _premise_class(w), _premise_name(w)
+            if k == "unlisted" and w.endswith("テープ"):
+                name = _tape_name(t, m.start(), w)
             if k != "ok" and name not in out[k]:
                 out[k].append(name)
     return out

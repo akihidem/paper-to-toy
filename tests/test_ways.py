@@ -128,11 +128,16 @@ assert ways._premise_of(["セロハンテープ（軸の先に巻く）", "竹�
 # ほかの語が付いた「…テープ」は、決まっていないので一覧に無い側（語の一部の当たりで使ってよいと判じていた。見直しの指摘）
 for name in ("ガムテープ", "両面テープ", "梱包用テープ", "マスキングテープ", "OPPテープ", "3Mテープ"):
     assert ways._premise_of([name], True) == {"metal": [], "resin": [], "unlisted": [name]}, (name, ways._premise_of([name], True))
-# 助詞と同じ字（は・が）を含む名は、名の頭が切れて出る（「はがせるテープ」は「せるテープ」）。使ってよいとは判じない事だけを見る
-got = ways._premise_of(["はがせるテープ"], True)
-assert got["unlisted"] and not got["resin"] and not got["metal"], got
-# 限り: 字の形では「上からテープ」と「はがせるテープ」を見分け切れないので、迷う物は一覧に無い側（使ってよいとは判じない）
-assert ways._premise_of(["上からテープ"], True)["unlisted"] and not ways._premise_of(["上からテープ"], True)["resin"]
+# 助詞と同じ字（は・が）を含む名は、当たりが名の途中から始まる。出す名は、前の区切りまで広げる（「せるテープ」と切れて
+# 出ていた。見直しの指摘）。分けは一覧に無い側のまま（使ってよいとは判じない）
+for text, name in (("はがせるテープ", "はがせるテープ"), ("貼ってはがせるテープ", "貼ってはがせるテープ"),
+                   ("竹串 1 本、はがせるテープ", "はがせるテープ")):
+    assert ways._premise_of([text], True) == {"metal": [], "resin": [], "unlisted": [name]}, (text, ways._premise_of([text], True))
+# 限り: 字の形では「上からテープ」と「はがせるテープ」を見分け切れないので、迷う物は一覧に無い側（使ってよいとは判じない）。
+# 出す名は文の続きごと（「上からテープ」）
+assert ways._premise_of(["上からテープ"], True) == {"metal": [], "resin": [], "unlisted": ["上からテープ"]}
+# 助詞の後のカタカナで始まる名は、広げずにそのまま出す
+assert ways._premise_of(["竹串とガムテープ"], True) == {"metal": [], "resin": [], "unlisted": ["ガムテープ"]}
 assert ways._premise_of(["透明の梱包テープ（60g/m² の見込み）"], True) == {"metal": [], "resin": ["梱包テープ"], "unlisted": []}
 assert ways._premise_of(["ビニールテープ"], True)["resin"] == ["ビニールテープ"]
 # 当時の材料と別の軸: 鈴は当時の物でも金属、厚紙は今の物でも紙
