@@ -60,10 +60,8 @@ def fold_only(parts):
 # 厚紙は今の物でも紙なので使ってよい側、鈴は当時の物でも金属なので避ける側。
 # 語は長い物から当てる（「セロハンテープ」をテープより先に、「油ねんど」を、ほかの語より先に）。
 PREMISE_WORDS = {
-    "metal": ("割りピン", "割ピン", "針金", "鈴", "クリップ", "ホチキス", "画鋲", "釘", "金属", "アルミ", "ワイヤー"),
-    # 2 つの語が入った材料の名（樹脂粘土など）は、1 つの材料として先に当てる（樹脂と粘土に分けて 2 度数えない。見直しの指摘）
-    "resin": ("セロハンテープ", "梱包テープ", "ビニールテープ", "テープ", "ストロー", "ビーズ", "消しゴム", "輪ゴム", "ビニール",
-              "発泡", "プラスチック", "プラ板", "樹脂粘土", "樹脂"),
+    "metal": ("割りピン", "割ピン", "針金", "鈴", "クリップ", "ホチキス", "画鋲", "釘", "ワイヤー"),
+    "resin": ("セロハンテープ", "梱包テープ", "テープ", "ストロー", "ビーズ", "消しゴム", "輪ゴム", "プラ板"),
     # 樹脂でも金属でもないが、使ってよい物の一覧にも無い物。使うかは、これから決める。油粘土のほかの粘土（石粉粘土など）も
     # ここに入る（使ってよいとされたのは油粘土だけ。広い語の「粘土」を使ってよい側に置くと、樹脂粘土なども通った。見直しの指摘）
     "unlisted": ("粘土", "ねんど", "ろう"),
@@ -72,8 +70,19 @@ PREMISE_WORDS = {
     "ok": ("竹串", "竹ぐし", "竹ひご", "楊枝", "つまようじ", "割り箸", "木", "糸", "紐", "布", "のり", "接着剤", "厚紙", "紙",
            "油粘土", "油ねんど"),
 }
-_PREMISE = re.compile("|".join(sorted({re.escape(w) for ws in PREMISE_WORDS.values() for w in ws}, key=len, reverse=True)))
+# 材料の名の頭に付いて、その材料の分けを決める語（樹脂粘土・樹脂ねんど・ビニールテープ・アルミの針金・金属の軸など）。
+# 頭の語から区切り（、。・括弧・空白・と・や・か・を・に・で・は・が）までを 1 つの材料として、頭の語の分けに入れる。
+# 2 つの語が入った名を、別々の分けに 2 度数えないため（見直しの指摘: 名を 1 つずつ足すと、樹脂ねんどのような書き方の揺れを取りこぼした）
+PREMISE_HEADS = {"樹脂": "resin", "プラスチック": "resin", "ビニール": "resin", "発泡": "resin", "金属": "metal", "アルミ": "metal"}
+_PREMISE = re.compile(
+    "(?:" + "|".join(map(re.escape, PREMISE_HEADS)) + r")[^\s、。・，,（）()「」とやかをにではが]*"
+    + "|" + "|".join(sorted({re.escape(w) for ws in PREMISE_WORDS.values() for w in ws}, key=len, reverse=True)))
 _PREMISE_CLASS = {w: k for k, ws in PREMISE_WORDS.items() for w in ws}
+
+
+def _premise_class(word):
+    """当たった語の分け。頭の語で始まる名は、頭の語の分け。"""
+    return next((k for h, k in PREMISE_HEADS.items() if word.startswith(h)), None) or _PREMISE_CLASS[word]
 # 道具の語は、材料の前提に数えない（玩具の材料でない）。10 円玉は、腕や弓の硬さを確かめる重りで、玩具に入らない
 PREMISE_TOOLS = re.compile(r"はさみ|定規|カッター|ニッパー|目打ち|下敷き|まち針|えんぴつ|鉛筆|ペン|紙やすり|時計|洗面器|皿|10 円玉|硬貨")
 
@@ -89,7 +98,7 @@ def _premise_of(texts, unknown_unlisted):
         if not words and unknown_unlisted and t.strip():
             out["unlisted"].append(str(text))
         for w in words:
-            k = _PREMISE_CLASS[w]
+            k = _premise_class(w)
             if k != "ok" and w not in out[k]:
                 out[k].append(w)
     return out

@@ -99,8 +99,12 @@ assert ways._premise_of(["油粘土 3g", "油ねんどの玉（直径 8mm）"], 
 # 使ってよいとされたのは油粘土だけ。ほかの粘土は一覧に無い側、樹脂粘土は樹脂の側にも出る（見直しの指摘）
 assert ways._premise_of(["石粉粘土"], True) == {"metal": [], "resin": [], "unlisted": ["粘土"]}
 assert ways._premise_of(["樹脂粘土"], True) == {"metal": [], "resin": ["樹脂粘土"], "unlisted": []}  # 1 つの材料として樹脂の側だけ
-# 1 つの材料の名は、3 つの分けのどれか 1 つにだけ出る（2 つの語が入った名を、別々の分けに 2 度数えない）
-for name in ("樹脂粘土", "ビニールテープ", "アルミの針金", "紙と針金", "油ねんどの玉か木の玉"):
+# 1 つの材料の名は、3 つの分けのどれか 1 つにだけ出る（2 つの語が入った名を、別々の分けに 2 度数えない）。
+# 頭の語（樹脂・ビニール・金属・アルミなど）で始まる名は、書き方が揺れても 1 つの材料として頭の語の分けに入る
+assert ways._premise_of(["樹脂ねんど（直径 8mm）"], True) == {"metal": [], "resin": ["樹脂ねんど"], "unlisted": []}
+assert ways._premise_of(["金属の軸"], True) == {"metal": ["金属の軸"], "resin": [], "unlisted": []}
+for name in ("樹脂粘土", "樹脂ねんど", "樹脂の粘土", "ビニールテープ", "発泡スチロールの玉", "アルミの針金", "金属の軸", "紙と針金",
+             "油ねんどの玉か木の玉"):
     got = ways._premise_of([name], True)
     assert sum(1 for v in got.values() if v) <= 1, (name, got)
 assert pr[("helix", "bdna")]["within"] is True  # 竹串と台の油粘土だけ
