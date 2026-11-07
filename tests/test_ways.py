@@ -91,9 +91,12 @@ assert {"ストロー", "セロハンテープ"} <= set(pin["bom"]["resin"] + pi
 assert "梱包テープ" in pr[("float", "none")]["bom"]["resin"] + pr[("float", "none")]["prep"]["resin"]
 assert "消しゴム" in pr[("balance", "yajirobe")]["prep"]["resin"]
 assert "ビーズ" in pr[("twist_drum", "kiku")]["bom"]["resin"]
-# 虎（首の形）: 竹串は使ってよい。重りの油粘土は一覧に無い。セロハンテープは用意する物の文にだけ出る（腕を仮に留める、作る途中だけの物）
+# 虎（首の形）: 竹串と重りの油粘土は使ってよい（制作者の言葉「油粘土も使ってよい」）。セロハンテープは用意する物の文にだけ出る
+# （腕を仮に留める、作る途中だけの物）。境目は既定のまま（制作者の言葉「境目は既定のままで」）: テープは樹脂の側
 tiger = pr[("pivot_counterweight", "neck")]
-assert tiger["bom"] == {"metal": [], "resin": [], "unlisted": ["油粘土"]} and tiger["prep"]["resin"] == ["セロハンテープ"], tiger
+assert tiger["bom"] == {"metal": [], "resin": [], "unlisted": []} and tiger["prep"]["resin"] == ["セロハンテープ"], tiger
+assert ways._premise_of(["油粘土 3g", "油ねんどの玉（直径 8mm）"], True) == {"metal": [], "resin": [], "unlisted": []}
+assert pr[("helix", "bdna")]["within"] is True  # 竹串と台の油粘土だけ
 # 御来迎（押し上げる形）: 割り箸は木で使ってよい。割り箸を留めるセロハンテープは、部品表に無く用意する物の文に出る
 assert pr[("slider_fan", "rise")]["bom"] == {"metal": [], "resin": [], "unlisted": []} and pr[("slider_fan", "rise")]["prep"]["resin"] == ["セロハンテープ"]
 assert pr[("slide_box", "lid")]["within"] is True  # 紙だけ
