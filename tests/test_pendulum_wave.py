@@ -8,7 +8,8 @@
 4. 寸法の決まり（F5.range）: 玉が隣と当たる・穴の組の間が狭い・V が浅い・梁の端が塔に乗らない・数が整数でない、を 1 行ずつ落とす。
 5. 刷る物: 梁の穴の組は振り子の真ん中から V の上の幅の半分ずつ、物差しの線は長さの所、番号の札は部品の内。糸の長さは V の 2 辺と結び代。
    型紙の検査を全部通り、組み方の文は 9 段で、最後の段に Γ 秒が入る。
-6. 出典の印: 原理の作例は「原理: …」と刷り、刷った PDF から原理の文・改変・出典 ID・仮説を読む（所蔵の名と永続 ID は探さない）。
+6. 出典の印: 江戸の玩具でない模型は、所蔵の代わりに出典の記録の reference（ここでは物理の原理の文）を「出典: …」と刷り、刷った PDF から
+   その文・改変・出典 ID・仮説を読む（所蔵の名と永続 ID は探さない。DNA の模型と同じ形）。
    史料の出典では、今までどおり所蔵の名と永続 ID も探す。
 """
 import json
@@ -93,7 +94,7 @@ assert lines(**{k: v for k, v in sc["params"].items() if k != "kind"}) == lines(
 
 # 6. 出典の印
 ml = mark_lines(src)
-assert ml[0].startswith("原理: ") and not any(s.startswith("所蔵") for s in ml), ml
+assert ml[0].startswith("出典: 物理の原理: ") and not any(s.startswith("所蔵") for s in ml), ml
 with tempfile.TemporaryDirectory() as d:
     rc = generate("pendulum_wave", p, pw.SOURCE, str(pathlib.Path(d) / "pw"))
     assert rc == 0, rc

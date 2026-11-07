@@ -14,12 +14,12 @@ HYPOTHESIS = "仮説: AI が考えた、試すための 1 つの翻案です。�
 
 
 def mark_lines(source, omit=None):
+    """型紙に刷る印の行。古い刷り物から起こした型紙は所蔵（holding）を、科学の模型（江戸の玩具でない試作）は、所蔵の代わりに
+    形の比の出所の文献（reference）を刷る。科学の模型に所蔵の文を刷ると、持っていない所蔵を言う事になるため。"""
     if omit == "all":
         return []
-    # 史料でない作例（江戸の玩具でなく、物理などの原理から寸法を出した試作の型紙）の出典は、所蔵の代わりに、その原理の文を
-    # 「原理: …」と刷る（holding_label。無ければ今までどおり「所蔵」）。所蔵の無い物に所蔵と刷らないため
-    label = source.get("holding_label", "所蔵")
-    lines = [f"{label}: {source['holding']}", source["modification_note"], HYPOTHESIS]
+    head = f"出典: {source['reference']}" if source.get("reference") else f"所蔵: {source['holding']}"
+    lines = [head, source["modification_note"], HYPOTHESIS]
     if omit != "source_id":
         lines.insert(2, f"出典ID: {source['source_id']}")
     return lines
@@ -38,16 +38,16 @@ def check_pdf(pdf_path, source):
     # 印が折り返されても読めるよう、空白と改行を全部取ってから探す。
     flat = "".join(out.split())
     # 短い語だけを探すと、本文が欠けても化けても別の所に同じ語が残れば通ってしまう。刷った文をそのまま探す。
-    need = {
-        "所蔵": HOLDER,
-        "所蔵の文": source["holding"],
-        "永続ID": source.get("persistent_id"),
-        "改変": source["modification_note"],
-        "出典ID": source["source_id"],
-        "仮説": HYPOTHESIS,
-    }
-    # 史料の出典（国立国会図書館の図）は、所蔵の名と永続 ID も探す。原理の作例（holding_label を持つ出典）は所蔵も永続 ID も
-    # 持たないので探さず、原理の文（所蔵の文の欄）・改変・出典 ID・仮説を探す（史料の出典の見方と並びは変えない）
-    if "holding_label" in source:
-        del need["所蔵"], need["永続ID"]
+    if source.get("reference"):
+        # 科学の模型: 所蔵の代わりに、文献の文がそのまま読める事を見る（所蔵の名と永続 ID は持たない）
+        need = {"出典の文献": source["reference"], "改変": source["modification_note"], "出典ID": source["source_id"], "仮説": HYPOTHESIS}
+    else:
+        need = {
+            "所蔵": HOLDER,
+            "所蔵の文": source["holding"],
+            "永続ID": source["persistent_id"],
+            "改変": source["modification_note"],
+            "出典ID": source["source_id"],
+            "仮説": HYPOTHESIS,
+        }
     return [Failure("F1.marks", name, f"PDF から「{text}」を取り出せない") for name, text in need.items() if "".join(text.split()) not in flat]
