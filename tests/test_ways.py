@@ -96,6 +96,9 @@ assert "ビーズ" in pr[("twist_drum", "kiku")]["bom"]["resin"]
 tiger = pr[("pivot_counterweight", "neck")]
 assert tiger["bom"] == {"metal": [], "resin": [], "unlisted": []} and tiger["prep"]["resin"] == ["セロハンテープ"], tiger
 assert ways._premise_of(["油粘土 3g", "油ねんどの玉（直径 8mm）"], True) == {"metal": [], "resin": [], "unlisted": []}
+# 使ってよいとされたのは油粘土だけ。ほかの粘土は一覧に無い側、樹脂粘土は樹脂の側にも出る（見直しの指摘）
+assert ways._premise_of(["石粉粘土"], True) == {"metal": [], "resin": [], "unlisted": ["粘土"]}
+assert ways._premise_of(["樹脂粘土"], True) == {"metal": [], "resin": ["樹脂"], "unlisted": ["粘土"]}
 assert pr[("helix", "bdna")]["within"] is True  # 竹串と台の油粘土だけ
 # 御来迎（押し上げる形）: 割り箸は木で使ってよい。割り箸を留めるセロハンテープは、部品表に無く用意する物の文に出る
 assert pr[("slider_fan", "rise")]["bom"] == {"metal": [], "resin": [], "unlisted": []} and pr[("slider_fan", "rise")]["prep"]["resin"] == ["セロハンテープ"]
