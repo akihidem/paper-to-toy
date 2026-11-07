@@ -79,4 +79,68 @@ assert r.returncode == 0 and json.loads(r.stdout) == json.loads(json.dumps(table
 r = subprocess.run([sys.executable, "-m", "omochae.ways", "--nope"], cwd=ROOT, capture_output=True, text=True,
                    env={"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin"})
 assert r.returncode == 4, (r.returncode, r.stderr)
+
+# 6. 材料の前提（制作者の言葉 2026-11-07「…竹、木、糸、布、接着剤、なるべくは樹脂、金属は使わずに考えるようにして設計を
+# 再考してもいいかもしれない」）。考え直す所を見る印で、落とす検査ではない。当時の材料とは別の軸
+pr = {(r["template"], r["form"]): r["premise"] for r in table}
+assert all(set(p) == {"within", "bom", "prep"} and set(p["bom"]) == set(p["prep"]) == {"metal", "resin", "unlisted"} for p in pr.values())
+sumo = pr[("lever_link", "sumo")]
+assert "割ピン" in sumo["prep"]["metal"] and sumo["within"] is False, sumo  # 割ピンは金属
+pin = pr[("spinner", "pinwheel")]
+assert {"ストロー", "セロハンテープ"} <= set(pin["bom"]["resin"] + pin["prep"]["resin"]), pin  # ストローとテープは樹脂
+assert "梱包テープ" in pr[("float", "none")]["bom"]["resin"] + pr[("float", "none")]["prep"]["resin"]
+assert "消しゴム" in pr[("balance", "yajirobe")]["prep"]["resin"]
+assert "ビーズ" in pr[("twist_drum", "kiku")]["bom"]["resin"]
+# 虎（首の形）: 竹串と重りの油粘土は使ってよい（制作者の言葉「油粘土も使ってよい」）。セロハンテープは用意する物の文にだけ出る
+# （腕を仮に留める、作る途中だけの物）。境目は既定のまま（制作者の言葉「境目は既定のままで」）: テープは樹脂の側
+tiger = pr[("pivot_counterweight", "neck")]
+assert tiger["bom"] == {"metal": [], "resin": [], "unlisted": []} and tiger["prep"]["resin"] == ["セロハンテープ"], tiger
+assert ways._premise_of(["油粘土 3g", "油ねんどの玉（直径 8mm）"], True) == {"metal": [], "resin": [], "unlisted": []}
+# 使ってよいとされたのは油粘土だけ。ほかの粘土は一覧に無い側、樹脂粘土は樹脂の側にも出る（見直しの指摘）
+assert ways._premise_of(["石粉粘土"], True) == {"metal": [], "resin": [], "unlisted": ["粘土"]}
+assert ways._premise_of(["樹脂粘土"], True) == {"metal": [], "resin": ["樹脂粘土"], "unlisted": []}  # 1 つの材料として樹脂の側だけ
+# 1 つの材料の名は、3 つの分けのどれか 1 つにだけ出る（2 つの語が入った名を、別々の分けに 2 度数えない）。
+# 頭の語（樹脂・ビニール・金属・アルミなど）で始まる名は、書き方が揺れても 1 つの材料として頭の語の分けに入る
+assert ways._premise_of(["樹脂ねんど（直径 8mm）"], True) == {"metal": [], "resin": ["樹脂ねんど"], "unlisted": []}
+assert ways._premise_of(["金属の軸"], True) == {"metal": ["金属の軸"], "resin": [], "unlisted": []}
+# 頭の語の名は、数字・記号・空白と、もう一方の避ける側の語の手前で止まる（見直しの指摘）
+for name in ("樹脂＋針金", "樹脂/針金", "樹脂の針金"):
+    assert ways._premise_of([name], True) == {"metal": ["針金"], "resin": ["樹脂"], "unlisted": []}, name
+assert ways._premise_of(["樹脂粘土3g", "樹脂粘土5g"], True) == {"metal": [], "resin": ["樹脂粘土"], "unlisted": []}
+for name in ("樹脂粘土", "樹脂ねんど", "樹脂の粘土", "ビニールテープ", "発泡スチロールの玉", "アルミの針金", "金属の軸", "紙と針金",
+             "油ねんどの玉か木の玉"):
+    got = ways._premise_of([name], True)
+    assert sum(1 for v in got.values() if v) <= 1, (name, got)
+assert pr[("helix", "bdna")]["within"] is True  # 竹串と台の油粘土だけ
+# 御来迎（押し上げる形）: 割り箸は木で使ってよい。割り箸を留めるセロハンテープは、部品表に無く用意する物の文に出る
+assert pr[("slider_fan", "rise")]["bom"] == {"metal": [], "resin": [], "unlisted": []} and pr[("slider_fan", "rise")]["prep"]["resin"] == ["セロハンテープ"]
+assert pr[("slide_box", "lid")]["within"] is True  # 紙だけ
+# 道具は数えない（硬さを確かめる 10 円玉・まち針・カッター・ニッパー）
+assert pr[("launcher", "crossbow")]["prep"]["metal"] == [] and pr[("twist_drum", "kiku")]["prep"]["metal"] == []
+# 当時の材料と別の軸: 鈴は当時の物でも金属、厚紙は今の物でも紙
+assert ways._premise_of(["鈴"], True)["metal"] == ["鈴"] and ways._premise_of(["空き箱の厚紙"], True) == {"metal": [], "resin": [], "unlisted": []}
+# 部品表の、どの語にも当たらない材料は、丸ごと一覧に無い物に出す。限り（README）: 用意する物の文の中の知らない材料は見落とす
+assert ways._premise_of(["ガラスの玉"], True)["unlisted"] == ["ガラスの玉"] and ways._premise_of(["ガラスの玉"], False)["unlisted"] == []
+# 今の型紙の部品表に、どの語にも当たらない行は無い（within を「知っている語の中に前提の外が無い」と読める根拠）
+for (t, f), p in pr.items():
+    tp = TEMPLATES[t]
+    rows_ = tp.bom(ways._params(tp, f))
+    assert all(ways._PREMISE.search(ways.PREMISE_TOOLS.sub(" ", str(r.get("material", "")))) for r in rows_ if str(r.get("material", "")).strip()), (t, f)
+# 部品表は紙の行も含めて全部を当てる（「紙と針金」の針金を、紙の見分けで先に外して見落とさない。見直しの指摘）
+tpl = TEMPLATES["slider_fan"]
+keep = tpl.bom, tpl.materials
+try:
+    tpl.bom, tpl.materials = (lambda p: [{"name": "x", "material": "紙と針金"}]), (lambda p: ["のり、はさみ、定規"])
+    got = ways.premise("slider_fan", "tab")
+    assert got["bom"]["metal"] == ["針金"] and got["within"] is False, got
+finally:
+    tpl.bom, tpl.materials = keep
+# 落とさない: 前提の外の形も型紙のまま（相撲は型紙）。前の欄（サイトと同じ名）は変えない
+assert any(r["sheet"] for r in table if (r["template"], r["form"]) == ("lever_link", "sumo"))
+assert set(ways.details("slider_fan", "tab")) == {"one_sheet", "fold_only", "period", "other_materials", "modern_substitutes"}
+# 文の一覧にも、前提の外の物を出す
+r = subprocess.run([sys.executable, "-m", "omochae.ways"], cwd=ROOT, capture_output=True, text=True,
+                   env={"PYTHONPATH": str(ROOT / "src"), "PATH": "/usr/bin:/bin"})
+line = next(ln for ln in r.stdout.splitlines() if ln.startswith("lever_link") and " sumo " in ln)
+assert r.returncode == 0 and "材料の前提の外: 金属 割ピン" in line, line
 print("ok")
