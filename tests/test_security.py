@@ -123,11 +123,13 @@ for path in files:
     if not path.is_file() or path.suffix.lower() in (".pdf", ".png", ".jpg", ".gif", ".ttf", ".otf", ".ttc", ".woff", ".woff2"):
         continue
     try:
-        text = path.read_text(encoding="utf-8")
+        text = path.read_bytes().decode("utf-8")  # 行の終わりを読み替えずに読む（read_text は 1 つだけの CR を改行に変えて、見張りから隠した）
     except UnicodeDecodeError:
         continue
     # 見えない文字（Cf）と、改行・タブ・行頭へ戻るのほかの制御の文字（Cc。ESC など。cat で端末を動かせる）と行の区切りを、生で置かない
     found = sorted({f"U+{ord(c):04X}" for c in text if unicodedata.category(c) in ("Cf", "Cc", "Zl", "Zp") and c not in "\n\t\r"})
+    if re.search("\r(?!\n)", text):  # 行頭へ戻る文字は、CRLF の行の終わりのほかは置かない（1 つだけの CR は、端末で前の字を上書きできる。見直しの指摘）
+        found.append("U+000D")
     if found:
         raw[str(path.relative_to(ROOT))] = found
 assert not raw, raw
