@@ -7,6 +7,10 @@
 - period（当時の材料）: 紙のほかの材料が全部、江戸の頃にもあった物の語の一覧（竹・糸・紐・木・鈴・玉）に当たる。知らない物には付けない。
   制作者の言葉「竹とか糸は江戸時代にもあったし使ったらよく再現できるということ」による、再現の良さの別の軸。
   紙一枚の印は優劣の印ではない。今の物で代えた材料（輪ゴム・テープ・割ピン・ストローなど）は modern_substitutes に出す。
+- premise（材料の前提）: 制作者の言葉（2026-11-07）「エンジン、紙だけで再現と言ったかも。竹、木、糸、布、接着剤、なるべくは樹脂、
+  金属は使わずに考えるようにして設計を再考してもいいかもしれない」による、設計を考え直す所を見る軸（落とす検査ではない）。
+  紙のほかの材料を、使ってよい（紙・竹・木・糸・布・接着剤）／なるべく使わない（金属・樹脂）／一覧に無い（油粘土など、
+  どちらとも決まっていない物）に分け、部品表と用意する物の文を別の一覧で出す。道具（はさみ・カッター・目打ち・硬貨など）は数えない。
 判断の芯:
 - 印は雛形に宣言させず、部品表（bom）・用意する物（materials）・部品（parts）から出す。宣言だと、部品を変えた時に印と食い違う。
 - 材料は、部品表の素材と、用意する物の文の両方で見る。部品表に載らない物（割ピン・テープなど）が、用意する物にだけ書かれる雛形があるため。
@@ -51,6 +55,48 @@ def fold_only(parts):
     return rect and not q.cuts and not q.round_cuts and not q.holes and not q.glue and bool(q.valley or q.mountain)
 
 
+# 材料の前提の語（制作者の言葉 2026-11-07）。当時の材料（PERIOD・MODERN）と分けるのは、物差しが違うため:
+# 厚紙は今の物でも紙なので使ってよい側、鈴は当時の物でも金属なので避ける側。
+# 語は長い物から当てる（「セロハンテープ」をテープより先に、「油ねんど」を、ほかの語より先に）。
+PREMISE_WORDS = {
+    "metal": ("割りピン", "割ピン", "針金", "鈴", "クリップ", "ホチキス", "画鋲", "釘"),
+    "resin": ("セロハンテープ", "梱包テープ", "テープ", "ストロー", "ビーズ", "消しゴム", "輪ゴム", "ビニール", "発泡"),
+    # 樹脂でも金属でもないが、使ってよい物の一覧にも無い物。使うかは、これから決める（油粘土は重りに広く使っている）
+    "unlisted": ("油粘土", "油ねんど", "粘土", "ねんど", "ろう"),
+    "ok": ("竹串", "竹ぐし", "竹ひご", "楊枝", "つまようじ", "割り箸", "木", "糸", "紐", "布", "のり", "接着剤", "厚紙", "紙"),
+}
+_PREMISE = re.compile("|".join(sorted({re.escape(w) for ws in PREMISE_WORDS.values() for w in ws}, key=len, reverse=True)))
+_PREMISE_CLASS = {w: k for k, ws in PREMISE_WORDS.items() for w in ws}
+# 道具の語は、材料の前提に数えない（玩具の材料でない）。10 円玉は、腕や弓の硬さを確かめる重りで、玩具に入らない
+PREMISE_TOOLS = re.compile(r"はさみ|定規|カッター|ニッパー|目打ち|下敷き|まち針|えんぴつ|鉛筆|ペン|紙やすり|時計|洗面器|皿|10 円玉|硬貨")
+
+
+def _premise_of(texts, unknown_unlisted):
+    """文の並びから、材料の前提の語を分けて集める（同じ語は 1 度）。unknown_unlisted なら、どの語にも当たらない文を
+    丸ごと一覧に無い物に入れる（部品表の紙でない素材は 1 行が 1 つの材料なので、知らない材料を見落とさないため）。"""
+    out = {"metal": [], "resin": [], "unlisted": []}
+    for text in texts:
+        t = PREMISE_TOOLS.sub(" ", str(text))
+        words = _PREMISE.findall(t)
+        if not words and unknown_unlisted and t.strip():
+            out["unlisted"].append(str(text))
+        for w in words:
+            k = _PREMISE_CLASS[w]
+            if k != "ok" and w not in out[k]:
+                out[k].append(w)
+    return out
+
+
+def premise(template_id, form):
+    """材料の前提の印。部品表（bom）と用意する物（prep）を別の一覧で出す。今のデータでは、作る時の手伝い（仮に留めるテープ
+    など）と玩具に残る物を見分けられないので、どちらに書かれたかだけを出す。within は、どちらにも金属・樹脂・一覧に無い物が無い時。"""
+    tpl = TEMPLATES[template_id]
+    p = _params(tpl, form)
+    bom = _premise_of([r.get("material", "") for r in tpl.bom(p) if not _is_paper(r.get("material", ""))], True)
+    prep = _premise_of(tpl.materials(p), False)
+    return {"within": not any(d[k] for d in (bom, prep) for k in d), "bom": bom, "prep": prep}
+
+
 def details(template_id, form):
     tpl = TEMPLATES[template_id]
     p = _params(tpl, form)
@@ -79,12 +125,21 @@ def table():
     型紙として出す。別の読みの行（sheet が false）も消さずに残し、reading_of で型紙の形を指す（試行錯誤のヒントに使える）。
     行を消さないのは、今の一覧を読む側（サイト）の形を壊さず、足した欄で絞れるようにするため。"""
     return [{"template": tid, "form": str(f), "source_id": source_of(tid, f), "sheet": is_sheet(tid, f),
-             "reading_of": reading_of(tid, f), **details(tid, f)}
+             "reading_of": reading_of(tid, f), **details(tid, f), "premise": premise(tid, f)}
             for tid, t in sorted(TEMPLATES.items()) for f in t.FORMS]
 
 
+def _premise_text(pr):
+    """文の一覧に出す、材料の前提の外の物（部品表と用意する物を合わせて、分けの名ごとに）。"""
+    if pr["within"]:
+        return ""
+    names = {"metal": "金属", "resin": "樹脂", "unlisted": "一覧に無い"}
+    got = [f"{names[k]} {'・'.join(dict.fromkeys(pr['bom'][k] + pr['prep'][k]))}" for k in names if pr["bom"][k] or pr["prep"][k]]
+    return "  材料の前提の外: " + "／".join(got)
+
+
 def main(argv=None):
-    ap = Parser(prog="omochae.ways", description="形ごとの作り方の印（紙一枚・折るだけ・当時の材料）を出す。どれも優劣の印ではない")
+    ap = Parser(prog="omochae.ways", description="形ごとの作り方の印（紙一枚・折るだけ・当時の材料・材料の前提）を出す。どれも優劣の印ではない")
     ap.add_argument("--json", action="store_true", help="JSON で出す（サイトの絞り込みに使う）")
     args = ap.parse_args(argv)
     t = table()
@@ -94,7 +149,8 @@ def main(argv=None):
     for r in t:
         mark = "・".join(n for n, k in (("紙一枚", "one_sheet"), ("折るだけ", "fold_only"), ("当時の材料", "period")) if r[k]) or "—"
         print(f"{r['template']:20s} {r['form']:12s} {mark:18s} 材料: {'・'.join(r['other_materials']) or '紙だけ'}"
-              f"{'（今の物で代えた: ' + '・'.join(r['modern_substitutes']) + '）' if r['modern_substitutes'] else ''}")
+              f"{'（今の物で代えた: ' + '・'.join(r['modern_substitutes']) + '）' if r['modern_substitutes'] else ''}"
+              f"{_premise_text(r['premise'])}")
     return 0
 
 
