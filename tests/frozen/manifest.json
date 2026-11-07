@@ -1,5 +1,5 @@
 {
- "criteria.md": "b7b6c82093edf94725081b21044a82c5076176fac05ba9a566b83e5533157c10",
+ "criteria.md": "ef8e3c7baa2e4fd159bbb5d2b8ebf5fc764e9158391d9bfca6001a2348c4e718",
  "scenarios": {
   "balance_neg.json": {
    "floors": [
@@ -430,6 +430,18 @@
    ],
    "rc": 3,
    "sha256": "53e0e06834823dce98915899d00949ed06133d0457ee36b28a068cefb2c9f9e2"
+  },
+  "pendulum_wave_neg.json": {
+   "floors": [
+    "F5.range"
+   ],
+   "rc": 3,
+   "sha256": "ec50ec20a802c5a50e24b21d25be73fb0eb512eb2fc77a8e6dda2934a909da1f"
+  },
+  "pendulum_wave_pos.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "7c765bf98532f6cfffcfffd49e08173ea9699c6283f2cb4954a8528145550434"
   },
   "popup_jar_neg.json": {
    "floors": [
@@ -1176,6 +1188,7 @@
   "test_paper_words",
   "test_path_confine",
   "test_pdf_repeatable",
+  "test_pendulum_wave",
   "test_pivot_3d",
   "test_pivot_arm_label",
   "test_pivot_fold3d",
