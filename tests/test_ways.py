@@ -138,6 +138,10 @@ for text, name in (("はがせるテープ", "はがせるテープ"), ("貼っ�
 assert ways._premise_of(["上からテープ"], True) == {"metal": [], "resin": [], "unlisted": ["上からテープ"]}
 # 助詞の後のカタカナで始まる名は、広げずにそのまま出す
 assert ways._premise_of(["竹串とガムテープ"], True) == {"metal": [], "resin": [], "unlisted": ["ガムテープ"]}
+# 限り: 区切りの字が無い並びで名が切れた時は、前の語ごと出る（「と」が助詞か名の字か、字の形では決められない）
+assert ways._premise_of(["竹串とはがせるテープ"], True) == {"metal": [], "resin": [], "unlisted": ["竹串とはがせるテープ"]}
+# 頭の語の名の字の型は文字列のまま（テープの名を広げる型で上書きしない。見直しの指摘）
+assert isinstance(ways._NAME_CHAR, str) and ways._head_pattern("resin", "metal")
 assert ways._premise_of(["透明の梱包テープ（60g/m² の見込み）"], True) == {"metal": [], "resin": ["梱包テープ"], "unlisted": []}
 assert ways._premise_of(["ビニールテープ"], True)["resin"] == ["ビニールテープ"]
 # 当時の材料と別の軸: 鈴は当時の物でも金属、厚紙は今の物でも紙

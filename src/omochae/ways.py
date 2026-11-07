@@ -129,7 +129,8 @@ def _premise_name(word):
     return word.rstrip("の") if any(word.startswith(h) for h in PREMISE_HEADS) else word
 
 
-_NAME_CHAR = re.compile("[ぁ-んァ-ヶー一-鿿々A-Za-z0-9Ａ-Ｚａ-ｚ０-９]")
+# 頭の語の名の字の型 _NAME_CHAR（上・文字列）とは別の物。上書きすると、後で _head_pattern を呼んだ時に型が壊れる（見直しの指摘）
+_TAPE_TEXT_CHAR = re.compile("[ぁ-んァ-ヶー一-鿿々A-Za-z0-9Ａ-Ｚａ-ｚ０-９]")
 _HIRAGANA = re.compile("[ぁ-ん]")
 
 
@@ -137,11 +138,13 @@ def _tape_name(text, start, word):
     """一覧に無い「…テープ」の出す名。頭の字に助詞と同じ字（は・が など）があると、当たりはその字の後から始まる（「はがせる
     テープ」は「せるテープ」）。ひらがなの後のひらがなで始まる当たりは、そう切れた物なので、前の区切りの字（空白・読点・括弧
     など）まで広げて出す。字の形だけでは名の頭を決め切れないので、切れた名より、前の字ごと出す方が人が読める（見直しの指摘）。
-    分け（一覧に無い側）は変えない。助詞の後のカタカナ・漢字で始まる名（「竹串とガムテープ」のガムテープ）は、そのまま出す。"""
+    分け（一覧に無い側）は変えない。助詞の後のカタカナ・漢字で始まる名（「竹串とガムテープ」のガムテープ）は、そのまま出す。
+    限り: 区切りの字が無い並び（「竹串とはがせるテープ」）は、前の語ごと出る。「と」が助詞か名の字かは、字の形では決められない
+    （「上から」の「か」と同じ）。名を短く切って出すより、前の語ごと出して人が読む方に倒す（見直しの指摘で、限りとして試験に残す）。"""
     if start == 0 or not (_HIRAGANA.match(word) and _HIRAGANA.match(text[start - 1])):
         return word
     i = start
-    while i > 0 and _NAME_CHAR.match(text[i - 1]):
+    while i > 0 and _TAPE_TEXT_CHAR.match(text[i - 1]):
         i -= 1
     return text[i:start] + word
 # 道具の語は、材料の前提に数えない（玩具の材料でない）。10 円玉は、腕や弓の硬さを確かめる重りで、玩具に入らない
