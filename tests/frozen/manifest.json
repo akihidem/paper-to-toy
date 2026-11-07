@@ -1,5 +1,5 @@
 {
- "criteria.md": "2f7d48085b259e466e080814ef061b504c2993cf2f0531e0f73ee74445cc4d2f",
+ "criteria.md": "b7b6c82093edf94725081b21044a82c5076176fac05ba9a566b83e5533157c10",
  "scenarios": {
   "balance_neg.json": {
    "floors": [
@@ -1154,6 +1154,7 @@
  "tests": [
   "test_assembly3d",
   "test_balance",
+  "test_check3d",
   "test_color_out",
   "test_engine_loop",
   "test_exit_codes",

@@ -11,7 +11,8 @@
    - 粘土の玉は 5 重りの腕の下の穴の所。
 4. できあがりの動き（finale）: 頭が静かな時の傾き（刷る物の重さの所で見た傾き）のまわりに ±MIN_SWING の中で揺れて、静かな時の傾きで止まる
    （型紙の当たりの検査が見る角と同じ。前は水平のまわりに 12° まで揺らし、段の終わりの水平で止めていた）。
-5. 入口: 書き出せる（終わりの値 0）。組み立ての書き方が無い形（御来迎のつまみの形）は 4。
+5. 入口: 書き出せる（終わりの値 0。虎 v7）。3D の組み立て検品（omochae.check3d）に落ちる形（虎 v6）は 3 で、JSON を書かない
+   （検品の決めは tests/test_check3d.py）。組み立ての書き方が無い形（御来迎のつまみの形）は 4。
 6. 紙の行列（paper.place）: 紙の座標を机の面（y = 0）へ写し、刷った面は上。段 1 の部品の置き場は、紙の行列と刷った所（paper.at）から出した物と同じ。
 7. 手の種類（act）と動く部品（moving）がどの POSE にもある。中身の分解（structure）: inside・exploded（できあがりから離した 1 枚）・cutaway（見る人の方の面）。
 8. 御来迎 v14（内筒を下から押し上げる）: 18 段。静かな時は内筒が外筒の中（隙間 0.75mm）、台の上の面は外筒の底から 70mm、扇と像は口の下。
@@ -195,10 +196,14 @@ assert max(abs(turned(f) - rest) for f in fin) > math.radians(pc.MIN_SWING) - 1e
 # 5. 入口
 env = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
 with tempfile.TemporaryDirectory() as d:
-    out = pathlib.Path(d) / "tora-v6.json"
-    r = subprocess.run([sys.executable, "-m", "omochae.assembly3d", "--scenario", str(ROOT / "examples/tora_v6.json"), "--out", str(out), "--commit", "x"],
+    out = pathlib.Path(d) / "tora-v7.json"
+    r = subprocess.run([sys.executable, "-m", "omochae.assembly3d", "--scenario", str(ROOT / "examples/tora_v7.json"), "--out", str(out), "--commit", "x"],
                        cwd=ROOT, env=env, capture_output=True, text=True)
-    assert r.returncode == 0 and json.loads(out.read_text(encoding="utf-8"))["toy"] == "tora-v6", r.stderr
+    assert r.returncode == 0 and json.loads(out.read_text(encoding="utf-8"))["toy"] == "tora-v7", r.stderr
+    out6 = pathlib.Path(d) / "tora-v6.json"
+    r = subprocess.run([sys.executable, "-m", "omochae.assembly3d", "--scenario", str(ROOT / "examples/tora_v6.json"), "--out", str(out6), "--commit", "x"],
+                       cwd=ROOT, env=env, capture_output=True, text=True)
+    assert r.returncode == 3 and not out6.exists() and "FAIL 3D.hit" in r.stderr, (r.returncode, r.stderr)  # v6 は検品に落ちる（負の対照）
     r = subprocess.run([sys.executable, "-m", "omochae.assembly3d", "--scenario", str(ROOT / "examples/fan_tab.json")], cwd=ROOT, env=env, capture_output=True, text=True)
     assert r.returncode == 4, (r.returncode, r.stderr)
 
