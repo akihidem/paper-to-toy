@@ -97,11 +97,15 @@ def _head_pattern(cls, other):
 # 「テープで留める」「竹串 1 本とテープ」など）は、この型紙たちではセロハンテープの事なので使ってよい。ほかの語が付いた「…テープ」
 # （ガムテープ・両面テープ・梱包用テープなど）は決まっていないので一覧に無い側。語の一部の当たりで、こうした物まで使ってよいと
 # 判じていた（見直しの指摘）。決まった語（セロハンテープ・梱包テープ）は語の表で先に当たる
-_TAPE_ALONE = "(?:(?<![ぁ-んァ-ヶー一-鿿々])|(?<=[とやかをにではが]))テープ"
+# 「…テープ」の頭になる字はカタカナ・漢字・英字・数字（ガム・両面・梱包用・OPP・3M など）。ひらがなや区切りの後の「テープ」は、
+# ほかの語に付かない「テープ」と読む（「上からテープ」「このテープ」）。前はひらがなも頭の字に入れ、英字と数字を入れていなかったので、
+# 「らテープ」を知らないテープにし、「OPPテープ」を使ってよいテープにした（見直しの指摘）
+_TAPE_PREFIX = "[ァ-ヶー一-鿿々A-Za-z0-9Ａ-Ｚａ-ｚ０-９]"
+_TAPE_ALONE = f"(?<!{_TAPE_PREFIX})テープ"
 # 決まった「…テープ」の語（梱包テープ・セロハンテープ）の手前で止める。止めないと「透明の梱包テープ」を頭から 1 つの知らない
 # テープとして飲み込み、梱包テープ（樹脂）を一覧に無い側に出した
 _TAPE_WORDS = [w for ws in PREMISE_WORDS.values() for w in ws if w.endswith("テープ")]
-_TAPE_COMPOUND = f"(?:(?!{_alt(_TAPE_WORDS)}){_NAME_CHAR})+テープ"
+_TAPE_COMPOUND = f"(?:(?!{_alt(_TAPE_WORDS)}){_TAPE_PREFIX})+テープ"
 _PREMISE = re.compile(_head_pattern("resin", "metal") + "|" + _head_pattern("metal", "resin") + "|"
                       + _alt({w for ws in PREMISE_WORDS.values() for w in ws}) + "|" + _TAPE_COMPOUND + "|" + _TAPE_ALONE)
 _PREMISE_CLASS = {w: k for k, ws in PREMISE_WORDS.items() for w in ws}

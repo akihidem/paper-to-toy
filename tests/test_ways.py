@@ -124,9 +124,9 @@ assert pr[("slide_box", "lid")]["within"] is True  # 紙だけ
 assert pr[("launcher", "crossbow")]["prep"]["metal"] == [] and pr[("twist_drum", "kiku")]["prep"]["metal"] == []
 # セロハンテープと、「テープ」とだけ書いた物（この型紙たちではセロハンテープの事）は使ってよい。梱包テープとビニールテープは樹脂のまま
 empty = {"metal": [], "resin": [], "unlisted": []}
-assert ways._premise_of(["セロハンテープ（軸の先に巻く）", "竹串 1 本とテープ", "テープで留める", "のり、はさみ、テープ"], True) == empty
+assert ways._premise_of(["セロハンテープ（軸の先に巻く）", "竹串 1 本とテープ", "テープで留める", "のり、はさみ、テープ", "上からテープ", "このテープ"], True) == empty
 # ほかの語が付いた「…テープ」は、決まっていないので一覧に無い側（語の一部の当たりで使ってよいと判じていた。見直しの指摘）
-for name in ("ガムテープ", "両面テープ", "梱包用テープ", "マスキングテープ"):
+for name in ("ガムテープ", "両面テープ", "梱包用テープ", "マスキングテープ", "OPPテープ", "3Mテープ"):
     assert ways._premise_of([name], True) == {"metal": [], "resin": [], "unlisted": [name]}, (name, ways._premise_of([name], True))
 assert ways._premise_of(["透明の梱包テープ（60g/m² の見込み）"], True) == {"metal": [], "resin": ["梱包テープ"], "unlisted": []}
 assert ways._premise_of(["ビニールテープ"], True)["resin"] == ["ビニールテープ"]
