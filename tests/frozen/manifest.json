@@ -1,5 +1,5 @@
 {
- "criteria.md": "b7b6c82093edf94725081b21044a82c5076176fac05ba9a566b83e5533157c10",
+ "criteria.md": "26d3d50703438eceb6f1affd6950d1d31a4158203525784078e6df5bd1a8d32c",
  "scenarios": {
   "balance_neg.json": {
    "floors": [
@@ -97,6 +97,18 @@
    "floors": [],
    "rc": 0,
    "sha256": "e6ef60cc674b74a61920f7d879efbc26affa6ac55825de125986281837e10600"
+  },
+  "helix_neg.json": {
+   "floors": [
+    "F5.range"
+   ],
+   "rc": 3,
+   "sha256": "5012981fb843da903a2c49fb722f08a3d4f96d0d68147f139f3cc0a9565ef86d"
+  },
+  "helix_pos.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "62b7a9d025cc0c2ebe9552bacc552c1816c1ab8fd14a2983e8995dde029d242a"
   },
   "launcher_neg.json": {
    "floors": [
@@ -430,6 +442,18 @@
    ],
    "rc": 3,
    "sha256": "53e0e06834823dce98915899d00949ed06133d0457ee36b28a068cefb2c9f9e2"
+  },
+  "pendulum_wave_neg.json": {
+   "floors": [
+    "F5.range"
+   ],
+   "rc": 3,
+   "sha256": "ec50ec20a802c5a50e24b21d25be73fb0eb512eb2fc77a8e6dda2934a909da1f"
+  },
+  "pendulum_wave_pos.json": {
+   "floors": [],
+   "rc": 0,
+   "sha256": "7c765bf98532f6cfffcfffd49e08173ea9699c6283f2cb4954a8528145550434"
   },
   "popup_jar_neg.json": {
    "floors": [
@@ -1168,6 +1192,7 @@
   "test_goraigo_rise_3d",
   "test_goraigo_v14",
   "test_guards",
+  "test_helix",
   "test_init_python",
   "test_intake",
   "test_launcher",
@@ -1176,6 +1201,7 @@
   "test_paper_words",
   "test_path_confine",
   "test_pdf_repeatable",
+  "test_pendulum_wave",
   "test_pivot_3d",
   "test_pivot_arm_label",
   "test_pivot_fold3d",
