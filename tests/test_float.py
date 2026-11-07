@@ -330,14 +330,14 @@ for q in (P, C):
     with_clay, no_clay = t.steps(q), t.steps({**q, "ballast_g": 0})
     diff = [i for i, (a_, b_) in enumerate(zip(with_clay, no_clay)) if a_ != b_]
     assert len(with_clay) == len(no_clay) and len(diff) == 1 and "油粘土" in with_clay[diff[0]] and "重りを使わない" in no_clay[diff[0]], diff
-# 組み方の文は、サイトの手順の紙の左の列（144mm・字 3.6mm）で STEP_LINES_MAX 行まで。前の版は風受けつきで 20 行あり、紙からはみ出していた。
+# 組み方の文は STEP_LINES_MAX 行まで（前のサイトの手順の紙の左の列 144mm・字 3.6mm で数えた。手順の紙は廃止し、組み立ての頁に出す）。前の版は風受けつきで 20 行あり、紙からはみ出していた。
 # サイトは「番号. 文」の形で刷り、同じ折り返し（textfit.wrap）を使う
 from omochae.textfit import text_width, wrap
 for q in (P, C, {**P, "ballast_g": 0}, {**C, "ballast_g": 0}, {**C, "ballast_g": 12.5}):
     n_lines = sum(len(wrap(f"{i}. {s_}", t.STEP_SIZE, t.STEP_COL_W)) for i, s_ in enumerate(t.steps(q), 1))
     assert n_lines <= t.STEP_LINES_MAX, (n_lines, q)
 
-# 「試した事」の欄は 1 行で、数でなく言葉で書く（サイトの手順の紙は測る欄を外している。2 行にすると紙からはみ出す）。
+# 「試した事」の欄は 1 行で、数でなく言葉で書く（前のサイトの手順の紙は測る欄を外していて、2 行にすると紙からはみ出した。手順の紙は廃止）。
 # 形ごとに、動かし方（息・渦）に合わせた予想の問いと欄にする
 mc, mn = t.measures(C), t.measures(P)
 for m, word, other in ((mc, "息", "渦"), (mn, "渦", "息")):

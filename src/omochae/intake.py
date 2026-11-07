@@ -1,6 +1,6 @@
 """作った人の報告の入口（Issue #22）。手元の画面で受け付け、受付箱に置き、人が確かめて受け入れた物だけを集計に回す。
 
-本人の決定（2026-11-05）: 報告の入口もエンジン（paper-to-toy）の側に作る。
+制作者の決定（2026-11-05）: 報告の入口もエンジン（paper-to-toy）の側に作る。
 提出物の持ち寄りの受付（受付箱 → 人の確認 → 公開）と同じ流れにした。判断の芯:
 - 画面は手元の機械（127.0.0.1）でだけ開く。外へ開く入口（認証・荒らし・保管の運用が要る）は、この Issue では作らない。
 - 送られた報告は omochae.feedback の check を通し、通った物だけを受付箱に置く。落ちた物は置かず、床の名と理由だけを見せる。
@@ -18,6 +18,7 @@ import os
 import pathlib
 import re
 import secrets
+import unicodedata
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs
@@ -30,6 +31,19 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 BASE = ROOT / "local" / "reports"
 MAX_PROBLEMS = 3
 MAX_BODY = 20_000  # 送られる文の上限（バイト）。長すぎる物は読まずに断る
+# 返す全部の頁に付ける守りの見出し。画面は手元の機械だけで開くが、ほかのサイトの枠に入れて押させる形（clickjacking）を止める
+SECURITY_HEADERS = {"X-Frame-Options": "DENY", "Content-Security-Policy": "frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+                    "X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer"}
+
+
+def visible(text):
+    """端末に出す前に、見えない文字と制御の文字を \\uXXXX の形にして見えるようにする。人が全文を読む事が最後の止めなので、
+    字の並びをごまかせる文字（Unicode の Cf。文の向きを変える U+202E など）と、端末を動かせる制御の文字（Cc。C1 の U+009B CSI など。
+    JSON は U+0020 より下しか escape しないので、C1 と DEL は報告の JSON に生で残る）と、行と段落の区切り（U+2028・U+2029）を
+    そのまま出さない。改行とタブは読むのに要るので残す（セキュリティの点検 2026-11-07・見直しの指摘）。"""
+    return "".join(f"\\u{ord(ch):04x}" if (unicodedata.category(ch) in ("Cf", "Cc", "Zl", "Zp") and ch not in "\n\t") else ch for ch in text)
+
+
 ID_FORM = re.compile(r"B-\d{8}-\d{6}-[0-9a-f]{8}")  # 受付の ID の形。形でない物は扱わない（../ で受付箱の外を消せた）
 CONSENTS = {"no_pii": "名前・連絡先・ほかの人の事を書いていない", "age": "18 歳以上か、保護者の同意がある"}
 MOVED_JA = {"moved": "動いた", "partly": "少し動いた", "not": "動かない"}
@@ -197,6 +211,9 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
+        # ほかのページの枠に入れさせない・形を読み替えさせない・送り元の URL を出さない（セキュリティの点検 2026-11-07）
+        for k, v in SECURITY_HEADERS.items():
+            self.send_header(k, v)
         self.end_headers()
         self.wfile.write(data)
 
@@ -276,7 +293,7 @@ def main(argv=None):
         if not p.exists():
             print("受付箱に無い", file=sys.stderr)
             return 3
-        print(p.read_text(encoding="utf-8"))
+        print(visible(p.read_text(encoding="utf-8")))
         return 0
     if args.action == "reject":
         ok, msg = reject(args.id, base, args.reason)
@@ -291,7 +308,7 @@ def main(argv=None):
             print("受付箱に無い", file=sys.stderr)
             return 3
         shown = p.read_text(encoding="utf-8")
-        print(shown)
+        print(visible(shown))
         print("上の全文に、名前・住所・連絡先・ほかの人の事が無いかを読んでから、ID を打つ（あれば review reject --reason pii）")
         typed = input(f"受け入れる報告の ID を打つ（{args.id}）: ").strip()
         ok, msg = accept(args.id, base, typed, shown=shown)
