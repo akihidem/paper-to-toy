@@ -87,16 +87,17 @@ assert all(set(p) == {"within", "bom", "prep"} and set(p["bom"]) == set(p["prep"
 sumo = pr[("lever_link", "sumo")]
 assert "割ピン" in sumo["prep"]["metal"] and sumo["within"] is False, sumo  # 割ピンは金属
 pin = pr[("spinner", "pinwheel")]
-assert {"ストロー", "セロハンテープ"} <= set(pin["bom"]["resin"] + pin["prep"]["resin"]), pin  # ストローとテープは樹脂
+assert "ストロー" in pin["bom"]["resin"] + pin["prep"]["resin"], pin  # ストローは樹脂
+assert "セロハンテープ" not in pin["bom"]["resin"] + pin["prep"]["resin"], pin  # セロハンテープは使ってよい（制作者の言葉 2026-11-08「セロハンテープくらいは許す」）
 assert "梱包テープ" in pr[("float", "none")]["bom"]["resin"] + pr[("float", "none")]["prep"]["resin"]
 # 代わりの物の字（消しゴム・ビーズ）を外した 4 形は、前提の内になる（2026-11-08 の型紙の直し・材料の前提の答えの ①）
 for k in (("balance", "yajirobe"), ("twist_drum", "kiku"), ("twist_drum", "tori"), ("whistle", "rattle")):
     assert pr[k]["within"] is True, (k, pr[k])
 assert not any("ビーズ" in p[w]["resin"] or "消しゴム" in p[w]["resin"] for p in pr.values() for w in ("bom", "prep"))
-# 虎（首の形）: 竹串と重りの油粘土は使ってよい（制作者の言葉「油粘土も使ってよい」）。セロハンテープは用意する物の文にだけ出る
-# （腕を仮に留める、作る途中だけの物）。境目は既定のまま（制作者の言葉「境目は既定のままで」）: テープは樹脂の側
+# 虎（首の形）: 竹串と重りの油粘土は使ってよい（制作者の言葉「油粘土も使ってよい」）。腕を仮に留めるセロハンテープも、
+# 制作者の言葉（2026-11-08）「セロハンテープくらいは許す」で使ってよい（前は既定の境目で樹脂の側だった）
 tiger = pr[("pivot_counterweight", "neck")]
-assert tiger["bom"] == {"metal": [], "resin": [], "unlisted": []} and tiger["prep"]["resin"] == ["セロハンテープ"], tiger
+assert tiger["bom"] == {"metal": [], "resin": [], "unlisted": []} and tiger["prep"]["resin"] == [] and tiger["within"] is True, tiger
 assert ways._premise_of(["油粘土 3g", "油ねんどの玉（直径 8mm）"], True) == {"metal": [], "resin": [], "unlisted": []}
 # 使ってよいとされたのは油粘土だけ。ほかの粘土は一覧に無い側、樹脂粘土は樹脂の側にも出る（見直しの指摘）
 assert ways._premise_of(["石粉粘土"], True) == {"metal": [], "resin": [], "unlisted": ["粘土"]}
@@ -114,11 +115,16 @@ for name in ("樹脂粘土", "樹脂ねんど", "樹脂の粘土", "ビニール
     got = ways._premise_of([name], True)
     assert sum(1 for v in got.values() if v) <= 1, (name, got)
 assert pr[("helix", "bdna")]["within"] is True  # 竹串と台の油粘土だけ
-# 御来迎（押し上げる形）: 割り箸は木で使ってよい。割り箸を留めるセロハンテープは、部品表に無く用意する物の文に出る
-assert pr[("slider_fan", "rise")]["bom"] == {"metal": [], "resin": [], "unlisted": []} and pr[("slider_fan", "rise")]["prep"]["resin"] == ["セロハンテープ"]
+# 御来迎（押し上げる形）: 割り箸は木で使ってよい。割り箸を留めるセロハンテープも使ってよい（2026-11-08）
+assert pr[("slider_fan", "rise")]["bom"] == {"metal": [], "resin": [], "unlisted": []} and pr[("slider_fan", "rise")]["within"] is True
 assert pr[("slide_box", "lid")]["within"] is True  # 紙だけ
 # 道具は数えない（硬さを確かめる 10 円玉・まち針・カッター・ニッパー）
 assert pr[("launcher", "crossbow")]["prep"]["metal"] == [] and pr[("twist_drum", "kiku")]["prep"]["metal"] == []
+# セロハンテープと、「テープ」とだけ書いた物（この型紙たちではセロハンテープの事）は使ってよい。梱包テープとビニールテープは樹脂のまま
+empty = {"metal": [], "resin": [], "unlisted": []}
+assert ways._premise_of(["セロハンテープ（軸の先に巻く）", "竹串 1 本とテープ"], True) == empty
+assert ways._premise_of(["透明の梱包テープ（60g/m² の見込み）"], True)["resin"] == ["梱包テープ"]
+assert ways._premise_of(["ビニールテープ"], True)["resin"] == ["ビニールテープ"]
 # 当時の材料と別の軸: 鈴は当時の物でも金属、厚紙は今の物でも紙
 assert ways._premise_of(["鈴"], True)["metal"] == ["鈴"] and ways._premise_of(["空き箱の厚紙"], True) == {"metal": [], "resin": [], "unlisted": []}
 # 部品表の、どの語にも当たらない材料は、丸ごと一覧に無い物に出す。限り（README）: 用意する物の文の中の知らない材料は見落とす
