@@ -219,7 +219,13 @@ m8, m7 = " ".join(pc.materials(q8)), " ".join(pc.materials(q7))
 assert "テープ" not in m8 and "鉛筆" in m8 and "カッター" in m8, m8
 assert "セロハンテープ" in m7, m7
 st8 = pc.steps(q8)
-assert len(st8) == len(pc.steps(q7)) and any("指で押さえて仮に止め" in s and "鉛筆で腕の位置の印" in s for s in st8), st8
+assert len(st8) == len(pc.steps(q7)) and any("指で押さえて仮に止める" in s for s in st8), st8
+# 鉛筆の印は、頭の傾きを見て位置を決めた後に付ける（傾きを見る前に印を付けると、位置を直した時に印が古い位置に残る。見直しの指摘）
+i_hold = next(i for i, s in enumerate(st8) if "指で押さえて仮に止める" in s)
+i_mark = next(i for i, s in enumerate(st8) if "鉛筆で腕の位置の印" in s)
+assert i_mark == i_hold + 1 and st8[i_mark].index("傾きを見て") < st8[i_mark].index("鉛筆で") < st8[i_mark].index("貼る"), st8[i_hold:i_mark + 1]
+assert "鉛筆" not in st8[i_hold], st8[i_hold]
+assert pc.steps(q7)[i_mark] == "頭の傾きを見て腕の位置を決めてから、腕を 3 首の帯に貼る"  # デモの v7 の手順は前のまま
 assert not any("テープ" in s for s in st8), st8
 _, lay8, fails8 = _compose("pivot_counterweight", t8["params"], _load(t8["source_id"]), version=8)
 assert not fails8, [f.line() for f in fails8]
