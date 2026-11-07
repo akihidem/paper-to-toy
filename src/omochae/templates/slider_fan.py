@@ -122,7 +122,8 @@ SLOT_MARGIN = 5
 
 def spec():
     """Claude に渡す道具 get_template_spec の中身。"""
-    return {"template_id": ID, "defaults": DEFAULTS, "ranges": RANGES, "push_part": PUSH_PARTS, "hub": HUBS}
+    # 列挙の寸法は、選び肢を全部見せる（stick_fix を足した時に spec へ出し忘れ、受け付ける値と食い違った。見直しの指摘）
+    return {"template_id": ID, "defaults": DEFAULTS, "ranges": RANGES, "push_part": PUSH_PARTS, "hub": HUBS, "stick_fix": STICK_FIXES}
 
 
 def check_range(p):

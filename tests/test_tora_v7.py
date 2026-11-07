@@ -225,4 +225,5 @@ _, lay8, fails8 = _compose("pivot_counterweight", t8["params"], _load(t8["source
 assert not fails8, [f.line() for f in fails8]
 assert any(t.text and t.text.endswith("版 8") for t in lay8["texts"]), "題が版 8 でない"
 assert pc.check_range({**q8, "arm_hold": "clip"}) and not pc.check_range(q8)  # 仮に止める物は tape と finger だけ
+assert pc.spec()["arm_hold"] == ("tape", "finger")  # 仕様の道具にも選び肢を出す（見直しの指摘）
 print("ok 虎 v8（テープを使わず、指で押さえて鉛筆で印・部品は v7 と同じ）")

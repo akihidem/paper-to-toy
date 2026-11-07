@@ -101,7 +101,9 @@ def title(p):
 
 
 def spec():
-    return {"template_id": ID, "defaults": DEFAULTS, "ranges": RANGES, "mount": MOUNTS, "head_sides": HEAD_SIDES, "fit_check": FIT_CHECKS}
+    # 列挙の寸法は、選び肢を全部見せる（arm_hold を足した時に spec へ出し忘れ、受け付ける値と食い違った。見直しの指摘）
+    return {"template_id": ID, "defaults": DEFAULTS, "ranges": RANGES, "mount": MOUNTS, "head_sides": HEAD_SIDES, "fit_check": FIT_CHECKS,
+            "arm_hold": ARM_HOLDS}
 
 
 ARM_HOLDS = ("tape", "finger")  # 重りの腕を仮に止める物（DEFAULTS の arm_hold）
@@ -834,9 +836,12 @@ def steps(p):
         # 帯は胴から来るので、口と反対の側（頭の後ろ）から入れる。手順の数と番号は変えない
         head = ("2 頭を頭の上の山折りの線で後ろへ折る。3 首の帯の先を、口と反対の側から 2 枚の間の真ん中まで挟み、裏どうしを貼る"
                 if p["head_sides"] == 2 else "3 首の帯の前の端に 2 頭を貼る")
+        # 腕を仮に止める文（arm_hold）。f-string の中に同じ引用符を入れ子にしない（Python 3.11 では構文の誤りになる。見直しの指摘）
+        hold = ("テープで仮に留める（まだ貼らない）" if p.get("arm_hold", "tape") == "tape"
+                else "指で押さえて仮に止め、帯に鉛筆で腕の位置の印を付ける（まだ貼らない）")
         out += [head, "帯を前の壁の穴に入れ、竹串を胴の穴と帯の穴に通す",
                 # 下の穴を後ろへ刷る腕（clay_back。v7 から）は向きがある。逆に下げると粘土の玉が前の壁に当たるので、向きを文で言う
-                f"5 重りの腕の上の穴にも竹串を通す{'（下の穴が後ろの尾の側に来る向きで）' if p['clay_back'] > 0 else ''}。{clay}。腕は 3 首の帯に添えて、{"テープで仮に留める（まだ貼らない）" if p.get("arm_hold", "tape") == "tape" else "指で押さえて仮に止め、帯に鉛筆で腕の位置の印を付ける（まだ貼らない）"}",
+                f"5 重りの腕の上の穴にも竹串を通す{'（下の穴が後ろの尾の側に来る向きで）' if p['clay_back'] > 0 else ''}。{clay}。腕は 3 首の帯に添えて、{hold}",
                 "頭の傾きを見て腕の位置を決めてから、腕を 3 首の帯に貼る"]
     else:
         # 式の「軸から頭の上の端まで」と重りの位置を文に書く。「下の端に貼る」「あごの近く」だけでは、式の寸法を実現できない。

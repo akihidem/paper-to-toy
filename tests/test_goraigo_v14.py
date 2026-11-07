@@ -106,4 +106,5 @@ _, lay15, fails15 = _compose("slider_fan", g15["params"], _load(g15["source_id"]
 assert not fails15, [f.line() for f in fails15]
 assert any(t.text and t.text.endswith("版 15") for t in lay15["texts"]), "題が版 15 でない"
 assert _tpl.check_range({**p15, "stick_fix": "nail"}) and not _tpl.check_range(p15)  # 留める物は tape と glue だけ
+assert _tpl.spec()["stick_fix"] == ("tape", "glue")  # 仕様の道具にも選び肢を出す（見直しの指摘）
 print("ok 御来迎 v15（テープを使わず、木工用ボンドで割り箸を貼る・部品は v14 と同じ）")
