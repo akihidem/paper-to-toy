@@ -98,7 +98,11 @@ assert tiger["bom"] == {"metal": [], "resin": [], "unlisted": []} and tiger["pre
 assert ways._premise_of(["油粘土 3g", "油ねんどの玉（直径 8mm）"], True) == {"metal": [], "resin": [], "unlisted": []}
 # 使ってよいとされたのは油粘土だけ。ほかの粘土は一覧に無い側、樹脂粘土は樹脂の側にも出る（見直しの指摘）
 assert ways._premise_of(["石粉粘土"], True) == {"metal": [], "resin": [], "unlisted": ["粘土"]}
-assert ways._premise_of(["樹脂粘土"], True) == {"metal": [], "resin": ["樹脂"], "unlisted": ["粘土"]}
+assert ways._premise_of(["樹脂粘土"], True) == {"metal": [], "resin": ["樹脂粘土"], "unlisted": []}  # 1 つの材料として樹脂の側だけ
+# 1 つの材料の名は、3 つの分けのどれか 1 つにだけ出る（2 つの語が入った名を、別々の分けに 2 度数えない）
+for name in ("樹脂粘土", "ビニールテープ", "アルミの針金", "紙と針金", "油ねんどの玉か木の玉"):
+    got = ways._premise_of([name], True)
+    assert sum(1 for v in got.values() if v) <= 1, (name, got)
 assert pr[("helix", "bdna")]["within"] is True  # 竹串と台の油粘土だけ
 # 御来迎（押し上げる形）: 割り箸は木で使ってよい。割り箸を留めるセロハンテープは、部品表に無く用意する物の文に出る
 assert pr[("slider_fan", "rise")]["bom"] == {"metal": [], "resin": [], "unlisted": []} and pr[("slider_fan", "rise")]["prep"]["resin"] == ["セロハンテープ"]
