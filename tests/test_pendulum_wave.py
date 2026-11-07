@@ -102,6 +102,8 @@ with tempfile.TemporaryDirectory() as d:
     assert rc == 0, rc
     pdf = pathlib.Path(d) / "pw.pdf"
     assert check_pdf(pdf, src) == []
+    mid = dict(src, reference=src["reference"][12:40])  # 刷った文の途中（前に「出典:」が無い所）。頭の語ごと探すので見つからない
+    assert [f.where for f in check_pdf(pdf, mid)] == ["出典の文献"], check_pdf(pdf, mid)
     ndl = load_source("NDL-1187053-R0000007-L-balance")
     miss = [f.where for f in check_pdf(pdf, ndl)]
     assert "所蔵" in miss and "永続ID" in miss, miss  # 史料の出典では、今までどおり所蔵の名（HOLDER）と永続 ID を探す

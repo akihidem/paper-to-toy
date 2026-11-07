@@ -39,8 +39,9 @@ def check_pdf(pdf_path, source):
     flat = "".join(out.split())
     # 短い語だけを探すと、本文が欠けても化けても別の所に同じ語が残れば通ってしまう。刷った文をそのまま探す。
     if source.get("reference"):
-        # 科学の模型: 所蔵の代わりに、文献の文がそのまま読める事を見る（所蔵の名と永続 ID は持たない）
-        need = {"出典の文献": source["reference"], "改変": source["modification_note"], "出典ID": source["source_id"], "仮説": HYPOTHESIS}
+        # 科学の模型: 所蔵の代わりに、「出典:」に続く文献の文がそのまま読める事を見る（所蔵の名と永続 ID は持たない）。
+        # 頭の「出典:」ごと探す（文献の文だけだと、頭の語が欠けても、文が別の所に残れば通った。見直しの指摘）
+        need = {"出典の文献": f"出典: {source['reference']}", "改変": source["modification_note"], "出典ID": source["source_id"], "仮説": HYPOTHESIS}
     else:
         need = {
             "所蔵": HOLDER,
