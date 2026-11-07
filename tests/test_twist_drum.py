@@ -193,9 +193,11 @@ assert t.SKEWER_USABLE == t.SKEWER_LEN - 2 * t.SKEWER_POINT and t.stick_cut(P) <
 # 18. 柱の足の印は、黒い閉じた四角（切る線に見える）でなく、茶色のかぎの印
 marks = [a for a in {q.key: q for q in t.parts(K)}["base"].art if a["kind"] == "line"]
 assert len(marks) == 4 and all(a["stroke"] == t.BAND and len(a["pts"]) == 3 for a in marks)
-# 19. 諫鼓の用意する物にカッターとテープ、組み方に棒を切って束ねる手順がある（長さは部品表と同じ式）
+# 19. 諫鼓の用意する物にカッターと棒を縛る糸、組み方に棒を切って束ねる手順がある（長さは部品表と同じ式）。
+#     棒はテープでなく糸で縛る（材料の前提でテープは樹脂の側。2026-11-08 の型紙の直し）
 m = " ".join(t.materials(K))
-assert "カッター" in m and "テープ" in m
+assert "カッター" in m and "テープ" not in m and "棒を縛る" in m, m
+assert any("糸で 3 か所をきつく縛って" in x for x in t.steps(K))
 assert nums(" ".join(t.steps(K)), r"竹ぐし 2 本を (\d+(?:\.\d+)?)mm に切り") == [t.rod_length(K)]
 # ---- 最終差分の独立レビュー（2026-11-05）の指摘を押さえる行 ----
 # 20. 留め具は刷った面を内にして（真ん中の糊の印を棒に当てて）巻く。両端を棒の真上で立てると、2 枚の旗は刷った面どうしが向き合い、端の糊の印が相手に当たる（折りの種類は 33）。

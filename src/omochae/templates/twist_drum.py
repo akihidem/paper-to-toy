@@ -95,6 +95,8 @@ CORD_SPARE = 30  # 玉の糸を切る時に、糸の長さ（結び目から玉�
 STEP_COL_W, STEP_SIZE, STEP_LINES_MAX, STEP_LINES_KANKO = 144.0, 3.6, 16, 41
 
 
+ROD_TIE_MM = 300  # 引く棒を縛る糸の長さの見込み（3 か所 × 約 80mm ＋ 結ぶ余り）。用意する物の文にだけ書く
+
 def stick_cut(p):
     """柄の竹串を切る長さ ＝ 胴の下の柄 ＋ 胴の直径 ＋ 胴の上へ出す長さ。部品表と組み方の文はこの 1 つの式から書く。
     切らずに 180mm のまま通すと、上を決めた分だけ下が余り、柄の巻き紙（柄より 2mm 短い）と合わなかった。"""
@@ -438,7 +440,8 @@ def materials(p):
     by = {r["key"]: r for r in bom(p)}
     if p["face"] == "kanko":
         # カッターは穴と竹串の両方に使うので 1 行にまとめる（2 行に分けると、同じ道具が 2 つ要るように読める）
-        return [f"{by['band']['material']}を 1 枚", "のり、はさみ、定規、セロハンテープ、まち針、えんぴつ", "カッター（台と帯の四角い穴と、竹ぐしを切る道具。大人が使います。竹ぐしはニッパーでも切れます）",
+        # 引く棒はテープでなく糸で縛ってまとめる（材料の前提でテープは樹脂の側。設計の条件・2026-11-07）。縛る糸を足した
+        return [f"{by['band']['material']}を 1 枚", "のり、はさみ、定規、まち針、えんぴつ", f"もめんの糸（14 引く棒を縛る分。約 {ROD_TIE_MM}mm）", "カッター（台と帯の四角い穴と、竹ぐしを切る道具。大人が使います。竹ぐしはニッパーでも切れます）",
                 by["peg"]["material"], by["rod"]["material"], f"{by['cord']['material']}と{by['pull']['material']}", by["bead"]["material"]]
     return [f"{by['band']['material']}を 1 枚", "のり、はさみ、定規、まち針", CUT_TOOL, by["stick"]["material"], f"{by['cord']['material']}を 2 本", f"{by['bead']['material']}を 2 つ"]
 
@@ -941,7 +944,7 @@ def bom_kanko(p):
         {"number": 11, "key": "base", "name": "台", "qty": 1, "material": paper, "substituted": True, "original_guess": "木の板（図の形からの推定）", "reason": why},
         {"number": 12, "key": "wheel", "name": "花車", "qty": 1, "material": paper, "substituted": True, "original_guess": "紙（図の形からの推定）", "reason": why},
         {"number": 13, "key": "peg", "name": "花車の軸", "qty": 1, "material": f"竹ぐし（長さ {peg:g}mm に切る）", "substituted": True, "original_guess": "竹か木（図の形からの推定）", "reason": "家にあり、台の穴で回しやすいため"},
-        {"number": 14, "key": "rod", "name": "引く棒", "qty": 1, "material": f"竹ぐし 2 本（長さ {rod:g}mm、テープでまとめる）", "substituted": True, "original_guess": "竹 2 本（図の形による。図の切り欠きは 16 棒の留め具に置き換えた）【解釈】", "reason": "図の 2 本並びの竹に近く、家にあるため"},
+        {"number": 14, "key": "rod", "name": "引く棒", "qty": 1, "material": f"竹ぐし 2 本（長さ {rod:g}mm、糸で縛ってまとめる）", "substituted": True, "original_guess": "竹 2 本（図の形による。図の切り欠きは 16 棒の留め具に置き換えた）【解釈】", "reason": "図の 2 本並びの竹に近く、家にあるため"},
         {"number": 15, "key": "pull", "name": "巻く糸", "qty": 1, "material": f"もめんの糸（{math.ceil((pull_cord(p) + 2 * CORD_SPARE) / 10) * 10:g}mm）", "substituted": True, "original_guess": "不明（図に見えない）【解釈】", "reason": "棒を引いて軸を回すため"},
         {"number": 16, "key": "rodtab", "name": "棒の留め具", "qty": 1, "material": paper, "substituted": True, "original_guess": "棒の切り欠き（図による）【解釈】", "reason": "竹串に切り欠きを彫るのは難しく、結ぶ所を刷って決めるため"},
         {"number": 17, "key": "gauge", "name": "花車の高さの紙", "qty": 1, "material": paper, "substituted": True, "original_guess": "無し（作るための道具）", "reason": "花車を台の上の面から決まった高さに貼るため"},
@@ -965,7 +968,7 @@ def steps_kanko(p):
             f"竹ぐし 13 を {peg_cut(p):g}mm に切ります。台の丸い穴に通して、下のはしを机につけます",
             f"17 を軸の横に立て、12 花車を台の上の面から {p['peg_height']:g}mm（17 の上のはしの印）にはります。軸の上のはしからは {PEG_TOP}mm 下です。はれたら 17 は外します",
             f"花車の小さい穴に糸を通して、花びらの先に結びます。穴から玉の中心まで {p['k_cord']:g}mm の所に玉を付け、あまりは切ります",
-            f"竹ぐし 2 本を {rod_length(p):g}mm に切ります。縦に重ねてセロハンテープで 3 か所まとめ、14 引く棒にします（真ん中は留め具を巻く所なので、よけます）",
+            f"竹ぐし 2 本を {rod_length(p):g}mm に切ります。縦に重ねて糸で 3 か所をきつく縛ってまとめ、14 引く棒にします（真ん中は留め具を巻く所なので、よけます）",
             f"【解釈】14 を南の壁の穴から北の壁の穴へ通し、北の壁から {rod_north_out(p):g}mm 出します。南の壁の所で、棒にえんぴつで印を付けます（押しこむ時の目印）",
             # 1 文に「どこに・どの向きで・どう巻く」を詰めていたので、文を分けた（どこに合わせるかの数は、前と同じ北のふちの位置）。
             f"【解釈】台の下から、16 棒の留め具を棒に巻いてはります。留め具の北のふちは、棒の北のはしから {rodtab_pos(p):g}mm の所です。"

@@ -93,6 +93,9 @@ assert "梱包テープ" in pr[("float", "none")]["bom"]["resin"] + pr[("float",
 for k in (("balance", "yajirobe"), ("twist_drum", "kiku"), ("twist_drum", "tori"), ("whistle", "rattle")):
     assert pr[k]["within"] is True, (k, pr[k])
 assert not any("ビーズ" in p[w]["resin"] or "消しゴム" in p[w]["resin"] for p in pr.values() for w in ("bom", "prep"))
+# テープを、抜け止めの油粘土（車屏風）と、糸で縛る形（でんでん太鼓の観光）に替えた 2 形も前提の内（答えの ②）
+for k in (("spinner", "screen"), ("twist_drum", "kanko")):
+    assert pr[k]["within"] is True, (k, pr[k])
 # 虎（首の形）: 竹串と重りの油粘土は使ってよい（制作者の言葉「油粘土も使ってよい」）。セロハンテープは用意する物の文にだけ出る
 # （腕を仮に留める、作る途中だけの物）。境目は既定のまま（制作者の言葉「境目は既定のままで」）: テープは樹脂の側
 tiger = pr[("pivot_counterweight", "neck")]
