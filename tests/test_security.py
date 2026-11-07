@@ -73,9 +73,9 @@ with tempfile.TemporaryDirectory() as d:
         h = {k.lower(): v for k, v in res.getheaders()}
         assert res.status == 200, res.status
         assert h.get("x-frame-options") == "DENY" and "frame-ancestors 'none'" in h.get("content-security-policy", ""), h
+        # same-origin で、同じサイトへの form の送りに本当の Origin が付く。no-referrer だと、同じサイトの POST にも
+        # Origin: null が付き、受付が断った（頭なしの Chromium で form を送って確かめた。2026-11-08）
         assert h.get("x-content-type-options") == "nosniff" and h.get("referrer-policy") == "same-origin", h
-        # no-referrer と、同じサイトの POST にも送り元を出さない決まりは使わない（ブラウザが Origin: null を付け、受付が断る）
-        assert h.get("referrer-policy") not in ("no-referrer", "strict-origin", "origin", "no-referrer-when-downgrade"), h
     finally:
         srv.shutdown()
 
