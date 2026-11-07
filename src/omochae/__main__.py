@@ -108,8 +108,13 @@ def generate(template, params, source_id, out, page="A4", version=1, title=None,
 def sheet_version(args, sc):
     """題に刷る型紙の版の番号。--version が先、無ければ場面の version（見本の型紙の版。虎 v7 は 7・御来迎 v14 は 14）、どちらも無ければ 1。
     決める側の決定（2026-11-07）「紙の題の版も見本に番号を持たせる形で」。前は見本から版を渡さず、どの版の紙の題も「版 1」だった
-    （サイトで v7 と出しても紙は「版 1」）。撮影中の虎 v6 の見本には番号を持たせない（刷った紙を変えない）。"""
-    return args.version if args.version is not None else sc.get("version", 1)
+    （サイトで v7 と出しても紙は「版 1」）。撮影中の虎 v6 の見本には番号を持たせない（刷った紙を変えない）。
+    版は 1 以上の整数に限り、ほかは呼び方の誤り（4）にする（見直しの指摘: 場面の null・字・負の数が、そのまま「版 None」などと刷られた）。
+    場面の title は題の全体を置き換えるので、その時は版も title に書く（凍結の場面 pos_long_title のように、題を丸ごと試す場面のため）。"""
+    v = args.version if args.version is not None else sc.get("version", 1)
+    if isinstance(v, bool) or not isinstance(v, int) or v < 1:
+        raise ToolMissing(f"型紙の版（version）は 1 以上の整数にする（{v!r}）")
+    return v
 
 
 def run(args):
@@ -121,7 +126,7 @@ def run(args):
 
 def main():
     ap = Parser(prog="omochae", description="寸法から型紙の SVG・PDF・PNG を作り、描く前と刷った後に検査する。終了: 0 通る / 3 落ちる / 4 検査できない")
-    ap.add_argument("--scenario", help="場面の JSON（template・source_id・params・inject）。examples/ と tests/frozen/scenarios/ の形。渡すと --template・--source・--params は使わない")
+    ap.add_argument("--scenario", help="場面の JSON（template・source_id・params・inject と、あれば version・title）。examples/ と tests/frozen/scenarios/ の形。渡すと --template・--source・--params は使わない")
     # choices で縛らない。--scenario の時は --template を使わないので、併記された値で止めない（知らない名前は run が --params の時だけ落とす）。
     ap.add_argument("--template", default="slider_fan", help="雛形（" + "・".join(sorted(TEMPLATES)) + "。既定 slider_fan）")
     ap.add_argument("--source", help="data/sources/ の出典の記録の名前（既定は雛形ごと: slider_fan は御来迎、pivot_counterweight は張子の首振り虎）")
