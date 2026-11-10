@@ -7,6 +7,7 @@ import copy
 import json
 import os
 import pathlib
+import re
 import subprocess
 import sys
 import tempfile
@@ -27,6 +28,11 @@ os.environ["OMOCHAE_ENGINE_LEDGER"] = str(tmp / "versions.json")
 def cli(*args):
     env = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
     return subprocess.run([sys.executable, "-m", "omochae.engine_loop", *args], cwd=ROOT, env=env, capture_output=True, text=True, timeout=60)
+
+
+# 版を刻む commit は、この repo に在る物だけを受ける（release が git で確かめる）。今の頭の短い番号と長い番号を使う
+HEAD, FULL = (subprocess.run(["git", "rev-parse", *a, "HEAD"], cwd=ROOT, capture_output=True, text=True, timeout=60, check=True).stdout.strip()
+              for a in (["--short"], []))
 
 
 def variant(change):
@@ -114,10 +120,12 @@ for p in auto:
     assert "まだ採っていない案" in md.split("## 目的")[0] and "立てるのは人" in md.split("## 目的")[0] and PHONE not in md
     assert "`PYTHONPATH=src .venv/bin/python -m omochae.engine_loop release`" in md, "下書きの命令は README と同じ字（python の名前が無い機械でも打てる）"
 assert f"新しい案 {len(auto)} 件" in r.stdout and "Issue の下書き" in r.stdout and all(p["id"] in r.stdout for p in auto)
-# この道具は、外へ何も送らない（Issue を立てるのは人）。網や外の命令を使う呼び出しを持たない
+# この道具は、外へ何も送らない（Issue を立てるのは人）。網を使う呼び出しを持たない。外の命令は、版の注と release の commit が
+# この repo に在るかを確かめる git だけで、時間の上限つきの tools.run_tool を通す
 code = (ROOT / "src/omochae/engine_loop.py").read_text(encoding="utf-8")
 for word in ("import subprocess", "import urllib", "import socket", "import http", "import requests", "os.system", "gh issue"):
     assert word not in code, word
+assert re.findall(r"run_tool\(\[\"([^\"]+)\", \"([^\"]+)\"", code) == [("git", "-C")] and code.count("run_tool(") == 1, "外の命令は git の 1 つだけ"
 # 話した事（声から字にした物）も同じ床で落ちる。話した数（craft_steps）は数なので残る
 spoken = variant(lambda b: b["groups"][0]["texts"].append({"kind": "craft", "step": 3, "text": f"分からなければ {PHONE} に聞いて", "count": 1}))
 assert [f.floor for f in el.check_bundle(spoken)] == ["F13.pii"] and PHONE not in el.check_bundle(spoken)[0].line()
@@ -248,16 +256,16 @@ assert cli("adopt", fid, "--by", "作る人").returncode == 3
 
 # 7. 次の版: commit と人が要る。刻むと、版の番号・採った案・commit が台帳に残り、予定は空になる。同じ案を 2 度刻めない
 assert cli("release", "--by", "作る人").returncode == 3
-assert cli("release", "--commit", "abc1234").returncode == 3
-assert cli("release", "--commit", "abc1234", "--by", "作る人", "--sheet-set", "slider_fan").returncode == 3
-r = cli("release", "--commit", "abc1234", "--by", "作る人", "--sheet-set", "slider_fan=goraigo-v11")
+assert cli("release", "--commit", HEAD).returncode == 3
+assert cli("release", "--commit", HEAD, "--by", "作る人", "--sheet-set", "slider_fan").returncode == 3
+r = cli("release", "--commit", HEAD, "--by", "作る人", "--sheet-set", "slider_fan=goraigo-v11")
 assert r.returncode == 0 and "版 1" in r.stdout, r.stdout + r.stderr
 led = el.ledger()
-assert led["next"] == [] and [(v["version"], v["commit"], [p["id"] for p in v["proposals"]]) for v in led["versions"]] == [(1, "abc1234", [sid])]
+assert led["next"] == [] and [(v["version"], v["commit"], [p["id"] for p in v["proposals"]]) for v in led["versions"]] == [(1, HEAD, [sid])]
 assert led["versions"][0]["sheet_sets"] == {"slider_fan": "goraigo-v11"}
 assert json.loads((tmp / "local/proposals" / f"{sid}.json").read_text(encoding="utf-8"))["status"] == "released"
-assert cli("release", "--commit", "abc1234", "--by", "作る人").returncode == 3  # 採った案が無いまま刻まない
-assert cli("adopt", mid, "--by", "作る人").returncode == 0 and cli("release", "--commit", "def5678", "--by", "作る人").returncode == 0
+assert cli("release", "--commit", HEAD, "--by", "作る人").returncode == 3  # 採った案が無いまま刻まない
+assert cli("adopt", mid, "--by", "作る人").returncode == 0 and cli("release", "--commit", FULL, "--by", "作る人").returncode == 0
 assert [v["version"] for v in el.ledger()["versions"]] == [1, 2]
 broken = el.ledger()
 broken["next"].append({"id": sid, "target": {}, "title": "", "numbers": {}})
@@ -457,7 +465,7 @@ assert cli("adopt", top, "--by", "作る人").returncode == 0
 next_up = {p["id"]: p for p in el.ledger()["next"]}
 assert next_up[pin]["finding"] == "軸の穴は、羽の幅に合わせて大きめに取る" and "finding" not in next_up[top]
 # 版は玩具ごとにも刻める（雛形 id.形）。刻むと、当たる玩具の出典が台帳に残り、版ごとの数はその紙の行にだけ版が並ぶ
-r = cli("release", "--commit", "abc1234", "--by", "作る人", "--sheet-set", "spinner.pinwheel=spin-v1", "--sheet-set", "slider_fan=goraigo-v10", "--sheet-set", "no_such=x")
+r = cli("release", "--commit", HEAD, "--by", "作る人", "--sheet-set", "spinner.pinwheel=spin-v1", "--sheet-set", "slider_fan=goraigo-v10", "--sheet-set", "no_such=x")
 assert r.returncode == 0, r.stderr
 ver = el.ledger()["versions"][-1]
 assert ver["sources"]["spinner.pinwheel"] == ["NDL-1187053-R0000014-L-spinner"] and ver["sources"]["slider_fan"] == ["NDL-1187053-R0000005-L"] and ver["sources"]["no_such"] == []
@@ -483,14 +491,14 @@ assert [p["id"] for p in el.ledger()["next"]] == ["EP-0005", "EP-0006"]
 os.environ["OMOCHAE_ENGINE_LOOP"] = str(tmp / "local5")
 os.environ["OMOCHAE_ENGINE_LEDGER"] = str(tmp / "versions5.json")
 (tmp / "versions5.json").write_text(json.dumps({"versions": [], "next": [{**row(pid), "adopted_at": "2026-11-06"} for pid in ("EP-0001", "EP-0002", "EP-0003")]}, ensure_ascii=False), encoding="utf-8")
-assert cli("release", "--commit", "abc1234", "--by", "作る人", "--proposal", "EP-0009").returncode == 3, "次の版の予定に無い案は刻まない"
-assert cli("release", "--commit", "abc1234", "--by", "作る人", "--proposal", "x").returncode == 3, "案の番号の形でない"
+assert cli("release", "--commit", HEAD, "--by", "作る人", "--proposal", "EP-0009").returncode == 3, "次の版の予定に無い案は刻まない"
+assert cli("release", "--commit", HEAD, "--by", "作る人", "--proposal", "x").returncode == 3, "案の番号の形でない"
 assert [p["id"] for p in el.ledger()["next"]] == ["EP-0001", "EP-0002", "EP-0003"] and not el.ledger()["versions"], "落ちた時は台帳に触らない"
-r = cli("release", "--commit", "abc1234", "--by", "作る人", "--proposal", "EP-0003", "--proposal", "EP-0001", "--sheet-set", "slider_fan=goraigo-v11")
+r = cli("release", "--commit", HEAD, "--by", "作る人", "--proposal", "EP-0003", "--proposal", "EP-0001", "--sheet-set", "slider_fan=goraigo-v11")
 assert r.returncode == 0, r.stderr
 led5 = el.ledger()
 assert [p["id"] for p in led5["versions"][-1]["proposals"]] == ["EP-0001", "EP-0003"] and [p["id"] for p in led5["next"]] == ["EP-0002"]
-assert cli("release", "--commit", "abc1234", "--by", "作る人").returncode == 0 and [p["id"] for p in el.ledger()["versions"][-1]["proposals"]] == ["EP-0002"], "選ばなければ全部（前と同じ）"
+assert cli("release", "--commit", HEAD, "--by", "作る人").returncode == 0 and [p["id"] for p in el.ledger()["versions"][-1]["proposals"]] == ["EP-0002"], "選ばなければ全部（前と同じ）"
 
 # 16. 雛形をまたぐ困り事の種類に、穴・足りない部品・手順と説明・接着を足した（11-06 のワークショップの感想 18 件で、制作者が挙げた
 # 「穴の位置と大きさ・部品・手順の少なさ・接着」が、前の語では 1 つも共有の案にならなかった）。2 つの雛形で出たら共有の案になる

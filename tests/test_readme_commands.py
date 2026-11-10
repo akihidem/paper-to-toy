@@ -122,6 +122,11 @@ git = shutil.which("git")
 if git:  # README の手順で何が変わるかを、打つ前の木と比べる
     for cmd in (["init", "-q"], ["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "before"]):
         subprocess.run(["git", *cmd], cwd=repo, env=GIT_ENV, check=True, capture_output=True)
+    # release は、この repo に在る commit だけを受ける（改善の輪が git で確かめる）。<番号> は、複製の打つ前の commit
+    PLACEHOLDER["<番号>"] = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=repo, env=GIT_ENV, check=True, capture_output=True,
+                                           text=True).stdout.strip()
+else:  # git の無い機械では commit を確かめられないので、release は刻まずに断るのが正しい
+    RC["omochae.engine_loop release"] = 3
 
 # 1. 囲みの中の命令を順に打つ
 ran = 0

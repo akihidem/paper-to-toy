@@ -30,6 +30,7 @@
 """
 import argparse
 import datetime
+import functools
 import json
 import os
 import pathlib
@@ -39,8 +40,9 @@ import sys
 
 from .compose import TEMPLATES
 from .feedback import _md_text, _one_line, has_pii
-from .model import Failure
+from .model import Failure, ToolMissing
 from .sheets import reading_of, source_of
+from .tools import run_tool
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCHEMA = "omochae.making-bundle/1"
@@ -122,21 +124,43 @@ def has_contact(text):
 
 # 連絡先の形がある時の知らせ（束の文・名の欄・版の注で同じ字）
 CONTACT_JA = "連絡先の形（数字の多い所か、@・メール・電話・URL などの語）がある"
-# 決まった形の番号。数字が多く、そのまま has_contact に当てると「数字の多い所」に当たるので、この形だけを伏せてから見る。
-# - 出典の ID（NDL-1187053-R0000014）: サイトは紙を「出典の ID.仮説」と名付けるので、伏せないと紙の名のある束を全部断る。名の欄で伏せるのはこれだけ。
-# - commit の番号（英字を含む 16 進の 7〜40 字）と Issue の番号（#106）: 台帳の今の注は 7 つ中 6 つがこれを書く。版の注でだけ伏せる。
-# 伏せる形は狭く保つ（伏せる所に番号を隠させないため）: 出典の ID は桁の数と前後まで決め、数字だけの並び（電話・郵便番号）は
-# commit の形に入れず、続けて並べた Issue の番号（#090#1234）は伏せない
-SOURCE_ID = r"(?<![0-9A-Za-z])NDL-[0-9]{7}-R[0-9]{7}(?![0-9])"
-NAME_IDS = re.compile(SOURCE_ID)
-NOTE_IDS = re.compile(SOURCE_ID + r"|(?<![0-9A-Za-z])(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}(?![0-9A-Za-z])|(?<![0-9A-Za-z#])#[0-9]{1,5}(?![0-9#])")
+# 決まった形の番号は数字が多く、そのまま has_contact に当てると「数字の多い所」に当たるので、在ると確かめた物だけを伏せてから見る。
+# 形だけで伏せると、その形の中に好きな数字を入れて番号を運べた（NDL- の後の 14 桁・英字を 1 つ足した 16 進・区切りを挟んで並べた # の番号）。
+# - 出典の頁の ID（NDL-1187053-R0000014）: サイトは紙を「出典の ID.仮説」と名付ける。data/sources に今ある頁の ID だけを伏せる（名の欄と版の注）。
+# - commit の番号: 版の注に書く（台帳の今の注は 7 つ中 6 つ）。この repo に在る commit だけを伏せる。確かめられない時は伏せない（断る側）。
+# - Issue の番号（#106）: 版の注に書く。#1〜#9999 の 1 つずつだけを伏せ、区切りや空白だけを挟んで 2 つ以上並ぶ物は伏せない。
+# 伏せた所は「-」にする（消すと、前後の字がつながったり、ドメインの前の字が無くなって「.com」の形を見逃したりする）
+SOURCE_PAGE = re.compile(r"(?<![0-9A-Za-z])NDL-[0-9]{7}-R[0-9]{7}(?![0-9])")
+HEX = re.compile(r"(?<![0-9A-Za-z])[0-9a-f]{7,40}(?![0-9A-Za-z])")
+ISSUE_REFS = re.compile(r"(?<![0-9A-Za-z#])#[1-9][0-9]{0,3}(?:(?:[^\w#]|_)*#[1-9][0-9]{0,3})*(?![0-9])")
 
 
-def _has_contact_outside_ids(text, ids=NAME_IDS):
-    """名の欄（雛形の id・刷った組・紙・出し元の名）と版の注に、連絡先の形があるか。見方は has_contact と同じで、決まった形の番号
-    （名は NAME_IDS、注は NOTE_IDS）だけを先に伏せる。名は案の題を通って、注はそのまま、git に入る版の台帳
+@functools.lru_cache(maxsize=1)
+def _source_pages():
+    """data/sources に今ある出典の頁の ID（ファイルの名の頭）。"""
+    return frozenset(m.group() for p in (ROOT / "data" / "sources").glob("*.json") for m in [SOURCE_PAGE.match(p.stem)] if m)
+
+
+@functools.lru_cache(maxsize=256)
+def _is_commit(token):
+    """この repo に在る commit か（git cat-file。時間の上限は tools の上限）。git が無い・返らない・確かめられない時は、
+    在ると言わない（伏せない・版を刻まない側に倒す）。token は 16 進の字だけなので、git の印として読まれない。"""
+    try:
+        run_tool(["git", "-C", str(ROOT), "cat-file", "-e", f"{token}^{{commit}}"], "git")
+    except ToolMissing:
+        return False
+    return True
+
+
+def _has_contact_outside_ids(text, note=False):
+    """名の欄（雛形の id・刷った組・紙・出し元の名）と版の注（note=True）に、連絡先の形があるか。見方は has_contact と同じで、
+    在ると確かめた決まった形の番号だけを先に伏せる。名は案の題を通って、注はそのまま、git に入る版の台帳
     （data/engine/versions.json）に写るので、作った人の文と同じ見方を当てる（セキュリティの点検 2026-11-07）。"""
-    return has_contact(ids.sub("", str(text)))
+    t = SOURCE_PAGE.sub(lambda m: "-" if m.group() in _source_pages() else m.group(), str(text))
+    if note:
+        t = HEX.sub(lambda m: "-" if _is_commit(m.group()) else m.group(), t)
+        t = ISSUE_REFS.sub(lambda m: "-" if m.group().count("#") == 1 else m.group(), t)
+    return has_contact(t)
 
 
 def _count(v, top=MAX_COUNT):
@@ -672,6 +696,10 @@ def release(commit, by, sheet_sets=None, note="", only=None):
     out = []
     if not (isinstance(commit, str) and COMMIT.fullmatch(commit)):
         out.append(Failure("F13.version", "commit", "commit の番号（16 進の 7〜40 字）が要る"))
+    elif not _is_commit(commit):
+        # 形だけだと、数字だけの番号（電話の形）も commit として台帳に入った。短い番号は数字だけの事もある（6877522）ので、
+        # 形では分けず、この repo に在るかで見る（セキュリティの点検 2026-11-07）
+        out.append(Failure("F13.version", "commit", "この repo に在る commit の番号が要る（確かめられない時も刻まない）"))
     if not (by or "").strip():
         out.append(Failure("F13.human", "by", "刻む人の名前が要る"))
     sheet_sets = dict(sheet_sets or {})
@@ -680,7 +708,7 @@ def release(commit, by, sheet_sets=None, note="", only=None):
     elif any(_has_contact_outside_ids(x) for kv in sheet_sets.items() for x in kv):
         out.append(Failure("F13.version", "sheet_sets", CONTACT_JA))
     note = str(note or "")[:MAX_TEXT]  # 台帳に書く字（長い注は切る。前と同じ）に当てる
-    if _has_contact_outside_ids(note, NOTE_IDS):
+    if _has_contact_outside_ids(note, note=True):
         out.append(Failure("F13.version", "note", CONTACT_JA))
     led = ledger()
     if not led.get("next"):

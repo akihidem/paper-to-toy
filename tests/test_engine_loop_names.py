@@ -2,7 +2,9 @@
 名の欄（束の from・current_sets の鍵と値・群の template・sheet_set・paper）と release の sheet_sets の鍵と値・note は、
 案の題や版の台帳（data/engine/versions.json。git に入る）に写る。作った人の文と同じ見方で、連絡先の形があれば断る。
 誤って止めない事も見る: 今の見本・試験・台帳・雛形の一覧にある名と、サイトの紙の名の形（出典の ID.仮説）と、台帳の今の注は全部通る。
-出典の ID（名と注）・commit の番号と Issue の番号（注だけ）は数字が多いので、その決まった形だけを伏せてから見る。伏せる形に番号を隠せない事も見る。"""
+出典の頁の ID（名と注）・commit の番号と Issue の番号（注だけ）は数字が多いので、在ると確かめた物だけを伏せてから見る
+（data/sources に今ある頁・この repo に在る commit・1 つずつの #1〜#9999）。伏せる所に番号を隠せない事と、
+release の commit も、この repo に在る物だけを受ける事も見る。"""
 import copy
 import json
 import os
@@ -32,6 +34,9 @@ DIGITS = "".join(("090", "1234", "5678"))
 DOMAIN = ".".join(("yamada", "example", "jp"))
 CONTACTS = (PHONE, DIGITS, DOMAIN, "twitter" + "_yamada", "line" + "_taro_1")
 assert all(el.NAME.fullmatch(c) and el.has_contact(c) for c in CONTACTS)
+# 版を刻む commit は、この repo に在る物（今の頭）を使う
+git = lambda *a: subprocess.run(["git", *a], cwd=ROOT, capture_output=True, text=True, timeout=60, check=True).stdout.strip()
+HEAD, FULL = git("rev-parse", "--short", "HEAD"), git("rev-parse", "HEAD")
 
 
 def cli(*args):
@@ -82,12 +87,12 @@ led0 = {"versions": [], "next": [row("EP-0001")]}
 (tmp / "versions.json").write_text(json.dumps(led0, ensure_ascii=False), encoding="utf-8")
 for sheet_sets, note, where in (({"slider_fan": PHONE}, "", "sheet_sets"), ({"slider_fan." + DIGITS: "goraigo-v11"}, "", "sheet_sets"),
                                 ({"slider_fan": "goraigo-v11"}, f"連絡は {PHONE} へ", "note"), ({}, f"{DOMAIN} に聞いた", "note"),
-                                ({}, "合体 " + DIGITS, "note")):  # 数字だけの並びは commit の番号の形に入れない（伏せない）
-    n, fails = el.release("abc1234", "作る人", sheet_sets, note)
+                                ({}, "合体 " + DIGITS, "note")):  # 数字だけの並びは、この repo の commit でないので伏せない
+    n, fails = el.release(HEAD, "作る人", sheet_sets, note)
     assert n is None and [(f.floor, f.where, f.message) for f in fails] == [("F13.version", where, PII)], (sheet_sets, note, [f.line() for f in fails])
     assert not any(PHONE in f.line() or DIGITS in f.line() for f in fails)
 assert json.loads((tmp / "versions.json").read_text(encoding="utf-8")) == led0
-r = cli("release", "--commit", "abc1234", "--by", "作る人", "--sheet-set", "slider_fan=goraigo-v11", "--note", f"電話 {PHONE}")
+r = cli("release", "--commit", HEAD, "--by", "作る人", "--sheet-set", "slider_fan=goraigo-v11", "--note", f"電話 {PHONE}")
 assert r.returncode == 3 and "F13.version" in r.stderr and PHONE not in r.stdout + r.stderr, (r.returncode, r.stderr)
 assert json.loads((tmp / "versions.json").read_text(encoding="utf-8")) == led0
 
@@ -136,13 +141,52 @@ for i, v in enumerate(REAL_LEDGER["versions"], 1):
     assert el.ledger()["versions"][-1]["note"] == v["note"][:el.MAX_TEXT] and el.ledger()["versions"][-1]["sheet_sets"] == v["sheet_sets"]
 assert len(REAL_LEDGER["versions"]) == 7
 
-# 5. 伏せる形は狭い: 出典の ID の桁が違う物・続けて並べた Issue の番号・英字の無い数字の並びは伏せず、番号を隠せない
-# 名の欄で伏せるのは出典の ID だけ（commit の形は伏せないので、英字を前に付けた番号も断る）
-for name in ("NDL-" + DIGITS + "-R0000014", "NDL-1187053-R" + DIGITS, "a" + DIGITS, "cafe-" + DIGITS):
+# 5. 伏せるのは、在ると確かめた物だけ（形だけで伏せると、その形の中に番号を入れて運べた）
+# 名の欄: 伏せるのは data/sources に今ある出典の頁の ID だけ。無い頁・桁の違う物・英字を前に付けた番号は伏せずに断る
+for name in ("NDL-" + "0901234" + "-R" + "5678000", "NDL-" + "0901234" + "-R" + "5678000" + ".H-A", "NDL-1187053-R0000099-L.H-A",
+             "NDL-" + DIGITS + "-R0000014", "NDL-1187053-R" + DIGITS, "a" + DIGITS, "cafe-" + DIGITS):
     assert [f.message for f in el.check_bundle(with_name("groups[0].paper", name))] == [PII], name
-for note in ("#" + "#".join(("090", "1234", "5678")), "commit " + DIGITS, "#" + DIGITS):
+assert "NDL-1187053-R0000014" in el._source_pages() and "NDL-1187053-R0000099" not in el._source_pages()
+os.environ["OMOCHAE_ENGINE_LEDGER"] = str(tmp / "versions.json")
+# 版の注: commit は、この repo に在る物だけを伏せる（英字を 1 つ足した番号・ドメインの前の 16 進は伏せない）。
+# Issue の番号は 1 つずつだけを伏せ、区切りや空白だけを挟んで並べた物は伏せない
+for note in ("#" + "#".join(("090", "1234", "5678")), "commit " + DIGITS, "#" + DIGITS, f"連絡は {DIGITS}a へ", "badface1" + ".com", "deadbeef" + ".jp",
+             "-".join("#" + x for x in ("090", "1234", "5678")), " ".join("#" + x for x in ("090", "1234", "5678")),
+             " ".join("#" + x for x in ("1234", "5678", "9012")), "・".join("#" + x for x in ("1234", "5678"))):
+    n, fails = el.release(HEAD, "作る人", {}, note)
+    assert n is None and [f.where for f in fails] == ["note"], (note, [f.line() for f in fails])
+# 在る commit と 1 つずつの Issue の番号は伏せる（台帳の今の注の書き方。4 で全部を見た）
+for note in (f"合体 {FULL}", f"#106・合体 {HEAD}", f"（#117・合体 {HEAD} と #122・合体 {FULL[:8]}）"):
+    assert not el._has_contact_outside_ids(note, note=True), note
+assert json.loads((tmp / "versions.json").read_text(encoding="utf-8")) == led0
+
+# 6. release の commit も、この repo に在る物だけを受ける（形だけだと、数字だけの番号が commit として台帳に入った）。
+# 短い番号は数字だけの事もあるので、形では分けない（この repo の、数字だけの短い番号は通る）
+for commit in (DIGITS, "abc1234", "0" * 40):
+    n, fails = el.release(commit, "作る人", {"slider_fan": "goraigo-v11"}, "")
+    assert n is None and [(f.floor, f.where) for f in fails] == [("F13.version", "commit")], (commit, [f.line() for f in fails])
+    assert DIGITS not in " ".join(f.line() for f in fails)
+r = cli("release", "--commit", DIGITS, "--by", "作る人")
+assert r.returncode == 3 and "F13.version" in r.stderr and DIGITS not in r.stdout + r.stderr, (r.returncode, r.stderr)
+assert json.loads((tmp / "versions.json").read_text(encoding="utf-8")) == led0
+digit_only = next((c for c in git("log", "--format=%h", "--abbrev=7", "-n", "2000").split() if re.fullmatch(r"[0-9]{7}", c)), None)
+if digit_only:  # 浅い複製で見つからない時は見ない
+    os.environ["OMOCHAE_ENGINE_LEDGER"] = str(tmp / "versions3.json")
+    (tmp / "versions3.json").write_text(json.dumps(led0, ensure_ascii=False), encoding="utf-8")
+    assert el.release(digit_only, "作る人", {}, "") == (1, []), digit_only
+    assert el.ledger()["versions"][0]["commit"] == digit_only
     os.environ["OMOCHAE_ENGINE_LEDGER"] = str(tmp / "versions.json")
-    n, fails = el.release("abc1234", "作る人", {}, note)
-    assert n is None and [f.where for f in fails] == ["note"], note
+# git が無い（確かめられない）時は、在ると言わない: commit は伏せず、版も刻まない
+path = os.environ.get("PATH", "")
+os.environ["PATH"] = str(tmp / "no-bin")
+el._is_commit.cache_clear()
+try:
+    assert el._has_contact_outside_ids(f"合体 {FULL}", note=True)
+    n, fails = el.release(HEAD, "作る人", {}, "")
+    assert n is None and [f.where for f in fails] == ["commit"], [f.line() for f in fails]
+finally:
+    os.environ["PATH"] = path
+    el._is_commit.cache_clear()
+assert json.loads((tmp / "versions.json").read_text(encoding="utf-8")) == led0
 
 print("OK test_engine_loop_names")
