@@ -212,6 +212,16 @@ with tempfile.TemporaryDirectory() as base:
         packed = objstm([(2, CAIRO + b" " + old)]) + objstm([(2, CAIRO + b" " + new)])
         (base / "update.pdf").write_bytes(b"%PDF-1.7\n" + packed + b"trailer\n<< /Info 2 0 R >>\n%%EOF\n")
         assert entry._ours_pdf(base / "update.pdf") is want, ("object stream の形", new)
+    # 3b'. 書き足した新しい Info が読めない形（字の中の << >>・入れ子の辞書）の時は、古い Info（この入口の作り手と時刻）へ戻らず、
+    # この入口の物と言わない（人が直した PDF を、横の SVG・PNG ごと消さないため）
+    for bad_new in (b"/Producer (Okular) /Title (memo << draft >> v2)", b"/Producer (Okular) /X << /Y 1 >>"):
+        plain = (b"1 0 obj\n<< " + CAIRO + b" " + EPOCH + b" >>\nendobj\ntrailer\n<< /Info 1 0 R >>\n"
+                 + b"1 0 obj\n<< " + bad_new + b" >>\nendobj\ntrailer\n<< /Info 1 0 R >>\n")
+        (base / "update.pdf").write_bytes(b"%PDF-1.4\n" + plain + b"%%EOF\n")
+        assert entry._ours_pdf(base / "update.pdf") is False, ("圧縮しない形の読めない新しい Info", bad_new)
+        packed = objstm([(2, CAIRO + b" " + EPOCH)]) + objstm([(2, bad_new)])
+        (base / "update.pdf").write_bytes(b"%PDF-1.7\n" + packed + b"trailer\n<< /Info 2 0 R >>\n%%EOF\n")
+        assert entry._ours_pdf(base / "update.pdf") is False, ("object stream の形の読めない新しい Info", bad_new)
     # 3c. 上限いっぱいの最悪の形の PDF でも、確かめは早く終わり、この入口の物と言わない。前は、>> の無い「5 0 obj <<」が並ぶと候補ごとに
     # 終わりまで読み直し（160 KB で 40 秒ほど）、番号の合わない小さな object stream が多数並ぶと、そのたびにファイルの後ろを全部写した。
     # 時間は広い幅で見る（今は 6 つで 1〜2 秒。混んだ機械でも誤って落ちないよう、子の 120 秒の時間切れだけで見る）

@@ -76,7 +76,7 @@ def _dict_at(data, at):
 
 
 def _objstm_info(data, num):
-    """object stream の中の番号 num の辞書を、(stream の位置, 中身) で前から順に出す。1 つの stream の中でも最後の物を使う。"""
+    """object stream の中の番号 num の辞書を、(stream の位置, 中身) で前から順に出す。1 つの stream の中でも最後の物を使う。中身が読めない時は None。"""
     budget = INFLATE_MAX
     for hit in itertools.islice(re.finditer(rb"/Type\s{0,16}/ObjStm\b", data), OBJSTM_MAX):
         start = data.rfind(b"<<", max(0, hit.start() - DICT_MAX), hit.start())
@@ -101,9 +101,8 @@ def _objstm_info(data, num):
         if first <= len(body) and len(nums) % 2 == 0 and all(re.fullmatch(NUM, t) for t in nums):
             pairs = [(int(n), int(off)) for n, off in zip(nums[0::2], nums[1::2])]
             mine = [off for n, off in pairs if n == num]
-            info = _dict_at(body, first + mine[-1]) if mine else None
-            if info is not None:
-                yield at, info
+            if mine:  # 番号が当たったのに読めない物も、位置を付けて出す（読めない新しい物に、古い物が勝たないため。_pdf_info）
+                yield at, _dict_at(body, first + mine[-1])
         if budget <= 0:
             return
 
@@ -125,9 +124,10 @@ def _pdf_info(data):
     num = int(ref.group(1))
     found = list(_objstm_info(data, num))
     last = re.match(rb"(?s:.*)(?<![0-9])%d\s{1,16}0\s{1,16}obj\b" % num, data)
-    info = _dict_at(data, last.end()) if last else None
-    if info is not None:
-        found.append((last.end(), info))
+    if last:
+        found.append((last.end(), _dict_at(data, last.end())))
+    # 一番後ろの候補が読めない（None）時は、古い候補へ戻らずに None（確かめられない）にする。書き足して直した新しい Info が読めない形の時に、
+    # 古い Info（この入口の作り手と時刻）で読むと、人が直した PDF を、この入口の物と読んでしまう
     return max(found, key=lambda x: x[0])[1] if found else None
 
 
