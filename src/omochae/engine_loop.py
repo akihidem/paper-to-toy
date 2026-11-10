@@ -30,6 +30,7 @@
 """
 import argparse
 import datetime
+import functools
 import json
 import os
 import pathlib
@@ -39,8 +40,9 @@ import sys
 
 from .compose import TEMPLATES
 from .feedback import _md_text, _one_line, has_pii
-from .model import Failure
+from .model import Failure, ToolMissing
 from .sheets import reading_of, source_of
+from .tools import run_tool
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SCHEMA = "omochae.making-bundle/1"
@@ -120,6 +122,88 @@ def has_contact(text):
     return has_pii(str(text)[:MAX_TEXT])
 
 
+# 連絡先の形がある時の知らせ（束の文・名の欄・版の注で同じ字）
+CONTACT_JA = "連絡先の形（数字の多い所か、@・メール・電話・URL などの語）がある"
+# 決まった形の番号は数字が多く、そのまま has_contact に当てると「数字の多い所」に当たるので、在ると確かめた物だけを伏せてから見る。
+# 形だけで伏せると、その形の中に好きな数字を入れて番号を運べた（NDL- の後の 14 桁・英字を 1 つ足した 16 進・区切りを挟んで並べた # の番号）。
+# - 出典の頁の ID（NDL-1187053-R0000014）: サイトは紙を「出典の ID.仮説」と名付ける。data/sources に今ある頁の ID だけを伏せる（名の欄と版の注）。
+# - commit の番号: 版の注に書く（台帳の今の注は 7 つ中 6 つ）。この repo に在る commit か、台帳の版の commit（versions[].commit の頭）だけを
+#   伏せる。台帳は git の中で写しと一緒に動くので、履歴の無い写し（サイトが 1 本の commit で入れた写し・浅い複製・.git の無い写し）でも、
+#   版の commit を書いた注は刻み直せる。注の中の 16 進は数えない（一度書いた 16 進が次の注で伏せられ、2 回の release で番号を運べた）。
+#   どちらでも確かめられない時は伏せない（断る側）。
+# - Issue の番号（#106）: 版の注に書く。台帳の注に書かれた番号か、この repo の履歴の「Merge pull request #N」に在る番号だけを伏せる
+#   （形だけだと、字を 1 つ挟んで #1234 か #5678 と 1 つずつ並べれば番号を運べた）。区切りや空白だけを挟んで 2 つ以上並ぶ物も伏せない。
+# 伏せた所は「-」にする（消すと、前後の字がつながったり、ドメインの前の字が無くなって「.com」の形を見逃したりする）。
+# この式は、うっかり入る連絡先を止める補助で、版の注は刻む人が読む。意図して崩す形（字で区切って在る番号を並べる・台帳の注の # 番号を
+# 使って 2 回にまたがる）は、式では止め切れない（台帳の注の # 番号を数えるのは、履歴の無い写しで今の注を刻み直すため）
+SOURCE_PAGE = re.compile(r"(?<![0-9A-Za-z])NDL-[0-9]{7}-R[0-9]{7}(?![0-9])")
+HEX = re.compile(r"(?<![0-9A-Za-z])[0-9a-f]{7,40}(?![0-9A-Za-z])")
+ISSUE_REFS = re.compile(r"(?<![0-9A-Za-z#])#[1-9][0-9]{0,3}(?:(?:[^\w#]|_)*#[1-9][0-9]{0,3})*(?![0-9])")
+
+
+@functools.lru_cache(maxsize=1)
+def _source_pages():
+    """data/sources に今ある出典の頁の ID（ファイルの名の頭）。"""
+    return frozenset(m.group() for p in (ROOT / "data" / "sources").glob("*.json") for m in [SOURCE_PAGE.match(p.stem)] if m)
+
+
+@functools.lru_cache(maxsize=256)
+def _is_commit(token):
+    """この repo に在る commit か（git cat-file。時間の上限は tools の上限）。git が無い・返らない・確かめられない時は、
+    在ると言わない（伏せない・版を刻まない側に倒す）。token は 16 進の字だけなので、git の印として読まれない。"""
+    try:
+        run_tool(["git", "-C", str(ROOT), "cat-file", "-e", f"{token}^{{commit}}"], "git")
+    except ToolMissing:
+        return False
+    return True
+
+
+@functools.lru_cache(maxsize=1)
+def _merged_prs():
+    """この repo の履歴の「Merge pull request #N」の N（git log。時間の上限は tools の上限）。確かめられない時は空。"""
+    try:
+        r = run_tool(["git", "-C", str(ROOT), "log", "--merges", "--format=%s"], "git")
+    except ToolMissing:
+        return frozenset()
+    return frozenset(re.findall(r"^Merge pull request #([1-9][0-9]{0,3}) ", r.stdout.decode("utf-8", "replace"), re.M))
+
+
+def _ledger_marks():
+    """台帳の版の commit（versions[].commit。注の中の 16 進は数えない）と、注の中の Issue の番号。今の台帳（ledger_path）と、
+    repo の台帳（data/engine/versions.json）の両方から読む。読めない・形の違う台帳は、読めた所までにする（伏せない側に倒す）。"""
+    commits, issues = set(), set()
+    for path in {ledger_path(), ROOT / "data" / "engine" / "versions.json"}:
+        try:
+            for v in _load(path).get("versions", []) if path.exists() else []:
+                if isinstance(v.get("commit"), str) and COMMIT.fullmatch(v["commit"]):
+                    commits.add(v["commit"])
+                if isinstance(v.get("note"), str):
+                    issues.update(re.findall(r"(?<![0-9A-Za-z#])#([1-9][0-9]{0,3})(?![0-9])", v["note"]))
+        except (OSError, ValueError, TypeError, AttributeError):
+            continue
+    return commits, issues
+
+
+def _known_commit(token, ledger_commits):
+    """在る commit か: 台帳の版の commit と同じ commit（長い番号か、その頭の短い番号。token の方が長い物は数えない。後ろに番号を足して
+    運べるため）か、この repo に在る commit（git で確かめる）。"""
+    return any(c.startswith(token) for c in ledger_commits) or _is_commit(token)
+
+
+def _has_contact_outside_ids(text, note=False):
+    """名の欄（雛形の id・刷った組・紙・出し元の名）と版の注（note=True）に、連絡先の形があるか。見方は has_contact と同じで、
+    在ると確かめた決まった形の番号だけを先に伏せる。名は案の題を通って、注はそのまま、git に入る版の台帳
+    （data/engine/versions.json）に写るので、作った人の文と同じ見方を当てる（セキュリティの点検 2026-11-07）。
+    うっかり入る連絡先を止める補助で、版の注は刻む人が読む（字で区切って並べる・2 回にまたがる形は止め切れない）。"""
+    t = SOURCE_PAGE.sub(lambda m: "-" if m.group() in _source_pages() else m.group(), str(text))
+    if note:
+        commits, issues = _ledger_marks()
+        t = HEX.sub(lambda m: "-" if _known_commit(m.group(), commits) else m.group(), t)
+        t = ISSUE_REFS.sub(lambda m: "-" if m.group().count("#") == 1 and (m.group()[1:] in issues or m.group()[1:] in _merged_prs())
+                           else m.group(), t)
+    return has_contact(t)
+
+
 def _count(v, top=MAX_COUNT):
     return isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= top
 
@@ -166,12 +250,16 @@ def check_bundle(b):
         bad("exported_at", "時刻は分まで（秒を持たない）")
     if not (isinstance(b.get("from"), str) and NAME.fullmatch(b["from"])):
         bad("from", "出し元の名は英数字と . - _ で 80 字まで")
+    elif _has_contact_outside_ids(b["from"]):
+        bad("from", CONTACT_JA)
     if "dropped_pii" in b and not _count(b["dropped_pii"]):
         bad("dropped_pii", "落とした文の数は 0 以上の整数")
     cur = b.get("current_sets", {})
     if not (isinstance(cur, dict) and len(cur) <= MAX_GROUPS
             and all(isinstance(k, str) and NAME.fullmatch(k) and isinstance(v, str) and NAME.fullmatch(v) for k, v in cur.items())):
         bad("current_sets", "今の刷った組は、雛形の id と組の名の組")
+    elif any(_has_contact_outside_ids(x) for kv in cur.items() for x in kv):
+        bad("current_sets", CONTACT_JA)
     groups = b.get("groups")
     if not isinstance(groups, list) or len(groups) > MAX_GROUPS:
         bad("groups", f"群は list で {MAX_GROUPS} まで")
@@ -191,6 +279,10 @@ def check_bundle(b):
             bad(f"{w}.sheet_set", "刷った組の形でない（分からない時は空）")
         if not (isinstance(paper, str) and (paper == "" or NAME.fullmatch(paper))):
             bad(f"{w}.paper", "紙の名の形でない（無い時は空）")
+        # 名の形の物だけに当てる（形の外の字は、上で断っている）。名の形でも、番号やメールの崩しは書ける
+        for key, name in (("template", tid), ("sheet_set", ss), ("paper", paper)):
+            if isinstance(name, str) and NAME.fullmatch(name) and _has_contact_outside_ids(name):
+                bad(f"{w}.{key}", CONTACT_JA)
         # 重なりは、3 つが全部字の時だけ見る。字でない値は上の行で形の誤りとして名指し済みで、list や辞書のまま集合に当てると
         # ハッシュできずにトレースバックで落ちた（決まった誤りで返すため。セキュリティの点検 2026-11-07）
         if all(isinstance(x, str) for x in (tid, ss, paper)):
@@ -242,7 +334,7 @@ def check_bundle(b):
             if not (isinstance(t.get("text"), str) and 1 <= len(t["text"]) <= MAX_TEXT):
                 bad(wt, f"文は 1〜{MAX_TEXT} 字")
             elif has_contact(t["text"]):
-                out.append(Failure("F13.pii", wt, "連絡先の形（数字の多い所か、@・メール・電話・URL などの語）がある"))
+                out.append(Failure("F13.pii", wt, CONTACT_JA))
     return out
 
 
@@ -656,11 +748,20 @@ def release(commit, by, sheet_sets=None, note="", only=None):
     out = []
     if not (isinstance(commit, str) and COMMIT.fullmatch(commit)):
         out.append(Failure("F13.version", "commit", "commit の番号（16 進の 7〜40 字）が要る"))
+    elif not _known_commit(commit, _ledger_marks()[0]):
+        # 形だけだと、数字だけの番号（電話の形）も commit として台帳に入った。短い番号は数字だけの事もある（6877522）ので、
+        # 形では分けず、この repo に在るか、台帳の版の commit と同じかで見る（セキュリティの点検 2026-11-07）
+        out.append(Failure("F13.version", "commit", "この repo に在る commit か、台帳の版の commit の番号が要る（確かめられない時も刻まない）"))
     if not (by or "").strip():
         out.append(Failure("F13.human", "by", "刻む人の名前が要る"))
     sheet_sets = dict(sheet_sets or {})
     if not all(isinstance(k, str) and NAME.fullmatch(k) and isinstance(v, str) and NAME.fullmatch(v) for k, v in sheet_sets.items()):
         out.append(Failure("F13.version", "sheet_sets", "刷った組は 雛形の id=組の名（玩具 1 つなら 雛形の id.形=組の名）"))
+    elif any(_has_contact_outside_ids(x) for kv in sheet_sets.items() for x in kv):
+        out.append(Failure("F13.version", "sheet_sets", CONTACT_JA))
+    note = str(note or "")[:MAX_TEXT]  # 台帳に書く字（長い注は切る。前と同じ）に当てる
+    if _has_contact_outside_ids(note, note=True):
+        out.append(Failure("F13.version", "note", CONTACT_JA))
     led = ledger()
     if not led.get("next"):
         out.append(Failure("F13.version", "次の版の予定", "採った案が無い（案が無いまま版を刻まない）"))
@@ -677,7 +778,7 @@ def release(commit, by, sheet_sets=None, note="", only=None):
     chosen = [p for p in led["next"] if not only or p["id"] in only]  # 並びは台帳の順（打った順に左右されない）
     ids = [p["id"] for p in chosen]
     led["versions"].append({"version": n, "commit": commit, "at": _now()[:10], "proposals": [{k: v for k, v in p.items() if k != "adopted_at"} for p in chosen],
-                            "sheet_sets": sheet_sets, "sources": {k: _sources_of(k) for k in sheet_sets}, "note": str(note or "")[:MAX_TEXT]})
+                            "sheet_sets": sheet_sets, "sources": {k: _sources_of(k) for k in sheet_sets}, "note": note})
     led["next"] = [p for p in led["next"] if p["id"] not in ids]
     _dump(ledger_path(), led)
     for pid in ids:
