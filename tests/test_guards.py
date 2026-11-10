@@ -300,12 +300,12 @@ assert re.search(rf'<circle [^>]*r="{neck_r:g}(\.0+)?"', render.to_svg(lay)), "�
 
 # 作業の覚え書きは、追跡している .gitignore だけで外れる（.git/info/exclude は clone に付いてこないので、まっさらな repo で見る）。
 # 機械の共通の ignore（~/.config/git/ignore など。core.excludesFile の既定）も読ませない。そこに同じ名がある機械では、
-# .gitignore に無くても外れて、試験が黙って通るため。手元の環境へ向けた symlink の .venv と .claude も外れる事を見る（中身は手元の絶対のパス）
+# .gitignore に無くても外れて、試験が黙って通るため（git init の雛形の info/exclude も同じなので、雛形を写さない）。手元の環境へ向けた symlink の .venv と .claude も外れる事を見る（中身は手元の絶対のパス）
 if shutil.which("git"):
     env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
     status = ["git", "-c", f"core.excludesFile={os.devnull}", "status", "--porcelain", "--untracked-files=all"]
     with tempfile.TemporaryDirectory() as d:
-        subprocess.run(["git", "init", "-q", d], env=env, check=True)
+        subprocess.run(["git", "init", "-q", "--template=", d], env=env, check=True)
         shutil.copy(ROOT / ".gitignore", d)
         names = ["LANE-BRIEF.md", "LANE-NOTES.md", "LANE-X.md", "lane-issues/a.md", ".claude/CONTEXT.md", "keep.md"]
         for n in names:
@@ -316,7 +316,7 @@ if shutil.which("git"):
         shown = sorted(line[3:] for line in r.stdout.splitlines())
         assert shown == [".gitignore", "keep.md"], f"覚え書きが git status に出た: {shown}"
     with tempfile.TemporaryDirectory() as d:
-        subprocess.run(["git", "init", "-q", d], env=env, check=True)
+        subprocess.run(["git", "init", "-q", "--template=", d], env=env, check=True)
         shutil.copy(ROOT / ".gitignore", d)
         for n in (".venv", ".claude"):
             (pathlib.Path(d) / n).symlink_to(pathlib.Path(tempfile.gettempdir()) / "elsewhere" / n)
