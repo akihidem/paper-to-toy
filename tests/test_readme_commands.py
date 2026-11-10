@@ -37,7 +37,7 @@ PLACEHOLDER = {"<人>": "試す人", "<番号>": "abc1234", "<組の名>": "gora
 _LEDGER = json.loads((ROOT / "data/engine/versions.json").read_text(encoding="utf-8"))
 _TAKEN = [int(p["id"][3:]) for v in _LEDGER["versions"] for p in v.get("proposals", [])] + [int(p["id"][3:]) for p in _LEDGER.get("next", [])]
 PLACEHOLDER["<案の番号>"] = f"EP-{max(_TAKEN, default=0) + 1:04d}"
-# <番号> は、台帳の今の版の commit。release は、この repo に在る commit か台帳に書かれた commit だけを受ける（作り物の番号は断る）。
+# <番号> は、台帳の今の版の commit。release は、この repo に在る commit か台帳の版の commit だけを受ける（作り物の番号は断る）。
 # 台帳は複製と一緒に動くので、複製に git の履歴が無くても打てる
 PLACEHOLDER["<番号>"] = _LEDGER["versions"][-1]["commit"][:7]
 # 受け入れは端末で人が ID を打つ。端末の無いこの試験では、断るのが正しい。

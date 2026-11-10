@@ -30,7 +30,7 @@ def cli(*args):
     return subprocess.run([sys.executable, "-m", "omochae.engine_loop", *args], cwd=ROOT, env=env, capture_output=True, text=True, timeout=60)
 
 
-# 版を刻む commit は、この repo に在る物か、版の台帳に書かれた物だけを受ける。repo の台帳の版の commit（短い番号と長い番号）を使う。
+# 版を刻む commit は、この repo に在る物か、台帳の版の commit だけを受ける。repo の台帳の版の commit（短い番号と長い番号）を使う。
 # 台帳は写しと一緒に動くので、履歴の無い写し・.git の無い写しでも、この試験は git を呼ばずに回る
 _REAL = json.loads((ROOT / "data/engine/versions.json").read_text(encoding="utf-8"))["versions"]
 COMMIT_SHORT, COMMIT_FULL = _REAL[-1]["commit"][:7], _REAL[-2]["commit"]

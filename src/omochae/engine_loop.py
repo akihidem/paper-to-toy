@@ -127,12 +127,15 @@ CONTACT_JA = "連絡先の形（数字の多い所か、@・メール・電話�
 # 決まった形の番号は数字が多く、そのまま has_contact に当てると「数字の多い所」に当たるので、在ると確かめた物だけを伏せてから見る。
 # 形だけで伏せると、その形の中に好きな数字を入れて番号を運べた（NDL- の後の 14 桁・英字を 1 つ足した 16 進・区切りを挟んで並べた # の番号）。
 # - 出典の頁の ID（NDL-1187053-R0000014）: サイトは紙を「出典の ID.仮説」と名付ける。data/sources に今ある頁の ID だけを伏せる（名の欄と版の注）。
-# - commit の番号: 版の注に書く（台帳の今の注は 7 つ中 6 つ）。この repo に在る commit か、版の台帳に書かれた commit（の頭）だけを伏せる。
-#   台帳は git の中で写しと一緒に動くので、履歴の無い写し（サイトが 1 本の commit で入れた写し・浅い複製・.git の無い写し）でも、
-#   今の版と注を刻み直せる。どちらでも確かめられない時は伏せない（断る側）。
+# - commit の番号: 版の注に書く（台帳の今の注は 7 つ中 6 つ）。この repo に在る commit か、台帳の版の commit（versions[].commit の頭）だけを
+#   伏せる。台帳は git の中で写しと一緒に動くので、履歴の無い写し（サイトが 1 本の commit で入れた写し・浅い複製・.git の無い写し）でも、
+#   版の commit を書いた注は刻み直せる。注の中の 16 進は数えない（一度書いた 16 進が次の注で伏せられ、2 回の release で番号を運べた）。
+#   どちらでも確かめられない時は伏せない（断る側）。
 # - Issue の番号（#106）: 版の注に書く。台帳の注に書かれた番号か、この repo の履歴の「Merge pull request #N」に在る番号だけを伏せる
 #   （形だけだと、字を 1 つ挟んで #1234 か #5678 と 1 つずつ並べれば番号を運べた）。区切りや空白だけを挟んで 2 つ以上並ぶ物も伏せない。
-# 伏せた所は「-」にする（消すと、前後の字がつながったり、ドメインの前の字が無くなって「.com」の形を見逃したりする）
+# 伏せた所は「-」にする（消すと、前後の字がつながったり、ドメインの前の字が無くなって「.com」の形を見逃したりする）。
+# この式は、うっかり入る連絡先を止める補助で、版の注は刻む人が読む。意図して崩す形（字で区切って在る番号を並べる・台帳の注の # 番号を
+# 使って 2 回にまたがる）は、式では止め切れない（台帳の注の # 番号を数えるのは、履歴の無い写しで今の注を刻み直すため）
 SOURCE_PAGE = re.compile(r"(?<![0-9A-Za-z])NDL-[0-9]{7}-R[0-9]{7}(?![0-9])")
 HEX = re.compile(r"(?<![0-9A-Za-z])[0-9a-f]{7,40}(?![0-9A-Za-z])")
 ISSUE_REFS = re.compile(r"(?<![0-9A-Za-z#])#[1-9][0-9]{0,3}(?:(?:[^\w#]|_)*#[1-9][0-9]{0,3})*(?![0-9])")
@@ -166,7 +169,7 @@ def _merged_prs():
 
 
 def _ledger_marks():
-    """版の台帳に書かれた commit（版の commit と、注の中の 16 進）と、注の中の Issue の番号。今の台帳（ledger_path）と、
+    """台帳の版の commit（versions[].commit。注の中の 16 進は数えない）と、注の中の Issue の番号。今の台帳（ledger_path）と、
     repo の台帳（data/engine/versions.json）の両方から読む。読めない・形の違う台帳は、読めた所までにする（伏せない側に倒す）。"""
     commits, issues = set(), set()
     for path in {ledger_path(), ROOT / "data" / "engine" / "versions.json"}:
@@ -175,7 +178,6 @@ def _ledger_marks():
                 if isinstance(v.get("commit"), str) and COMMIT.fullmatch(v["commit"]):
                     commits.add(v["commit"])
                 if isinstance(v.get("note"), str):
-                    commits.update(HEX.findall(v["note"]))
                     issues.update(re.findall(r"(?<![0-9A-Za-z#])#([1-9][0-9]{0,3})(?![0-9])", v["note"]))
         except (OSError, ValueError, TypeError, AttributeError):
             continue
@@ -183,14 +185,16 @@ def _ledger_marks():
 
 
 def _known_commit(token, ledger_commits):
-    """在る commit か: 台帳に書かれた commit の頭（token の方が長い物は数えない。後ろに番号を足して運べるため）か、この repo に在る commit。"""
+    """在る commit か: 台帳の版の commit と同じ commit（長い番号か、その頭の短い番号。token の方が長い物は数えない。後ろに番号を足して
+    運べるため）か、この repo に在る commit（git で確かめる）。"""
     return any(c.startswith(token) for c in ledger_commits) or _is_commit(token)
 
 
 def _has_contact_outside_ids(text, note=False):
     """名の欄（雛形の id・刷った組・紙・出し元の名）と版の注（note=True）に、連絡先の形があるか。見方は has_contact と同じで、
     在ると確かめた決まった形の番号だけを先に伏せる。名は案の題を通って、注はそのまま、git に入る版の台帳
-    （data/engine/versions.json）に写るので、作った人の文と同じ見方を当てる（セキュリティの点検 2026-11-07）。"""
+    （data/engine/versions.json）に写るので、作った人の文と同じ見方を当てる（セキュリティの点検 2026-11-07）。
+    うっかり入る連絡先を止める補助で、版の注は刻む人が読む（字で区切って並べる・2 回にまたがる形は止め切れない）。"""
     t = SOURCE_PAGE.sub(lambda m: "-" if m.group() in _source_pages() else m.group(), str(text))
     if note:
         commits, issues = _ledger_marks()
@@ -746,8 +750,8 @@ def release(commit, by, sheet_sets=None, note="", only=None):
         out.append(Failure("F13.version", "commit", "commit の番号（16 進の 7〜40 字）が要る"))
     elif not _known_commit(commit, _ledger_marks()[0]):
         # 形だけだと、数字だけの番号（電話の形）も commit として台帳に入った。短い番号は数字だけの事もある（6877522）ので、
-        # 形では分けず、この repo に在るか、台帳に書かれた commit かで見る（セキュリティの点検 2026-11-07）
-        out.append(Failure("F13.version", "commit", "この repo に在る commit の番号が要る（確かめられない時も刻まない）"))
+        # 形では分けず、この repo に在るか、台帳の版の commit と同じかで見る（セキュリティの点検 2026-11-07）
+        out.append(Failure("F13.version", "commit", "この repo に在る commit か、台帳の版の commit の番号が要る（確かめられない時も刻まない）"))
     if not (by or "").strip():
         out.append(Failure("F13.human", "by", "刻む人の名前が要る"))
     sheet_sets = dict(sheet_sets or {})
