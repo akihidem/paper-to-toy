@@ -10,7 +10,8 @@
    \\uXXXX の形で見せる（改行とタブは残す）。
 5. SVG から PDF を作る時、data: のほかの URL を読まない（cairosvg の既定は file: の手元のファイルを読みに行った）。
 6. 直に使う依存と shapely が引く numpy は、全部 == で版を固定する（numpy は Python の版の印で 2 つに分ける。numpy 2.5 は Python 3.12 以上を
-   求め、init.sh の下限 3.11 と食い違うため。2 つが揃う事は tests/test_requirements_pin.py が見る）。
+   求め、init.sh の下限 3.11 と食い違うため）。印を付けた名は、同じ分け目の >= と < の 2 行にする（片方だけだと、当たらない Python に
+   その名が入らない。2 つの版が解ける事は tests/test_requirements_pin.py が見る）。
 7. git で追う字のファイル（コード・試験・文書・見本）に、見えない文字（Unicode の Cf。文の向きを変える U+202E など）と制御の文字（ESC など）を
    生のまま置かない
    （字の並びをごまかして、読む人に別のコードに見せられる。この試験を足した時、試験の字の中の見えない文字を生で書いてしまったので、
@@ -117,6 +118,10 @@ assert "url_fetcher=data_only_fetcher" in render_src  # 型紙を刷る道がこ
 req = [ln.strip() for ln in (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines() if ln.strip() and not ln.startswith("#")]
 assert len(req) >= 8 and all(re.fullmatch(r'[A-Za-z0-9_.-]+==[0-9][0-9A-Za-z.]*(; python_version (>=|<) "\d+\.\d+")?', ln) for ln in req), req
 assert sum(ln.startswith("numpy==") for ln in req) == 2, req
+marked = {}
+for m in filter(None, (re.fullmatch(r'([A-Za-z0-9_.-]+)==[^;]+; python_version (>=|<) "(\d+\.\d+)"', ln) for ln in req)):
+    marked.setdefault(m.group(1).lower(), []).append((m.group(2), m.group(3)))
+assert all(sorted(op for op, _ in rows) == ["<", ">="] and rows[0][1] == rows[1][1] for rows in marked.values()), marked
 # 7. 字のファイルに見えない文字を生のまま置かない
 import unicodedata  # noqa: E402
 listed = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, text=True)  # 空白のある名も 1 つに読む（見直しの指摘）
