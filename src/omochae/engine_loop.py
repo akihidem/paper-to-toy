@@ -74,6 +74,17 @@ MAX_TEXTS = 2000
 MAX_GROUPS = 500
 MAX_STEP = 40  # 手順の番号の上限。どの雛形の組み方も 40 手順より短い
 MAX_COUNT = 100000  # 数の欄の上限。上限が無いと、数の欄で番号を運べる
+# 束の大きさの上限（バイト。置き場に置く形の JSON で数える）。上限が無いと、大きな束を一度置くだけで、以後の案作りと並べが毎回
+# その束を確かめ直して止まった（セキュリティの点検 2026-11-07）。値の根拠: 今の見本の束は 3.4 KB、サイトの今の書き出しは 1.7 KB。
+# サイトは群 1 つの文を 2000 件・1 つ 300 字までに切るので、それが詰まった群は約 2 MB になる。8 MB は、その詰まった群が 4 つ入る大きさで、
+# 見本の 2000 倍を越える。8 MB の束を確かめるのは、手元で 10〜15 秒ほど（300 字の文を詰めて測った）。
+# record_ids の件数は今までどおり MAX_COUNT まで（束の中の群 1 つの番号の数）。案には番号を写さず、数（record_count）だけを持たせる
+MAX_BUNDLE_BYTES = 8_000_000
+BUNDLE_TOO_LARGE_JA = f"束は {MAX_BUNDLE_BYTES // 1_000_000} MB まで"
+# 受け入れた報告 1 つの大きさの上限（バイト）。上限が無いと、置き場の大きな報告を案作りのたびに全部読んだ。値の根拠: 受付の入口は
+# 送られる文を 20 KB で断り、報告の検査は文の合計を 4000 字までにする。受付が書く報告は、その 4000 字が全部エスケープされる字でも
+# 30 KB に届かない。100 KB は入口の 5 倍で、受付を通った報告を落とさない
+MAX_REPORT_BYTES = 100_000
 NAME = re.compile(r"[A-Za-z0-9_.-]{1,80}")  # 雛形の id・刷った組・出し元の名
 MEASURE = re.compile(r"[a-z_]{1,30}")
 RECORD_ID = re.compile(r"R-[0-9]{4,8}")
@@ -155,6 +166,13 @@ def check_bundle(b):
     連絡先の形のある文は F13.pii で名指しする（何番目の群の何番目の文か、だけ）。take は、その文を落として先へ進む。"""
     if not isinstance(b, dict):
         return [Failure("F13.bundle", "束", "JSON の物（辞書）でない")]
+    # 大きさは、置き場に置く形（_dump と同じ書き方）で先に見る。上限の中なら、置いた後の束も読める（bundles が同じ上限で読む）。
+    # 先に見るのは、上限の外の束で文ごとの連絡先の形を探して、時間をかけないため
+    size = _size(b)
+    if size is None:
+        return [Failure("F13.bundle", "束", "JSON にできない値がある")]
+    if size > MAX_BUNDLE_BYTES:
+        return [Failure("F13.bundle", "束", BUNDLE_TOO_LARGE_JA)]
     out = []
     bad = lambda where, msg: out.append(Failure("F13.bundle", where, msg))
     if set(b) - TOP_KEYS:
@@ -271,6 +289,29 @@ def _load(path):
     return json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
 
 
+class _TooLarge(ValueError):
+    """ファイルが上限より大きい（読めない物の 1 つとして受けられるよう、ValueError の仲間にする）。"""
+
+
+def _load_bundle(path, limit=MAX_BUNDLE_BYTES):
+    """束（と受け入れた報告）のファイルを読む。上限より大きい物は、上限の 1 バイト先までで読むのをやめて _TooLarge
+    （大きなファイルや、終わりの無いファイルを指されても、全部を読もうとして止まらないように）。"""
+    with open(path, "rb") as f:
+        data = f.read(limit + 1)
+    if len(data) > limit:
+        raise _TooLarge(limit)
+    return json.loads(data.decode("utf-8"))
+
+
+def _size(obj):
+    """置き場に置く形（_dump と同じ書き方）の大きさ（バイト）。JSON にできない値（set・bytes・輪になった物・深すぎる入れ子）は None
+    （道具として直に呼ばれた時も、トレースバックでなく決まった誤りで返すため）。"""
+    try:
+        return len(json.dumps(obj, ensure_ascii=False, indent=1).encode("utf-8")) + 1
+    except (TypeError, ValueError, RecursionError):
+        return None
+
+
 def _dump(path, obj, exclusive=False):
     with open(path, "x" if exclusive else "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False, indent=1)
@@ -290,6 +331,9 @@ def take(b):
         dropped += len(g.get("texts", [])) - len(kept)
         groups.append({**g, "texts": kept})
     clean = {**b, "groups": groups, "dropped_pii": b.get("dropped_pii", 0) + dropped}
+    # 置く形で測り直す。dropped_pii の欄を足すと、確かめた束より大きくなる事があり、上限の端で置いた束を bundles が数えなかった
+    if (_size(clean) or MAX_BUNDLE_BYTES + 1) > MAX_BUNDLE_BYTES:
+        return None, [Failure("F13.bundle", "束", BUNDLE_TOO_LARGE_JA)], 0
     path = _dirs()["bundles"] / f"B-{datetime.datetime.now(TZ):%Y%m%d-%H%M}-{secrets.token_hex(4)}.json"
     _dump(path, clean, exclusive=True)
     return path, [], dropped
@@ -300,7 +344,7 @@ def bundles():
     latest = {}
     for p in sorted(_dirs()["bundles"].glob("B-*.json")):
         try:
-            b = _load(p)
+            b = _load_bundle(p)  # 上限より大きい束は、読めない束と同じく数えない
         except (OSError, ValueError, RecursionError):  # 深すぎる入れ子も読めない束（CLI の check・take の読みと同じ受け）
             continue
         if check_bundle(b):
@@ -327,7 +371,7 @@ def report_source():
     out, dropped = {}, 0
     for path in sorted(d.glob("*.json")) if d.is_dir() else []:
         try:
-            r = _load(path)
+            r = _load_bundle(path, MAX_REPORT_BYTES)  # 上限より大きい報告は、読めない報告と同じく数えない
         except (OSError, ValueError, RecursionError):  # 束の置き場と同じく、深すぎる入れ子も読めない物として数えない
             continue
         if not isinstance(r, dict) or check(r):
@@ -377,6 +421,9 @@ def groups(bs):
     今の刷った組は、新しい束の値で読む（組は進むので、前の束の「今」は古い）。文も紙の名を持つ（共有の所の案は紙をまたぐ）。"""
     out = {}
     now = {}
+    # 群ごとの、もう入れた記録の番号。前は入れた番号の list を 1 つずつ探していて、件数の 2 乗の時間がかかった
+    # （出し元の違う束が同じ群を持つ時）。並びと中身は前と同じ（入れる前の番号に無い物を、束の並びのまま足す）
+    have_ids = {}
     for b in sorted(bs, key=lambda b: b["exported_at"]):
         now.update(b.get("current_sets", {}))
     for b in bs:
@@ -404,7 +451,10 @@ def groups(bs):
             m["minutes"] = _join(m["minutes"], g.get("minutes"))
             for k, v in g.get("measures", {}).items():
                 m["measures"][k] = _join(m["measures"].get(k), v)
-            m["record_ids"] += [r for r in g.get("record_ids", []) if r not in m["record_ids"]]
+            have = have_ids.setdefault(key, set())
+            new_ids = [r for r in g.get("record_ids", []) if r not in have]
+            m["record_ids"] += new_ids
+            have.update(new_ids)
             # problem は、受け入れた報告の困り事の種類（report_source が付ける。束の文の欄には無い）
             m["texts"] += [{"kind": t["kind"], "step": t.get("step"), "text": t["text"], "count": t.get("count", 1), "paper": paper,
                             **({"problem": t["problem"]} if t.get("problem") else {})} for t in g.get("texts", [])]
@@ -445,7 +495,10 @@ def _key(kind, tid, ss, paper, step=None):
 
 def drafts(gs):
     """群から直しの案（下書き）を起こす。Returns 案の list（まだ置かない）。key は同じ案を 2 度起こさないための鍵。
-    案は行き先・題・数・当たった文だけを持つ。新しい寸法の値は持たない。"""
+    案は行き先・題・数・当たった文だけを持つ。新しい寸法の値は持たない。
+    記録の番号は写さず、群の番号の数（record_count）だけを持つ（セキュリティの点検 2026-11-07）。番号を案ごとに写すと、群 1 つの番号が
+    その群の案の全部に写り、上限の中の束 1 つで置き場が束の数十倍に膨らんで、以後の案作りと一覧が遅くなった。どの記録かは、
+    案の雛形・刷った組・紙（群の鍵）と置き場の束から辿れる。"""
     out = []
     shared = {}
     for (tid, ss, paper), g in sorted(gs.items()):
@@ -467,7 +520,7 @@ def drafts(gs):
                                         "craft_talks": c["talks"], "craft_people": c["people"], "reports": g["reports"]},
                             "why": f"{where}の手順 {step} で、止まったの札が {s['taps']} 回（印のある人 {s['people']} 人）。",
                             "evidence": [t for t in g["texts"] if t["step"] == step and t["kind"] in ("stuck", "question", "craft")],
-                            "record_ids": g["record_ids"], "in_engine": here})
+                            "record_count": len(g["record_ids"]), "in_engine": here})
         # 雛形: 止まったの札は重なっていないが、同じ手順で工夫を話した人が重なった所。止まった段の案が起きる段では、
         # 工夫はその案に付けてあるので、同じ段に 2 つの案を起こさない。
         for step, c in sorted(g["craft_steps"].items()):
@@ -479,7 +532,7 @@ def drafts(gs):
                             "numbers": {"craft_talks": c["talks"], "craft_people": c["people"], "stuck_taps": s["taps"], "stuck_people": s["people"], "reports": g["reports"]},
                             "why": f"{where}の手順 {step} で、作りながら話された工夫が {c['talks']} 件（印のある人 {c['people']} 人）。",
                             "evidence": [t for t in g["texts"] if t["step"] == step and t["kind"] == "craft"],
-                            "record_ids": g["record_ids"], "in_engine": here})
+                            "record_count": len(g["record_ids"]), "in_engine": here})
         # 雛形: 工夫の言葉（作った人が直した点・次の思いつき・作りながら話した工夫・できた後の話）。1 件でも案にする
         # （直した人は、型紙の足りない所を実物で見つけている）。
         craft = [t for t in g["texts"] if t["kind"] in ("fix", "idea", "craft", "keep")]
@@ -489,7 +542,7 @@ def drafts(gs):
                         "title": f"{tid}{_on(paper)}: 作った人の工夫（直した点と思いつき）を、雛形に入れるか見る",
                         "numbers": {"fixes": n_fix, "ideas": n_idea, "craft_talks": n_talk, "keeps": n_keep, "reports": g["reports"]},
                         "why": f"{where}で、作った人が直した点が {n_fix} 件、思いつきが {n_idea} 件、作りながら話した工夫が {n_talk} 件、できた後の話が {n_keep} 件。",
-                        "evidence": craft, "record_ids": g["record_ids"], "in_engine": here})
+                        "evidence": craft, "record_count": len(g["record_ids"]), "in_engine": here})
         # 雛形: ワークショップの型紙レビュー。経験者が読んで人が確かめた指摘なので 1 件から案にする。作っていないので、止まった段・工夫の案には混ぜない。
         reviews = [t for t in g["texts"] if t["kind"] == "review"]
         if reviews:
@@ -498,7 +551,7 @@ def drafts(gs):
                         "title": f"{tid}{_on(paper)}: ワークショップの型紙レビューの指摘を、雛形に入れるか見る",
                         "numbers": {"reviews": n_review, "reports": g["reports"]},
                         "why": f"{where}について、ワークショップの型紙レビューの指摘が {n_review} 件（人が確かめた物）。",
-                        "evidence": reviews, "record_ids": g["record_ids"], "in_engine": here})
+                        "evidence": reviews, "record_count": len(g["record_ids"]), "in_engine": here})
         # 生成の決まり: 検査を通って刷られた紙なのに、動かない側の札が重なった所。「わからない」は動かない側に数えない。
         # 作る前の考え（仮説を見て、どう動くと思ったか）もここに付ける。考えだけでは案にしない。
         not_moved = g["results"].get(g["not_moved_word"], 0) if g["not_moved_word"] else 0
@@ -509,7 +562,7 @@ def drafts(gs):
                         "numbers": {"not_moved": not_moved, "moved": g["results"].get(g["moved_word"], 0), "reports": g["reports"]},
                         "why": f"{where}は検査を通って刷られた紙で、「{_label(g['not_moved_word'])}」の札が {not_moved} 件（報告 {g['reports']} 件）。",
                         "evidence": [t for t in g["texts"] if t["kind"] in ("stuck", "impression", "explain", "think")][:MOTION_TEXTS],
-                        "record_ids": g["record_ids"], "in_engine": here})
+                        "record_count": len(g["record_ids"]), "in_engine": here})
         for d in out[first:]:
             d.update(current_set=cur, why=d["why"] + note)
         for t in g["texts"]:
@@ -526,7 +579,7 @@ def drafts(gs):
                         "title": f"共有の所: {SHARED[kind][0]}を見直す",
                         "numbers": {"templates": len(by_tpl), "texts": sum(t["count"] for t in texts)},
                         "why": f"同じ種類の困り事が {len(by_tpl)} つの雛形（{'・'.join(sorted(by_tpl))}）で出た。雛形ごとでなく共有の所に当たるかを見る。",
-                        "evidence": texts, "record_ids": [], "in_engine": True})
+                        "evidence": texts, "record_count": 0, "in_engine": True})
     return out
 
 
@@ -562,7 +615,8 @@ def propose():
             _dump(d / f"{p['id']}.json", p, exclusive=True)
             made.append(p)
         elif old["status"] == "draft" and any(old.get(k) != v for k, v in dr.items()):
-            p = {**old, **dr, "renewed_at": _now()}
+            # 前の形の案が持つ番号の list（record_ids）は、新しくする時に落とす（数は record_count が持つ）。決めた案は書き換えない
+            p = {**{k: v for k, v in old.items() if k != "record_ids"}, **dr, "renewed_at": _now()}
             _dump(d / f"{p['id']}.json", p)
             renewed.append(p)
         else:
@@ -780,7 +834,9 @@ def main(argv=None):
     try:
         if args.cmd in ("check", "take"):
             try:
-                b = _load(args.file)
+                b = _load_bundle(args.file)
+            except _TooLarge:  # 読めない物でなく、決まりの外の束として断る（check_bundle の上限と同じ字）
+                return fail([Failure("F13.bundle", "束", BUNDLE_TOO_LARGE_JA)])
             except (OSError, ValueError, RecursionError) as e:
                 print(f"確かめられない: 束が読めない（{type(e).__name__}）", file=sys.stderr)
                 return 4

@@ -178,7 +178,7 @@ fold = by_key["shared:fold:pivot_counterweight+slider_fan"]
 assert fold["target"]["kind"] == "part" and fold["numbers"]["templates"] == 2
 # 今の組と同じ組の群から起きた案には、組の並びを足さない。雛形の id が要る案は、今の組を持つ
 assert stuck["current_set"] == "goraigo-v10" and all("今の組" not in p["why"] for p in made)
-allowed = {"id", "status", "key", "target", "template", "sheet_set", "current_set", "paper", "step", "title", "numbers", "why", "evidence", "record_ids", "in_engine", "made_at"}
+allowed = {"id", "status", "key", "target", "template", "sheet_set", "current_set", "paper", "step", "title", "numbers", "why", "evidence", "record_count", "in_engine", "made_at"}
 for p in made:
     assert set(p) == allowed and p["status"] == "draft", set(p) ^ allowed
     assert all(isinstance(v, int) and not isinstance(v, bool) for v in p["numbers"].values())  # 数は件数だけ（寸法の値でない）
