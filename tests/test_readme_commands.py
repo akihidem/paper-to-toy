@@ -37,6 +37,9 @@ PLACEHOLDER = {"<人>": "試す人", "<番号>": "abc1234", "<組の名>": "gora
 _LEDGER = json.loads((ROOT / "data/engine/versions.json").read_text(encoding="utf-8"))
 _TAKEN = [int(p["id"][3:]) for v in _LEDGER["versions"] for p in v.get("proposals", [])] + [int(p["id"][3:]) for p in _LEDGER.get("next", [])]
 PLACEHOLDER["<案の番号>"] = f"EP-{max(_TAKEN, default=0) + 1:04d}"
+# <番号> は、台帳の今の版の commit。release は、この repo に在る commit か台帳に書かれた commit だけを受ける（作り物の番号は断る）。
+# 台帳は複製と一緒に動くので、複製に git の履歴が無くても打てる
+PLACEHOLDER["<番号>"] = _LEDGER["versions"][-1]["commit"][:7]
 # 受け入れは端末で人が ID を打つ。端末の無いこの試験では、断るのが正しい。
 RC = {"omochae.intake review accept": 3}
 WRITES = ("out/fan_tab.svg", "out/fan_tab.pdf", "out/fan_tab.png", "out/tiger.pdf",
@@ -122,11 +125,6 @@ git = shutil.which("git")
 if git:  # README の手順で何が変わるかを、打つ前の木と比べる
     for cmd in (["init", "-q"], ["add", "-A"], ["-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-q", "-m", "before"]):
         subprocess.run(["git", *cmd], cwd=repo, env=GIT_ENV, check=True, capture_output=True)
-    # release は、この repo に在る commit だけを受ける（改善の輪が git で確かめる）。<番号> は、複製の打つ前の commit
-    PLACEHOLDER["<番号>"] = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=repo, env=GIT_ENV, check=True, capture_output=True,
-                                           text=True).stdout.strip()
-else:  # git の無い機械では commit を確かめられないので、release は刻まずに断るのが正しい
-    RC["omochae.engine_loop release"] = 3
 
 # 1. 囲みの中の命令を順に打つ
 ran = 0
