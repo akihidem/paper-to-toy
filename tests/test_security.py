@@ -9,8 +9,8 @@
 4. 受付の人の確かめ（review show）は、見えない文字（文の向きを変える U+202E など）と制御の文字（C1 の CSI・DEL・ESC）と行の区切りを
    \\uXXXX の形で見せる（改行とタブは残す）。
 5. SVG から PDF を作る時、data: のほかの URL を読まない（cairosvg の既定は file: の手元のファイルを読みに行った）。
-6. 直に使う依存は、全部 == で版を固定する（shapely が引く numpy は固定しない。今の venv の numpy 2.5.4 は Python 3.12 以上を求め、
-   init.sh の下限 3.11 と食い違うため。固定するかは Python の下限と一緒に決める）。
+6. 直に使う依存と shapely が引く numpy は、全部 == で版を固定する（numpy は Python の版の印で 2 つに分ける。numpy 2.5 は Python 3.12 以上を
+   求め、init.sh の下限 3.11 と食い違うため。2 つが揃う事は tests/test_requirements_pin.py が見る）。
 7. git で追う字のファイル（コード・試験・文書・見本）に、見えない文字（Unicode の Cf。文の向きを変える U+202E など）と制御の文字（ESC など）を
    生のまま置かない
    （字の並びをごまかして、読む人に別のコードに見せられる。この試験を足した時、試験の字の中の見えない文字を生で書いてしまったので、
@@ -113,9 +113,10 @@ assert refused and seen == ["file:///etc/hostname"], seen  # 取り出し口は 
 render_src = (ROOT / "src/omochae/render.py").read_text(encoding="utf-8")
 assert "url_fetcher=data_only_fetcher" in render_src  # 型紙を刷る道がこの取り出し口を使う
 
-# 6. 直に使う依存は全部 == で固定
+# 6. 直に使う依存と numpy は全部 == で固定。印は Python の版の物だけを許す（ほかの印だと、印の当たらない機械で固定が外れる）
 req = [ln.strip() for ln in (ROOT / "requirements.txt").read_text(encoding="utf-8").splitlines() if ln.strip() and not ln.startswith("#")]
-assert len(req) >= 6 and all(re.fullmatch(r"[A-Za-z0-9_.-]+==[0-9][0-9A-Za-z.]*", ln) for ln in req), req
+assert len(req) >= 8 and all(re.fullmatch(r'[A-Za-z0-9_.-]+==[0-9][0-9A-Za-z.]*(; python_version (>=|<) "\d+\.\d+")?', ln) for ln in req), req
+assert sum(ln.startswith("numpy==") for ln in req) == 2, req
 # 7. 字のファイルに見えない文字を生のまま置かない
 import unicodedata  # noqa: E402
 listed = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, text=True)  # 空白のある名も 1 つに読む（見直しの指摘）
