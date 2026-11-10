@@ -10,14 +10,17 @@ Python では入らない（前に numpy==2.5.4 だけで固定した時、tests
 3. numpy の 2 つの版とも、shapely の求める numpy の下限を満たす。新しい Python の側の版は、古い側の版より下でない
 4. uv が在る時、init.sh の下限と分け目の版の Python で requirements.txt を解き、印の付いた名が、その Python に当たる行の版に解ける事
    （< の行に 3.11 で入らない版を書くと、ここで落ちる）。uv が無い・返らない・ネットなどで解けたかを言えない時は「確かめられない」と
-   1 行出して、この検査だけ飛ばす。落とすのは uv が「No solution found」（解けないと言い切った）と言う時と、解けた版が違う時だけ
+   1 行出して、この検査だけ飛ばす。落とすのは、uv が「No solution found」と言い、その原因の文が印を付けた名を名指しした時と、解けた版が
+   違う時だけ。ネットを使わない設定（UV_OFFLINE など）でキャッシュに無い物がある時も uv は「No solution found」と言うので、それは飛ばす
 """
 import importlib.metadata
+import os
 import pathlib
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 REQ = ROOT / "requirements.txt"
@@ -61,24 +64,69 @@ for side in ("new", "old"):
 assert ver(pins["numpy"]["new"]) >= ver(pins["numpy"]["old"]), f"新しい Python の側の版が古い側より下: {pins['numpy']}"
 
 # 4. uv が在る時、下限と分け目の Python で解き、印の付いた名がその Python に当たる行の版に解ける
+# 解けたかどうかの読みは verdict に分けて、uv の言い方の写し（2026-11-10 に uv 0.13.0 が出した文）でも見る（ネットに出ずに見られる）
+NETWORK_OFF = ("network was disabled", "not found in the cache")
+
+
+def verdict(rc, stderr, names):
+    """uv pip compile の終わりを ("ok" | "fail" | "skip", 理由) にする。
+
+    落とす（fail）のは、uv が「No solution found」と言い、解けない原因の文が印を付けた名（names）を名指しした時だけ。
+    ネットを使わない設定（UV_OFFLINE や uv.toml の offline）でキャッシュに無い物がある時も、uv は「No solution found」と言う
+    （原因は「… was not found in the cache」、hint は「network was disabled」）ので、それは解けないと言い切れない（skip）。
+    ほかの名が原因の時も、印の確かめの外なので skip にする（落とすと、この試験が別の事で落ちる）。"""
+    if rc == 0:
+        return "ok", ""
+    if any(s in stderr for s in NETWORK_OFF):
+        return "skip", "ネットを使わない設定で、キャッシュに無い物がある"
+    if "No solution found" in stderr:
+        named = [n for n in names if re.search(rf"(?<![\w.-]){re.escape(n)}(?![\w.-])", stderr, re.I)]
+        if named:
+            return "fail", stderr.strip()[:800]
+        return "skip", "解けない原因が、印を付けた名でない"
+    return "skip", (stderr.strip().splitlines() or [f"rc={rc}"])[0][:200]
+
+
+def compile_at(py, env):
+    """requirements.txt を Python py で解く。(verdict の種類, 理由, 解けた {名: 版}) を返す。"""
+    cmd = [uv, "pip", "compile", "--python-version", py, "--no-header", "--no-annotate", str(REQ)]
+    try:
+        r = subprocess.run(cmd, cwd=ROOT, env=env, capture_output=True, text=True, timeout=limit)
+    except subprocess.TimeoutExpired:
+        return "skip", f"{limit:g} 秒で返らない", {}
+    kind, why = verdict(r.returncode, r.stderr, list(pins))
+    got = {k.lower(): v for k, v in re.findall(r"^([A-Za-z0-9_.-]+)==(\S+)$", r.stdout, re.M)} if kind == "ok" else {}
+    return kind, why, got
+
+
+# uv の言い方の写しで、読み分けを見る（ネットに出ない）
+COLD = ("error: No solution found when resolving dependencies\n  cause: Because cairosvg was not found in the cache and you require "
+        "cairosvg==2.9.1, we can conclude that your requirements are unsatisfiable.\n\nhint: Packages were unavailable because the network "
+        "was disabled. When the network is disabled, registry packages may only be read from the cache.\n")
+UNSAT = ("error: No solution found when resolving dependencies\n  cause: Because the requested Python version (>=3.11) does not satisfy "
+         "Python>=3.12 and you require numpy{python_full_version < '3.12'}==2.5.4, we can conclude that your requirements are unsatisfiable.\n")
+assert verdict(1, COLD, ["numpy"])[0] == "skip"
+assert verdict(1, COLD.replace("cairosvg", "numpy"), ["numpy"])[0] == "skip"  # キャッシュに無いのが numpy でも、言い切れない
+assert verdict(1, UNSAT, ["numpy"])[0] == "fail"
+assert verdict(1, UNSAT.replace("numpy", "shapely"), ["numpy"])[0] == "skip"
+assert verdict(2, "error: Request failed after 3 retries\n  cause: tcp connect error\n", ["numpy"])[0] == "skip"
+assert verdict(0, "", ["numpy"]) == ("ok", "")
+
 uv = shutil.which("uv")
 if uv is None:
     print("確かめられない: uv が無いので、Python の版ごとに requirements.txt が解けるかを見ない（この検査だけ飛ばす）")
 else:
     limit = tool_timeout()
     for py in sorted({MIN_PY, *(p["cut"] for p in pins.values())}, key=ver):
-        cmd = [uv, "pip", "compile", "--python-version", py, "--no-header", "--no-annotate", str(REQ)]
-        try:
-            r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=limit)
-        except subprocess.TimeoutExpired:
-            print(f"確かめられない: uv pip compile が Python {py} で {limit:g} 秒で返らない（この検査だけ飛ばす）")
+        kind, why, got = compile_at(py, os.environ)
+        assert kind != "fail", f"Python {py} で requirements.txt が解けない: {why}"
+        if kind == "skip":
+            print(f"確かめられない: uv pip compile が Python {py} で解けたかを言えない（{why}）。この検査だけ飛ばす")
             continue
-        assert "No solution found" not in r.stderr, f"Python {py} で requirements.txt が解けない: {r.stderr.strip()[:800]}"
-        if r.returncode != 0:
-            said = (r.stderr.strip().splitlines() or [f"rc={r.returncode}"])[0][:200]
-            print(f"確かめられない: uv pip compile が Python {py} で解けたかを言えない（{said}）。この検査だけ飛ばす")
-            continue
-        got = {k.lower(): v for k, v in re.findall(r"^([A-Za-z0-9_.-]+)==(\S+)$", r.stdout, re.M)}
         for name, p in pins.items():
             want = p["new"] if ver(py) >= ver(p["cut"]) else p["old"]
             assert got.get(name) == want, f"Python {py} で {name} が {got.get(name)} に解けた（固定は {want}）"
+    # ネットを使わない設定で、キャッシュが空の時は、落とさずに飛ばす（空の置き場を UV_CACHE_DIR にするので、ネットにもキャッシュにも出ない）
+    with tempfile.TemporaryDirectory() as cold:
+        kind, why, _ = compile_at(MIN_PY, {**os.environ, "UV_OFFLINE": "1", "UV_CACHE_DIR": cold})
+        assert kind == "skip", (kind, why)
