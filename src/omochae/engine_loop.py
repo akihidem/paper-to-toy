@@ -120,6 +120,25 @@ def has_contact(text):
     return has_pii(str(text)[:MAX_TEXT])
 
 
+# 連絡先の形がある時の知らせ（束の文・名の欄・版の注で同じ字）
+CONTACT_JA = "連絡先の形（数字の多い所か、@・メール・電話・URL などの語）がある"
+# 決まった形の番号。数字が多く、そのまま has_contact に当てると「数字の多い所」に当たるので、この形だけを伏せてから見る。
+# - 出典の ID（NDL-1187053-R0000014）: サイトは紙を「出典の ID.仮説」と名付けるので、伏せないと紙の名のある束を全部断る。名の欄で伏せるのはこれだけ。
+# - commit の番号（英字を含む 16 進の 7〜40 字）と Issue の番号（#106）: 台帳の今の注は 7 つ中 6 つがこれを書く。版の注でだけ伏せる。
+# 伏せる形は狭く保つ（伏せる所に番号を隠させないため）: 出典の ID は桁の数と前後まで決め、数字だけの並び（電話・郵便番号）は
+# commit の形に入れず、続けて並べた Issue の番号（#090#1234）は伏せない
+SOURCE_ID = r"(?<![0-9A-Za-z])NDL-[0-9]{7}-R[0-9]{7}(?![0-9])"
+NAME_IDS = re.compile(SOURCE_ID)
+NOTE_IDS = re.compile(SOURCE_ID + r"|(?<![0-9A-Za-z])(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}(?![0-9A-Za-z])|(?<![0-9A-Za-z#])#[0-9]{1,5}(?![0-9#])")
+
+
+def _has_contact_outside_ids(text, ids=NAME_IDS):
+    """名の欄（雛形の id・刷った組・紙・出し元の名）と版の注に、連絡先の形があるか。見方は has_contact と同じで、決まった形の番号
+    （名は NAME_IDS、注は NOTE_IDS）だけを先に伏せる。名は案の題を通って、注はそのまま、git に入る版の台帳
+    （data/engine/versions.json）に写るので、作った人の文と同じ見方を当てる（セキュリティの点検 2026-11-07）。"""
+    return has_contact(ids.sub("", str(text)))
+
+
 def _count(v, top=MAX_COUNT):
     return isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= top
 
@@ -158,12 +177,16 @@ def check_bundle(b):
         bad("exported_at", "時刻は分まで（秒を持たない）")
     if not (isinstance(b.get("from"), str) and NAME.fullmatch(b["from"])):
         bad("from", "出し元の名は英数字と . - _ で 80 字まで")
+    elif _has_contact_outside_ids(b["from"]):
+        bad("from", CONTACT_JA)
     if "dropped_pii" in b and not _count(b["dropped_pii"]):
         bad("dropped_pii", "落とした文の数は 0 以上の整数")
     cur = b.get("current_sets", {})
     if not (isinstance(cur, dict) and len(cur) <= MAX_GROUPS
             and all(isinstance(k, str) and NAME.fullmatch(k) and isinstance(v, str) and NAME.fullmatch(v) for k, v in cur.items())):
         bad("current_sets", "今の刷った組は、雛形の id と組の名の組")
+    elif any(_has_contact_outside_ids(x) for kv in cur.items() for x in kv):
+        bad("current_sets", CONTACT_JA)
     groups = b.get("groups")
     if not isinstance(groups, list) or len(groups) > MAX_GROUPS:
         bad("groups", f"群は list で {MAX_GROUPS} まで")
@@ -183,6 +206,10 @@ def check_bundle(b):
             bad(f"{w}.sheet_set", "刷った組の形でない（分からない時は空）")
         if not (isinstance(paper, str) and (paper == "" or NAME.fullmatch(paper))):
             bad(f"{w}.paper", "紙の名の形でない（無い時は空）")
+        # 名の形の物だけに当てる（形の外の字は、上で断っている）。名の形でも、番号やメールの崩しは書ける
+        for key, name in (("template", tid), ("sheet_set", ss), ("paper", paper)):
+            if isinstance(name, str) and NAME.fullmatch(name) and _has_contact_outside_ids(name):
+                bad(f"{w}.{key}", CONTACT_JA)
         if (tid, ss, paper) in seen:
             bad(w, "同じ雛形・刷った組・紙の群が 2 つある")
         seen.add(tuple(x if isinstance(x, str) else None for x in (tid, ss, paper)))
@@ -231,7 +258,7 @@ def check_bundle(b):
             if not (isinstance(t.get("text"), str) and 1 <= len(t["text"]) <= MAX_TEXT):
                 bad(wt, f"文は 1〜{MAX_TEXT} 字")
             elif has_contact(t["text"]):
-                out.append(Failure("F13.pii", wt, "連絡先の形（数字の多い所か、@・メール・電話・URL などの語）がある"))
+                out.append(Failure("F13.pii", wt, CONTACT_JA))
     return out
 
 
@@ -650,6 +677,11 @@ def release(commit, by, sheet_sets=None, note="", only=None):
     sheet_sets = dict(sheet_sets or {})
     if not all(isinstance(k, str) and NAME.fullmatch(k) and isinstance(v, str) and NAME.fullmatch(v) for k, v in sheet_sets.items()):
         out.append(Failure("F13.version", "sheet_sets", "刷った組は 雛形の id=組の名（玩具 1 つなら 雛形の id.形=組の名）"))
+    elif any(_has_contact_outside_ids(x) for kv in sheet_sets.items() for x in kv):
+        out.append(Failure("F13.version", "sheet_sets", CONTACT_JA))
+    note = str(note or "")[:MAX_TEXT]  # 台帳に書く字（長い注は切る。前と同じ）に当てる
+    if _has_contact_outside_ids(note, NOTE_IDS):
+        out.append(Failure("F13.version", "note", CONTACT_JA))
     led = ledger()
     if not led.get("next"):
         out.append(Failure("F13.version", "次の版の予定", "採った案が無い（案が無いまま版を刻まない）"))
@@ -666,7 +698,7 @@ def release(commit, by, sheet_sets=None, note="", only=None):
     chosen = [p for p in led["next"] if not only or p["id"] in only]  # 並びは台帳の順（打った順に左右されない）
     ids = [p["id"] for p in chosen]
     led["versions"].append({"version": n, "commit": commit, "at": _now()[:10], "proposals": [{k: v for k, v in p.items() if k != "adopted_at"} for p in chosen],
-                            "sheet_sets": sheet_sets, "sources": {k: _sources_of(k) for k in sheet_sets}, "note": str(note or "")[:MAX_TEXT]})
+                            "sheet_sets": sheet_sets, "sources": {k: _sources_of(k) for k in sheet_sets}, "note": note})
     led["next"] = [p for p in led["next"] if p["id"] not in ids]
     _dump(ledger_path(), led)
     for pid in ids:
