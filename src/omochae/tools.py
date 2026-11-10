@@ -57,13 +57,20 @@ def _sweep(parent, prefix):
 
     同じ所へ別の回が同時に書く事があるので、動いている回の物は消さない。名前に主の pid を入れて、生きているかで見る。
     pid の無い古い形は主が分からないので、時刻で見る。
+    消すのは、work_dir（tempfile.mkdtemp）が作る形の名だけ。頭の字が同じでも形の違う名（人が置いた物など）は、古くても消さない
+    （--out の親の所は人の置き場でもあるので、頭の字と時刻だけで消すと、人の物を消しうる。セキュリティの点検 2026-11-07）。
+    mkdtemp の後ろの 8 字は英小文字・数字・_ で、Python がこの形を変えたら、ここは消さない側に倒れる（片づかないだけで、壊さない）。
     """
-    pattern = re.compile(rf"{re.escape(prefix)}(\d+)-")
+    tail = r"[a-z0-9_]{8}"
+    ours = re.compile(rf"{re.escape(prefix)}(\d+)-{tail}")
+    old_form = re.compile(rf"{re.escape(prefix)}{tail}")  # pid を名前に入れる前の形（#29 の前の回が残した物）
     now = time.time()
     for path in parent.glob(f"{prefix}*"):
         if path.is_symlink() or not path.is_dir():
             continue
-        owner = pattern.match(path.name)
+        owner = ours.fullmatch(path.name)
+        if not owner and not old_form.fullmatch(path.name):
+            continue
         try:
             stale = not _alive(int(owner.group(1))) if owner else now - path.stat().st_mtime > STALE_SECONDS
         except OSError:

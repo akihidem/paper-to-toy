@@ -76,21 +76,31 @@ with tempfile.TemporaryDirectory() as tmp:
     stale = list(out.parent.glob(".omochae-*"))
     assert len(stale) == 1, ("止められた回の置き場が残るはず（試験の前提）", stale)
 
-    # 動いている回の置き場は消さない（同じ所へ別の回が同時に書く）。名前で作った主は、この試験の子ではなくこの試験そのもの
-    alive = out.parent / f".omochae-{os.getpid()}-alive"
+    # 動いている回の置き場は消さない（同じ所へ別の回が同時に書く）。名前で作った主は、この試験の子ではなくこの試験そのもの。
+    # 名前は work_dir（mkdtemp）が作る形（頭の字・pid・- ・8 字）にそろえる。形の違う名は、そもそも消す物に入らないため
+    alive = out.parent / f".omochae-{os.getpid()}-alive000"
     alive.mkdir()
-    # 形の違う古い置き場（時刻で見る）: 古い物だけ消す
-    old = out.parent / ".omochae-old"
+    # pid の無い前の形の古い置き場（頭の字・8 字。時刻で見る）: 古い物だけ消す
+    old = out.parent / ".omochae-old00000"
     old.mkdir()
     os.utime(old, (time.time() - 7200, time.time() - 7200))
-    fresh = out.parent / ".omochae-fresh"
+    fresh = out.parent / ".omochae-fresh000"
     fresh.mkdir()
+    # 頭の字は同じでも、work_dir の作る形でない物は、古くても主が死んでいても消さない（--out の親の所は人の置き場でもある）
+    dead = subprocess.Popen([PY, "-c", "pass"])
+    dead.wait()
+    others = [out.parent / ".omochae-old", out.parent / f".omochae-{dead.pid}-keep", out.parent / ".omochae-backup-20261107"]
+    for o in others:
+        o.mkdir()
+        (o / "keep.txt").write_text("x", encoding="utf-8")
+        os.utime(o, (time.time() - 7200, time.time() - 7200))
 
     r = generate(out, env_with())
     assert r.returncode == 0, (r.returncode, r.stderr)
     assert not any(p.exists() for p in stale), "止められた回の置き場が残った"
     assert not old.exists(), "古い置き場が残った"
     assert alive.exists() and fresh.exists(), "動いている回の置き場まで消した"
+    assert all((o / "keep.txt").exists() for o in others), ("work_dir の作る形でない物まで消した", [o.name for o in others if not o.exists()])
     assert out.with_suffix(".pdf").exists()
     print("ok stale work dir")
 
@@ -99,12 +109,15 @@ with tempfile.TemporaryDirectory() as tmp:
     fold.mkdir()
     dead = subprocess.Popen([PY, "-c", "pass"])
     dead.wait()
-    stale_fold = fold / f".foldsim-{dead.pid}-x"
+    stale_fold = fold / f".foldsim-{dead.pid}-xxxxxxxx"
     stale_fold.mkdir()
+    other_fold = fold / f".foldsim-{dead.pid}-x"  # 主は死んでいるが、work_dir の作る形でない名なので残す
+    other_fold.mkdir()
     r = subprocess.run([PY, "-m", "omochae.foldsim", "--scenario", SCENARIO, "--out", str(fold)], cwd=ROOT, env=env_with(),
                        capture_output=True, text=True, timeout=OUTER)
     assert r.returncode == 0, (r.returncode, r.stderr)
     assert not stale_fold.exists(), "折りの絵の古い置き場が残った"
+    assert other_fold.exists(), "折りの絵の置き場で、work_dir の作る形でない物まで消した"
     print("ok foldsim work dir")
 
     # 4 床の入口: 返らない子は決めた秒数で打ち切り、4 で名指しする（ほかの子は回し切る）
