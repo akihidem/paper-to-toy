@@ -3,10 +3,14 @@
 終了: 0 = 通る / 3 = 落ちる / 4 = 検査できない。1 と 2 は使わない（検査の結果と道具の故障を読み分けるため）。
 """
 import argparse
+import itertools
 import json
+import os
 import pathlib
+import re
 import shutil
 import sys
+import zlib
 
 # 読み込みは main の囲いより前に走るので、ここで落ちるとトレースバックの 1 になる（#25）。omochae.foldsim もここを通る。
 try:
@@ -32,9 +36,158 @@ def _named(stem, ext):
     return stem.with_name(stem.name + ext)
 
 
+# この入口が書く 3 つの紙の頭。SVG は render.to_svg が drawsvg で書く頭（drawsvg は requirements.txt で版を固定）。型紙の SVG を
+# 絵の道具で開いて同じ名で保存し直すと、頭が道具の物に変わるので、手を入れた SVG を前の回の紙と読まない。PNG は PNG の決まった頭だけ
+# （pdftoppm の PNG には、この入口が決まった値を書く所が無い）。
+HEADS = {".svg": b'<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg"', ".pdf": b"%PDF-",
+         ".png": b"\x89PNG\r\n\x1a\n"}
+
+
+def _head_is(path, head):
+    """普通のファイルで、頭が head か。FIFO などは開くと止まりうるので、開かない。"""
+    try:
+        if not path.is_file():
+            return False
+        with path.open("rb") as f:
+            return f.read(len(head)) == head
+    except OSError:
+        return False
+
+
+# PDF を読む時の上限。手元で刷った型紙の PDF 3688 枚（2026-11-10）を測った値から、余裕を持たせて決める。超える物は、この入口の物と
+# 言わない（確かめられない＝消さない側）。どれも、上限いっぱいの最悪の形の入力でも、確かめが 1 秒ほどで終わるための物でもある。
+# - PDF_READ_MAX: ファイルの大きさ。3688 枚は 0.10〜0.51 MB なので 8 倍ほど。全部を読む前に大きさで止める
+# - OBJSTM_MAX: 見る object stream の数。3688 枚はどれも 2 つ
+# - STREAM_IN_MAX: 1 つの object stream の、zlib に渡す前の大きさ。3688 枚は多くて 290 バイト（/Length は別の obj を指す形なので使わない）
+# - INFLATE_MAX: 開いた後の大きさの、全部の object stream の合計。3688 枚は 1 つ多くて 448 バイト。圧縮の爆弾でも、ここで止まる
+# - DICT_MAX: 辞書の終わりの >> を探す幅。Info の辞書は 100 バイトほど
+PDF_READ_MAX = 4 * 1024 * 1024
+OBJSTM_MAX = 16
+STREAM_IN_MAX = 64 * 1024
+INFLATE_MAX = 1024 * 1024
+DICT_MAX = 64 * 1024
+NUM = rb"\d{1,10}"  # obj の番号・位置の桁。int に桁の多すぎる字を渡さない（4300 桁を越えると ValueError）
+
+
+def _dict_at(data, at):
+    """data の at から始まる「<< … >>」の中身。DICT_MAX の幅に >> が無い・入れ子の辞書は None（読まない）。"""
+    found = re.match(rb"\s*<<(.*?)>>", data[at:at + DICT_MAX], re.S)
+    return found.group(1) if found and b"<<" not in found.group(1) else None
+
+
+def _objstm_info(data, num):
+    """object stream の中の番号 num の辞書を、(stream の位置, 中身) で前から順に出す。1 つの stream の中でも最後の物を使う。中身が読めない時は None。"""
+    budget = INFLATE_MAX
+    for hit in itertools.islice(re.finditer(rb"/Type\s{0,16}/ObjStm\b", data), OBJSTM_MAX):
+        start = data.rfind(b"<<", max(0, hit.start() - DICT_MAX), hit.start())
+        end = data.find(b">>", hit.end(), hit.end() + DICT_MAX)
+        if start < 0 or end < 0:
+            continue
+        head = data[start + 2:end]
+        go = re.match(rb"\s{0,16}stream\r?\n", data[end + 2:end + 34])
+        first = re.search(rb"/First\s+(" + NUM + rb")\b", head)
+        if b"<<" in head or not go or not first or not re.search(rb"/Filter\s*/FlateDecode\b", head):
+            continue
+        at = end + 2 + go.end()
+        try:
+            # 入力は STREAM_IN_MAX で切ってから渡す。zlib は開き終えた後ろの残りを unused_data に写すので、切らないと stream ごとに
+            # ファイルの後ろを全部写す（小さな stream が多数並ぶと、それだけで遅くなる）
+            body = zlib.decompressobj().decompress(data[at:at + STREAM_IN_MAX], budget)
+        except zlib.error:
+            continue
+        budget -= len(body)
+        first = int(first.group(1))
+        nums = body[:first].split()  # 頭は「番号 位置」の並び
+        if first <= len(body) and len(nums) % 2 == 0 and all(re.fullmatch(NUM, t) for t in nums):
+            pairs = [(int(n), int(off)) for n, off in zip(nums[0::2], nums[1::2])]
+            mine = [off for n, off in pairs if n == num]
+            if mine:  # 番号が当たったのに読めない物も、位置を付けて出す（読めない新しい物に、古い物が勝たないため。_pdf_info）
+                yield at, _dict_at(body, first + mine[-1])
+        if budget <= 0:
+            return
+
+
+def _pdf_info(data):
+    """PDF の Info の辞書（作り手・作った時刻などの欄）の中身のバイト。見つからない・読めない時は None。
+
+    末尾の trailer（cairo 1.18 では XRef の stream の辞書。どちらも圧縮しない）の /Info が指す物を読む。ほかの所に同じ字を置いた PDF を、
+    この入口の物と読まないため。Info は、圧縮しない「N 0 obj << … >>」（object stream を使わない cairo 1.16 などの形。その版の実物では
+    確かめていない）か、/FlateDecode の object stream の中（cairo 1.18 の形）に在る。object stream のほかの stream（頁の線など）は、
+    辞書が入らないので開かない。開けない stream と、形の読めない stream は飛ばす。
+    trailer も Info も、ファイルの中で最後に当たった物を使う（後から書き足して直した PDF では、新しい物が後ろに来る）。
+    探し方はどれも、ファイルを 1 度読むだけで済む形にし、候補ごとに見る幅も決める（候補ごとに終わりまで読み直すと、候補の多い物で止まらない）。"""
+    # 最後に当たった物は、頭の (?s:.*) で後ろから探して 1 度で取る（finditer で全部を並べると、候補の多い物で遅い）。search でなく match に
+    # する（search は当たらない時に始まりを 1 つずつずらして、そのたびに終わりまで読み直す）
+    ref = re.match(rb"(?s:.*)/Info\s{0,16}(" + NUM + rb")\s{1,16}0\s{1,16}R\b", data)
+    if ref is None:
+        return None
+    num = int(ref.group(1))
+    found = list(_objstm_info(data, num))
+    last = re.match(rb"(?s:.*)(?<![0-9])%d\s{1,16}0\s{1,16}obj\b" % num, data)
+    if last:
+        found.append((last.end(), _dict_at(data, last.end())))
+    # 一番後ろの候補が読めない（None）時は、古い候補へ戻らずに None（確かめられない）にする。書き足して直した新しい Info が読めない形の時に、
+    # 古い Info（この入口の作り手と時刻）で読むと、人が直した PDF を、この入口の物と読んでしまう
+    return max(found, key=lambda x: x[0])[1] if found else None
+
+
+def _ours_pdf(path):
+    """この入口（render.write_all）が書いた PDF か。検査に落ちた時に、--out の所の別の物（同じ名の写真や書類）を消さない・
+    上書きしないため（セキュリティの点検 2026-11-07）。落ちない回は今までどおり置き換える。3D の入口の _ours（作り方の 3D の JSON か）と
+    同じ種類の直し。
+
+    なぜ作った時刻の欄で見るか: write_all は cairo で書き、作った時刻の欄を決まった値 PDF_DATE にする。ほかの道具や人の PDF は
+    本当の時刻を持つ（cairo も、時刻を決めないと今の時刻を D:2026… の形で書く）ので、Info の作り手が cairo で、作った時刻が PDF_DATE の
+    PDF は、この入口の紙と読める。紙に新しい印を足さずに済む（刷る紙を変えない）。
+    なぜ道具を呼ばずに Python で読むか: poppler の pdftotext -htmlmeta は、22.04 より前の版（Ubuntu 22.04 は 22.02）では作った時刻を
+    いつも空で出すので、それで見ると、この入口の紙を自分の物と読めない。pdfinfo は init.sh が見ていない。poppler の版の下限を要る物にしない。
+    cairo は時刻を「(19700101000000Z)」の形で書く（PDF_DATE から - と T と : を除いた形。頭の D: を付けない。cairo 1.18.0 の実物で確かめた）。
+    確かめられない時（読めない・大きすぎる・普通のファイルでない・Info が見つからない・render が読み込めない）は、この入口の物と
+    言わない（消さない側）。"""
+    if not _head_is(path, HEADS[".pdf"]):
+        return False
+    try:
+        from .render import PDF_DATE  # 描く前の検査だけの時は、消す候補が在る時にだけ重い読み込みをする
+        with path.open("rb") as f:
+            # 大きさを先に見る（read に上限の大きさを渡すと、小さな物でも上限の分の置き場を取る）
+            size = os.fstat(f.fileno()).st_size
+            data = f.read(size + 1) if size <= PDF_READ_MAX else b""
+    except (ImportError, OSError):
+        return False
+    try:
+        info = _pdf_info(data) if 0 < len(data) <= PDF_READ_MAX else None
+    except Exception:  # 読めない形のどこで何が起きても、確かめられない（消さない）。検査に落ちた回を 4 にしない
+        return False
+    if info is None:
+        return False
+    when = re.escape(PDF_DATE.translate(str.maketrans("", "", "-T:")).encode("ascii"))
+    return bool(re.search(rb"/Producer\s*\(cairo \d", info) and re.search(rb"/CreationDate\s*\((?:D:)?" + when + rb"\)", info))
+
+
+def _keep(path):
+    # 3D の入口と同じ言い方にする。確かめられない物も同じ行で言う（どちらも、この入口の物としては扱わない）。
+    print(f"--out の所の物は型紙の {path.suffix[1:].upper()} でないので、消さない: {path}", file=sys.stderr)
+
+
 def _drop(stem):
-    for old in (_named(stem, x) for x in (".svg", ".pdf", ".png")):
-        old.unlink(missing_ok=True)
+    """前の回の紙（--out の名の SVG・PDF・PNG）を消す。消すのは、この入口が書いたと確かめた物だけで、ほかは消さずに行で言う。
+
+    SVG と PNG を同じ名の PDF で確かめるのは、SVG と PNG には、PDF の作った時刻の欄のような、この入口が決まった値を書く所が無いため。
+    3 つは通った回にだけ、同じ回に同じ名へ置くので、同じ名の PDF がこの入口の物なら、SVG と PNG も同じ回の物と読む。そのうえで、
+    それぞれの頭が、この入口の書く形かも見る（HEADS）。PDF が無い・この入口の物と確かめられない時は、SVG と PNG も消さない。
+    前の回の紙が正しい名で残りうるが、消さない事は行で分かる。確かめは消す前に済ませる（PDF を先に消すと、SVG と PNG の確かめの
+    拠り所が無くなる）。
+    限り: この入口の PDF を残したまま、横の SVG・PNG だけを頭の同じ別の物（PNG の写真など）に替えると、それは消える（ファイルの時刻で
+    同じ回の物かを見る形は、混んだ機械では書く間の時間の幅が読めず誤りうるので採らない）。"""
+    ours = _ours_pdf(_named(stem, ".pdf"))
+    for ext, head in HEADS.items():
+        old = _named(stem, ext)
+        if not (old.exists() or old.is_symlink()):
+            continue
+        if ours and _head_is(old, head):
+            old.unlink()
+        else:
+            _keep(old)
 
 
 def load_source(source_id):
@@ -72,9 +225,10 @@ def generate(template, params, source_id, out, page="A4", version=1, title=None,
     if failures:
         # 検査に落ちた時だけ前の回の紙を消す。前に通った紙が正しい名前で残ると、今回の物と取り違える。
         # 検査できない（例外・exit 4）時は消さない。今回は何も分かっていないので、前の結果を壊す理由が無い。
-        _drop(stem)
+        # 消すのは、この入口が書いたと確かめた紙だけ（_drop）。消さない物の行は、検査の行の後に出す（3D の入口と同じ順）。
         for f in failures:
             print(f.line(), file=sys.stderr)
+        _drop(stem)
         return 3
     from .render import to_png, write_all  # 描く前の検査だけの時に重い読み込みをしない
     # 描く・刷った後の検査・PNG は、その回だけの仮の置き場で作り、全部済んでから正しい名前へ移す。途中で検査できなくなった
@@ -90,11 +244,16 @@ def generate(template, params, source_id, out, page="A4", version=1, title=None,
         failures = check_pdf(pdf, source) + check_image_count(pdf)
         if failures:
             rejected = _named(stem, ".rejected.pdf")
-            pdf.replace(rejected)  # 印の無い紙を正しい名前で残さない。
-            _drop(stem)  # 前の回の紙も正しい名前で残さない（今回の物と取り違えるため）。
             for f in failures:
                 print(f.line(), file=sys.stderr)
-            print(f"退けた: {rejected}", file=sys.stderr)
+            # 退けた紙の名に別の物が在る時は上書きしない（上書きは消すのと同じ。確かめは _drop と同じ _ours_pdf）。
+            # その時は今回の退けた紙を残さない（別の名で置くと、使う人の知らない名の物が増える）。
+            if not (rejected.exists() or rejected.is_symlink()) or _ours_pdf(rejected):
+                pdf.replace(rejected)  # 印の無い紙を正しい名前で残さない。
+                print(f"退けた: {rejected}", file=sys.stderr)
+            else:
+                _keep(rejected)
+            _drop(stem)  # 前の回の紙も正しい名前で残さない（今回の物と取り違えるため）。
             return 3
         to_png(pdf, tmp)
         for x in (".svg", ".pdf", ".png"):
