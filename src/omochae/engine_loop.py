@@ -142,6 +142,14 @@ def _word(v):
     return isinstance(v, str) and 1 <= len(v) <= 20 and not has_contact(v)
 
 
+def _label(word):
+    """札の言葉（動きの札の結果の名・動かない側の札）を、Issue の下書きの「なぜか」と版ごとの数の表に出す形にする。
+    札は束から来る字で、長さと連絡先の形しか見ていないので、改行・表の区切り（|）・HTML の形・制御の文字が入りうる。
+    作った人の文と同じく、1 行にして Markdown の記号を無効にする（下書きの見出しや表の列を、束の字で作らせない。
+    セキュリティの点検 2026-11-07）。雛形の札（「動いた」「回らない」など）は記号を持たないので、出る字は変わらない。"""
+    return _md_text(_one_line(word))
+
+
 def check_bundle(b):
     """束の形を確かめる。Returns Failure の list（空なら通る）。知らせの文に、束の値は入れない（落とした中身を出し直さないため）。
     連絡先の形のある文は F13.pii で名指しする（何番目の群の何番目の文か、だけ）。take は、その文を落として先へ進む。"""
@@ -496,7 +504,7 @@ def drafts(gs):
                         "paper": paper, "step": None,
                         "title": f"{tid}{_on(paper)}: 動きの床の式と既定の寸法を見直す",
                         "numbers": {"not_moved": not_moved, "moved": g["results"].get(g["moved_word"], 0), "reports": g["reports"]},
-                        "why": f"{where}は検査を通って刷られた紙で、「{g['not_moved_word']}」の札が {not_moved} 件（報告 {g['reports']} 件）。",
+                        "why": f"{where}は検査を通って刷られた紙で、「{_label(g['not_moved_word'])}」の札が {not_moved} 件（報告 {g['reports']} 件）。",
                         "evidence": [t for t in g["texts"] if t["kind"] in ("stuck", "impression", "explain", "think")][:MOTION_TEXTS],
                         "record_ids": g["record_ids"], "in_engine": here})
         for d in out[first:]:
@@ -698,7 +706,7 @@ def compare(gs, led):
         for ss, paper, g in sorted(by_tpl[tid], key=lambda x: (_natural(x[0]), x[1])):
             v = version_of.get((f"{tid}.{paper}", ss)) or version_of.get((tid, ss))  # 玩具 1 つの版（雛形の id.形）があれば、それが先
             ver = f"版 {v['version']}（{'・'.join(p['id'] for p in v['proposals'])}）" if v else "—"
-            res = "・".join(f"{k} {n}" for k, n in g["results"].items()) or "—"
+            res = "・".join(f"{_label(k)} {n}" for k, n in g["results"].items()) or "—"  # 札の言葉は束の字なので、表の列を崩させない
             stuck = "、".join(f"手順 {k}: {s['taps']} 回・{s['people']} 人" for k, s in sorted(g["stuck_steps"].items())) or "—"
             quit_ = "、".join(f"手順 {k}: {n}" for k, n in sorted(g["quit_steps"].items())) or "—"
             sheet = reading_of(tid, paper)
