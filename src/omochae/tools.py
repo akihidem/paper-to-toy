@@ -81,5 +81,11 @@ def work_dir(parent, prefix):
     parent = pathlib.Path(parent)
     _sweep(parent, prefix)
     path = pathlib.Path(tempfile.mkdtemp(prefix=f"{prefix}{os.getpid()}-", dir=parent))
-    (path / MARK).write_bytes(b"")
+    try:
+        (path / MARK).write_bytes(b"")
+    except OSError:
+        # 印を書けない（場所が足りない など）時は、置き場を消してから同じ誤りを返す。呼ぶ側はまだ置き場を受け取っていないので
+        # finally で消せず、印が無いので次の回の片づけも消さない（残ったままになる）
+        shutil.rmtree(path, ignore_errors=True)
+        raise
     return path

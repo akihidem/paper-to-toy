@@ -97,7 +97,9 @@ with tempfile.TemporaryDirectory() as tmp:
         o.mkdir()
         (o / "keep.txt").write_text("x", encoding="utf-8")
         os.utime(o, (time.time() - 7200, time.time() - 7200))
-    (out.parent / f".omochae-{dead.pid}-linkmark" / MARK).symlink_to(out.parent / "elsewhere")
+    # 印が symlink の物: 先は在る普通のファイルにする（先が無いと is_file だけで外れ、symlink を見る確かめを試せない）
+    (out.parent / "mark-target").write_bytes(b"")
+    (out.parent / f".omochae-{dead.pid}-linkmark" / MARK).symlink_to(out.parent / "mark-target")
 
     r = generate(out, env_with())
     assert r.returncode == 0, (r.returncode, r.stderr)
@@ -106,6 +108,20 @@ with tempfile.TemporaryDirectory() as tmp:
     assert all((o / "keep.txt").exists() for o in others), ("work_dir が作ったと分からない物まで消した", [o.name for o in others if not o.exists()])
     assert out.with_suffix(".pdf").exists()
     print("ok stale work dir")
+
+    # 印を書けない時（場所が足りない など）は、印の無い置き場を残さない（次の回の片づけは、印の無い物を消さないため）
+    from unittest import mock
+    from omochae import tools
+    nospace = base / "nospace"
+    nospace.mkdir()
+    with mock.patch.object(pathlib.Path, "write_bytes", side_effect=OSError(28, "No space left on device")):
+        try:
+            tools.work_dir(nospace, ".omochae-")
+            raise AssertionError("印を書けないのに置き場を返した")
+        except OSError as e:
+            assert e.errno == 28, e
+    assert not list(nospace.iterdir()), ("印を書けなかった置き場が残った", [p.name for p in nospace.iterdir()])
+    print("ok mark write fails")
 
     # 3 折りの絵の一時の置き場も同じ
     fold = base / "fold"
