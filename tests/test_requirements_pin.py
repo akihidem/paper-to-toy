@@ -126,7 +126,9 @@ else:
         for name, p in pins.items():
             want = p["new"] if ver(py) >= ver(p["cut"]) else p["old"]
             assert got.get(name) == want, f"Python {py} で {name} が {got.get(name)} に解けた（固定は {want}）"
-    # ネットを使わない設定で、キャッシュが空の時は、落とさずに飛ばす（空の置き場を UV_CACHE_DIR にするので、ネットにもキャッシュにも出ない）
+    # ネットを使わない設定で、キャッシュが空の時は、落とさない（空の置き場を UV_CACHE_DIR にするので、ネットにもキャッシュにも出ない）。
+    # 手元の wheel の置き場（UV_FIND_LINKS や uv.toml の find-links。ネットの無い機械でよく使う）がある機械では、ネットに出ずに解けるので、
+    # 解けた（ok）も通す。見るのは「解けないと誤って落とさない」事だけ
     with tempfile.TemporaryDirectory() as cold:
         kind, why, _ = compile_at(MIN_PY, {**os.environ, "UV_OFFLINE": "1", "UV_CACHE_DIR": cold})
-        assert kind == "skip", (kind, why)
+        assert kind != "fail", (kind, why)
