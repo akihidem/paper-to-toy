@@ -2,7 +2,8 @@
 .env.*
 *.pem
 *.key
-.venv/
+# 末尾の / を付けない（/ 付きはフォルダにしか当たらず、手元の環境へ向けた symlink の .venv が入りうる。中身は手元の絶対のパス）
+.venv
 out/
 # README の手順で作る寸法の見本（--params に渡す JSON）
 /tiger.json
@@ -13,5 +14,5 @@ __pycache__/
 LANE-*.md
 lane-issues/
 # 作業の道具が手元に書く覚え書きの置き場（.claude/CONTEXT.md など）。.git/info/exclude だけで外すと clone に付いてこず、
-# 別の clone で `git add -A` すると入りうる（セキュリティの点検 2026-11-07）
-.claude/
+# 別の clone で `git add -A` すると入りうる（セキュリティの点検 2026-11-07）。.venv と同じく symlink にも当たるよう、末尾の / は付けない
+.claude
