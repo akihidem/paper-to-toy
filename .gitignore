@@ -12,3 +12,6 @@ __pycache__/
 # 作業の頼みの文（作る過程の覚え書き）は repo の中身ではないので入れない
 LANE-*.md
 lane-issues/
+# 作業の道具が手元に書く覚え書きの置き場（.claude/CONTEXT.md など）。.git/info/exclude だけで外すと clone に付いてこず、
+# 別の clone で `git add -A` すると入りうる（セキュリティの点検 2026-11-07）
+.claude/

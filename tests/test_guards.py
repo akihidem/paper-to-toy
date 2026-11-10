@@ -304,7 +304,7 @@ if shutil.which("git"):
         env = {**os.environ, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
         subprocess.run(["git", "init", "-q", d], env=env, check=True)
         shutil.copy(ROOT / ".gitignore", d)
-        names = ["LANE-BRIEF.md", "LANE-NOTES.md", "LANE-X.md", "lane-issues/a.md", "keep.md"]
+        names = ["LANE-BRIEF.md", "LANE-NOTES.md", "LANE-X.md", "lane-issues/a.md", ".claude/CONTEXT.md", "keep.md"]
         for n in names:
             f = pathlib.Path(d) / n
             f.parent.mkdir(exist_ok=True)
