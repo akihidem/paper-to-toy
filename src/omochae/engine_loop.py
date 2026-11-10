@@ -183,9 +183,12 @@ def check_bundle(b):
             bad(f"{w}.sheet_set", "刷った組の形でない（分からない時は空）")
         if not (isinstance(paper, str) and (paper == "" or NAME.fullmatch(paper))):
             bad(f"{w}.paper", "紙の名の形でない（無い時は空）")
-        if (tid, ss, paper) in seen:
-            bad(w, "同じ雛形・刷った組・紙の群が 2 つある")
-        seen.add(tuple(x if isinstance(x, str) else None for x in (tid, ss, paper)))
+        # 重なりは、3 つが全部字の時だけ見る。字でない値は上の行で形の誤りとして名指し済みで、list や辞書のまま集合に当てると
+        # ハッシュできずにトレースバックで落ちた（決まった誤りで返すため。セキュリティの点検 2026-11-07）
+        if all(isinstance(x, str) for x in (tid, ss, paper)):
+            if (tid, ss, paper) in seen:
+                bad(w, "同じ雛形・刷った組・紙の群が 2 つある")
+            seen.add((tid, ss, paper))
         if not _count(g.get("reports", 0)):
             bad(f"{w}.reports", "報告の数は 0 以上の整数")
         res = g.get("results", {})
@@ -290,7 +293,7 @@ def bundles():
     for p in sorted(_dirs()["bundles"].glob("B-*.json")):
         try:
             b = _load(p)
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):  # 深すぎる入れ子も読めない束（CLI の check・take の読みと同じ受け）
             continue
         if check_bundle(b):
             continue  # 置いた後に手で書き換えられた束は数えない
@@ -317,7 +320,7 @@ def report_source():
     for path in sorted(d.glob("*.json")) if d.is_dir() else []:
         try:
             r = _load(path)
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):  # 束の置き場と同じく、深すぎる入れ子も読めない物として数えない
             continue
         if not isinstance(r, dict) or check(r):
             continue
@@ -820,6 +823,11 @@ def main(argv=None):
         return 0
     except (OSError, ValueError, KeyError) as e:
         print(f"できない: {type(e).__name__}（置き場か台帳が読めない）", file=sys.stderr)
+        return 4
+    except Exception as e:  # 想定外は「できた」にも「落ちた」にも数えない（手で書き換えた台帳や案の記録の型違いなど）。
+        # トレースバックの 1 を出さない（終了の番号の決まり）。例外の文は出さず型の名だけ: 文に束や台帳の値が入りうる
+        # （落とした中身を出し直さないため。セキュリティの点検 2026-11-07）
+        print(f"できない: {type(e).__name__}", file=sys.stderr)
         return 4
 
 
