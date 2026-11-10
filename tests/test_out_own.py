@@ -25,7 +25,10 @@ import zlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PY = sys.executable
-ENV = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
+ENV = {**{k: v for k, v in os.environ.items() if k != "OMOCHAE_INJECT"}, "PYTHONPATH": str(ROOT / "src")}
+# 刷った後の検査に落ちる負の対照（場面の inject）は、試験の印を立てた子でだけ回る（compose.INJECT_MARK と同じ名。印の無い道では 4 で断る）。
+# 印はその場面の子にだけ渡し、ほかの子は印の無い道（使う人と同じ道）で回す
+INJECT_ENV = {**ENV, "OMOCHAE_INJECT": "1"}
 SRC_ID = "NDL-1187053-R0000005-L"
 FROZEN = ROOT / "tests/frozen/scenarios"
 KINDS = (".svg", ".pdf", ".png")
@@ -122,11 +125,11 @@ with tempfile.TemporaryDirectory() as base:
     assert files(d) == {}, f"自分の紙が残った: {sorted(files(d))}"
     # 刷った後の検査に落ちた時も消え、退けた紙だけが残る。退けた紙の名の前の自分の物は上書きする
     d = case("own_post")
-    r = gen(marks, d / "x")
+    r = gen(marks, d / "x", INJECT_ENV)
     assert r.returncode == 3 and "F1.marks" in r.stderr and f"退けた: {d / 'x.rejected.pdf'}" in r.stderr and KEEP not in r.stderr, r.stderr
     assert sorted(files(d)) == ["x.rejected.pdf"], sorted(files(d))
     first = (d / "x.rejected.pdf").read_bytes()
-    r = gen(images, d / "x")
+    r = gen(images, d / "x", INJECT_ENV)
     assert r.returncode == 3 and "F5.image_count" in r.stderr and "退けた: " in r.stderr and KEEP not in r.stderr, r.stderr
     assert sorted(files(d)) == ["x.rejected.pdf"] and (d / "x.rejected.pdf").read_bytes() != first, "自分の前の退けた紙を上書きしない"
 
@@ -198,7 +201,7 @@ with tempfile.TemporaryDirectory() as base:
     for name, how in (("rejected_other", other_pdf), ("rejected_text", lambda p: p.write_text("大事なメモ", encoding="utf-8"))):
         d = case(name, _rejected_pdf=how)
         keep = (d / "x.rejected.pdf").read_bytes()
-        r = gen(marks, d / "x")
+        r = gen(marks, d / "x", INJECT_ENV)
         assert r.returncode == 3 and "F1.marks" in r.stderr and keep_line(d / "x.rejected.pdf") in r.stderr and "退けた: " not in r.stderr, r.stderr
         assert files(d) == {"x.rejected.pdf": keep}, (name, sorted(files(d)))
         assert not [p for p in d.iterdir() if p.name.startswith(".omochae-")], "仮の置き場が残った"
