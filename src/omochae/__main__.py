@@ -5,6 +5,7 @@
 import argparse
 import json
 import pathlib
+import re
 import shutil
 import sys
 
@@ -13,7 +14,7 @@ try:
     from .compose import TEMPLATES, compose
     from .marks import check_image_count, check_pdf
     from .model import ToolMissing, check_name
-    from .tools import work_dir
+    from .tools import run_tool, work_dir
 except Exception as e:
     print(f"検査できない: {type(e).__name__}: {e}", file=sys.stderr)
     sys.exit(4)
@@ -32,9 +33,70 @@ def _named(stem, ext):
     return stem.with_name(stem.name + ext)
 
 
+# この入口が書く 3 つの紙の頭。SVG は render.to_svg が drawsvg で書く頭（drawsvg は requirements.txt で版を固定）。型紙の SVG を
+# 絵の道具で開いて同じ名で保存し直すと、頭が道具の物に変わるので、手を入れた SVG を前の回の紙と読まない。PNG は PNG の決まった頭だけ
+# （pdftoppm の PNG には、この入口が決まった値を書く所が無い）。
+HEADS = {".svg": b'<?xml version="1.0" encoding="UTF-8"?>\n<svg xmlns="http://www.w3.org/2000/svg"', ".pdf": b"%PDF-",
+         ".png": b"\x89PNG\r\n\x1a\n"}
+
+
+def _head_is(path, head):
+    """普通のファイルで、頭が head か。FIFO などは開くと止まりうるので、開かない。"""
+    try:
+        if not path.is_file():
+            return False
+        with path.open("rb") as f:
+            return f.read(len(head)) == head
+    except OSError:
+        return False
+
+
+def _ours_pdf(path):
+    """この入口（render.write_all）が書いた PDF か。--out を別の物（同じ名の写真や書類）に向けた時に、それを消さない・上書きしないため
+    （セキュリティの点検 2026-11-07）。3D の入口の _ours（作り方の 3D の JSON か）と同じ種類の直し。
+
+    なぜ作った時刻の欄で見るか: write_all は cairo で書き、作った時刻の欄を決まった値 PDF_DATE にする。ほかの道具や人の PDF は
+    本当の時刻を持つので、作り手が cairo で時刻が PDF_DATE の PDF は、この入口の紙と読める。紙に新しい印を足さずに済む（刷る紙を変えない）。
+    欄は cairo 1.18 では圧縮した塊に入る（render の注）ので、バイトを探さず、刷った後の検査が使う pdftotext（init.sh が見る道具）の
+    -htmlmeta で読む。pdfinfo は init.sh が見ていないので使わない。日付は poppler の版で、ISO の形に直して出すか（poppler 24.02 は
+    1970-01-01T00:00:00Z）、欄の生の字（19700101000000Z）で出すかが違いうるので、数字だけを比べる。
+    確かめられない時（道具が無い・時間切れ・読めない・普通のファイルでない・render が読み込めない）は、この入口の物と言わない（消さない側）。"""
+    if not _head_is(path, HEADS[".pdf"]):
+        return False
+    try:
+        from .render import PDF_DATE  # 描く前の検査だけの時は、消す候補が在る時にだけ重い読み込みをする
+        # 絶対のパスで渡す（- で始まる --out を、命令の印と読ませない）。-l 1: 本文は要らないので、大きな PDF でも 1 頁で止める
+        head = run_tool(["pdftotext", "-htmlmeta", "-l", "1", str(path.absolute()), "-"], "pdftotext で読めない").stdout
+    except (ImportError, OSError, ToolMissing):
+        return False
+    head = head.decode("utf-8", "replace").split("</head>", 1)[0]  # 題などの値は poppler が &quot; などに直すので、行の形を偽れない
+    meta = dict(re.findall(r'^<meta name="(\w+)" content="([^"]*)"/>$', head, re.M))
+    digits = lambda s: re.sub(r"\D", "", s)
+    return meta.get("Producer", "").startswith("cairo ") and digits(meta.get("CreationDate", "")) == digits(PDF_DATE)
+
+
+def _keep(path):
+    # 3D の入口と同じ言い方にする。確かめられない物も同じ行で言う（どちらも、この入口の物としては扱わない）。
+    print(f"--out の所の物は型紙の {path.suffix[1:].upper()} でないので、消さない: {path}", file=sys.stderr)
+
+
 def _drop(stem):
-    for old in (_named(stem, x) for x in (".svg", ".pdf", ".png")):
-        old.unlink(missing_ok=True)
+    """前の回の紙（--out の名の SVG・PDF・PNG）を消す。消すのは、この入口が書いたと確かめた物だけで、ほかは消さずに行で言う。
+
+    SVG と PNG を同じ名の PDF で確かめるのは、SVG と PNG には、PDF の作った時刻の欄のような、この入口が決まった値を書く所が無いため。
+    3 つは通った回にだけ、同じ回に同じ名へ置くので、同じ名の PDF がこの入口の物なら、SVG と PNG も同じ回の物と読む。そのうえで、
+    それぞれの頭が、この入口の書く形かも見る（HEADS）。PDF が無い・この入口の物と確かめられない時は、SVG と PNG も消さない。
+    前の回の紙が正しい名で残りうるが、消さない事は行で分かる。確かめは消す前に済ませる（PDF を先に消すと、SVG と PNG の確かめの
+    拠り所が無くなる）。"""
+    ours = _ours_pdf(_named(stem, ".pdf"))
+    for ext, head in HEADS.items():
+        old = _named(stem, ext)
+        if not (old.exists() or old.is_symlink()):
+            continue
+        if ours and _head_is(old, head):
+            old.unlink()
+        else:
+            _keep(old)
 
 
 def load_source(source_id):
@@ -72,9 +134,10 @@ def generate(template, params, source_id, out, page="A4", version=1, title=None,
     if failures:
         # 検査に落ちた時だけ前の回の紙を消す。前に通った紙が正しい名前で残ると、今回の物と取り違える。
         # 検査できない（例外・exit 4）時は消さない。今回は何も分かっていないので、前の結果を壊す理由が無い。
-        _drop(stem)
+        # 消すのは、この入口が書いたと確かめた紙だけ（_drop）。消さない物の行は、検査の行の後に出す（3D の入口と同じ順）。
         for f in failures:
             print(f.line(), file=sys.stderr)
+        _drop(stem)
         return 3
     from .render import to_png, write_all  # 描く前の検査だけの時に重い読み込みをしない
     # 描く・刷った後の検査・PNG は、その回だけの仮の置き場で作り、全部済んでから正しい名前へ移す。途中で検査できなくなった
@@ -90,11 +153,16 @@ def generate(template, params, source_id, out, page="A4", version=1, title=None,
         failures = check_pdf(pdf, source) + check_image_count(pdf)
         if failures:
             rejected = _named(stem, ".rejected.pdf")
-            pdf.replace(rejected)  # 印の無い紙を正しい名前で残さない。
-            _drop(stem)  # 前の回の紙も正しい名前で残さない（今回の物と取り違えるため）。
             for f in failures:
                 print(f.line(), file=sys.stderr)
-            print(f"退けた: {rejected}", file=sys.stderr)
+            # 退けた紙の名に別の物が在る時は上書きしない（上書きは消すのと同じ。確かめは _drop と同じ _ours_pdf）。
+            # その時は今回の退けた紙を残さない（別の名で置くと、使う人の知らない名の物が増える）。
+            if not (rejected.exists() or rejected.is_symlink()) or _ours_pdf(rejected):
+                pdf.replace(rejected)  # 印の無い紙を正しい名前で残さない。
+                print(f"退けた: {rejected}", file=sys.stderr)
+            else:
+                _keep(rejected)
+            _drop(stem)  # 前の回の紙も正しい名前で残さない（今回の物と取り違えるため）。
             return 3
         to_png(pdf, tmp)
         for x in (".svg", ".pdf", ".png"):
