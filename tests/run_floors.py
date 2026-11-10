@@ -21,6 +21,9 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 PY = str(ROOT / ".venv/bin/python")
 NOT_YET = []
 MANIFEST = "tests/frozen/manifest.json"
+# 場面の inject（負の対照の差し込み）を許す印。src/omochae/compose.py の INJECT_MARK と同じ名前（tests/test_inject_gate.py が揃いを見る）。
+# ここで import しないのは、src を置かずに場面だけを回す写しの tree（tests/test_exit_codes.py）でも、この file が読めるようにするため。
+INJECT_MARK = "OMOCHAE_INJECT"
 
 
 def _sha(path):
@@ -112,8 +115,22 @@ def load_scenarios():
 
 def child_env(environ):
     """子へ渡す環境。試験は素の assert で検査するので、assert を消す設定（PYTHONOPTIMIZE）を渡さない。
-    呼ぶ側の環境に残っていると、落ちるはずの試験が黙って通る（#36）。子は -O も付けずに起こす。"""
-    return {**{k: v for k, v in environ.items() if k != "PYTHONOPTIMIZE"}, "PYTHONPATH": str(ROOT / "src")}
+    呼ぶ側の環境に残っていると、落ちるはずの試験が黙って通る（#36）。子は -O も付けずに起こす。
+    inject を許す印も渡さない。印は inject を持つ場面の子にだけ足す（main）。試験の子が呼ぶ側の印を受けると、
+    印の無い道で inject を断る事を、試験が確かめられない。"""
+    drop = {"PYTHONOPTIMIZE", INJECT_MARK}
+    return {**{k: v for k, v in environ.items() if k not in drop}, "PYTHONPATH": str(ROOT / "src")}
+
+
+def uses_inject(sc):
+    """場面が負の対照の差し込み（inject）を持つか。持つ場面の子にだけ印を渡し、結果の表の命令にも印を書く。
+    全部の場面に渡さないのは、inject の無い場面を、印の無いふつうの入口と同じ形で回すため（その行の命令も前のまま）。"""
+    return bool(json.loads(sc.read_text(encoding="utf-8")).get("inject"))
+
+
+def scenario_env(env, sc):
+    """場面の子へ渡す環境。inject を持つ場面にだけ印を足す（試験もこの関数で、ここと同じ渡し方を確かめる）。"""
+    return {**env, INJECT_MARK: "1"} if uses_inject(sc) else env
 
 
 def child_timeout(environ):
@@ -141,8 +158,10 @@ def _rel(path):
 
 
 def scenario_command(sc):
-    """結果の表に書く命令。repo の頭でそのまま打てる形にする（落ちた行を手で回し直すため）。"""
-    return f"PYTHONPATH=src .venv/bin/python -m omochae --scenario {_rel(sc)} --out out/scenarios/{sc.stem}"
+    """結果の表に書く命令。repo の頭でそのまま打てる形にする（落ちた行を手で回し直すため）。
+    inject を持つ場面は、印が無いと断られて 4 になるので、子に渡したのと同じ印を命令の頭に書く（打てば同じ結果になる）。"""
+    mark = f"{INJECT_MARK}=1 " if uses_inject(sc) else ""
+    return f"{mark}PYTHONPATH=src .venv/bin/python -m omochae --scenario {_rel(sc)} --out out/scenarios/{sc.stem}"
 
 
 def test_command(test):
@@ -183,7 +202,7 @@ def main():
     for sc, expect in scenarios:
         out = ROOT / "out/scenarios" / sc.stem
         cmd = [PY, "-m", "omochae", "--scenario", str(sc), "--out", str(out)]
-        r, _ = run_child(cmd, env, limit)
+        r, _ = run_child(cmd, scenario_env(env, sc), limit)
         ok, got = scenario_ok(expect, r.returncode, r.stderr)
         broken += r.returncode == 4
         bad += not ok

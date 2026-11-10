@@ -9,8 +9,10 @@ import pathlib
 import subprocess
 import sys
 import tempfile
+from unittest import mock
 
 from omochae.__main__ import load_source
+from omochae.compose import INJECT_MARK
 from omochae.foldsim import ROUND_SEGMENTS, export
 from omochae.templates import pivot_counterweight, slider_fan
 
@@ -57,8 +59,10 @@ assert out == [] and [f.floor for f in failures] == ["F5.fan_height"] and not an
 export("slider_fan", tab, src, d)
 assert [f.name for f in export("slider_fan", tab, src, d, parts={"fan"})[0]] == ["slider_fan_fan_foldsim.svg"]
 assert sorted(p.name for p in pathlib.Path(d).iterdir()) == ["slider_fan_fan_foldsim.svg"]
-# 場面の inject も検査に渡す（python -m omochae と同じ判定）
-_, failures = export("slider_fan", {}, src, tempfile.mkdtemp(), inject={"move_part": {"name": "base", "x": 10, "y": 60}})
+# 場面の inject も検査に渡す（python -m omochae と同じ判定）。inject は試験だけで使えるので、印を立てた間だけ渡す
+# （印の無い道で断る事は tests/test_inject_gate.py が見る）
+with mock.patch.dict(os.environ, {INJECT_MARK: "1"}):
+    _, failures = export("slider_fan", {}, src, tempfile.mkdtemp(), inject={"move_part": {"name": "base", "x": 10, "y": 60}})
 assert "F5.overlap" in [f.floor for f in failures]
 # 前の回の SVG を名前で選ぶので、部品の key は英小文字だけにしておく
 import re
@@ -107,8 +111,8 @@ except ValueError as e:
 
 # 4. 入口（python -m omochae.foldsim）の終了の番号: 0 書き出した / 3 検査に落ちた / 4 書き出せない
 with tempfile.TemporaryDirectory() as d:
-    def cli(*args):
-        return subprocess.run([sys.executable, "-m", "omochae.foldsim", *args, "--out", str(pathlib.Path(d) / "fs")], cwd=d, env=ENV, capture_output=True, text=True)
+    def cli(*args, env=ENV):
+        return subprocess.run([sys.executable, "-m", "omochae.foldsim", *args, "--out", str(pathlib.Path(d) / "fs")], cwd=d, env=env, capture_output=True, text=True)
 
     assert cli("--scenario", str(ROOT / "examples/tiger_hang.json")).returncode == 0
     bad = pathlib.Path(d) / "bad.json"
@@ -123,7 +127,8 @@ with tempfile.TemporaryDirectory() as d:
     assert r.returncode == 4 and "知らない部品" in r.stderr, r.stderr
     r = cli("--scenario", str(ROOT / "examples/fan_tab.json"), "--parts", "figure")
     assert r.returncode == 4 and "折りのある部品が無い" in r.stderr, r.stderr
-    r = cli("--scenario", str(ROOT / "tests/frozen/scenarios/neg_overlap.json"))
+    # 凍結の負の対照の場面は、tests/run_floors.py と同じく印を渡して回す
+    r = cli("--scenario", str(ROOT / "tests/frozen/scenarios/neg_overlap.json"), env={**ENV, INJECT_MARK: "1"})
     assert r.returncode == 3 and "F5.overlap" in r.stderr, r.stderr
     # 折りの無い形は、折る所が無いだけで誤りではない。0 で終わり、書いていない --parts を案内しない。前の回の同じ頭の SVG は残さない
     fs, form = pathlib.Path(d) / "fs", pathlib.Path(d) / "form.json"

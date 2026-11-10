@@ -185,6 +185,14 @@ def _word(v):
     return isinstance(v, str) and 1 <= len(v) <= 20 and not has_contact(v)
 
 
+def _label(word):
+    """札の言葉（動きの札の結果の名・動かない側の札）を、Issue の下書きの「なぜか」と版ごとの数の表に出す形にする。
+    札は束から来る字で、長さと連絡先の形しか見ていないので、改行・表の区切り（|）・HTML の形・制御の文字が入りうる。
+    作った人の文と同じく、1 行にして Markdown の記号を無効にする（下書きの見出しや表の列を、束の字で作らせない。
+    セキュリティの点検 2026-11-07）。雛形の札（「動いた」「回らない」など）は記号を持たないので、出る字は変わらない。"""
+    return _md_text(_one_line(word))
+
+
 def check_bundle(b):
     """束の形を確かめる。Returns Failure の list（空なら通る）。知らせの文に、束の値は入れない（落とした中身を出し直さないため）。
     連絡先の形のある文は F13.pii で名指しする（何番目の群の何番目の文か、だけ）。take は、その文を落として先へ進む。"""
@@ -234,9 +242,12 @@ def check_bundle(b):
         for key, name in (("template", tid), ("sheet_set", ss), ("paper", paper)):
             if isinstance(name, str) and NAME.fullmatch(name) and _has_contact_outside_ids(name):
                 bad(f"{w}.{key}", CONTACT_JA)
-        if (tid, ss, paper) in seen:
-            bad(w, "同じ雛形・刷った組・紙の群が 2 つある")
-        seen.add(tuple(x if isinstance(x, str) else None for x in (tid, ss, paper)))
+        # 重なりは、3 つが全部字の時だけ見る。字でない値は上の行で形の誤りとして名指し済みで、list や辞書のまま集合に当てると
+        # ハッシュできずにトレースバックで落ちた（決まった誤りで返すため。セキュリティの点検 2026-11-07）
+        if all(isinstance(x, str) for x in (tid, ss, paper)):
+            if (tid, ss, paper) in seen:
+                bad(w, "同じ雛形・刷った組・紙の群が 2 つある")
+            seen.add((tid, ss, paper))
         if not _count(g.get("reports", 0)):
             bad(f"{w}.reports", "報告の数は 0 以上の整数")
         res = g.get("results", {})
@@ -341,7 +352,7 @@ def bundles():
     for p in sorted(_dirs()["bundles"].glob("B-*.json")):
         try:
             b = _load(p)
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):  # 深すぎる入れ子も読めない束（CLI の check・take の読みと同じ受け）
             continue
         if check_bundle(b):
             continue  # 置いた後に手で書き換えられた束は数えない
@@ -368,7 +379,7 @@ def report_source():
     for path in sorted(d.glob("*.json")) if d.is_dir() else []:
         try:
             r = _load(path)
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):  # 束の置き場と同じく、深すぎる入れ子も読めない物として数えない
             continue
         if not isinstance(r, dict) or check(r):
             continue
@@ -547,7 +558,7 @@ def drafts(gs):
                         "paper": paper, "step": None,
                         "title": f"{tid}{_on(paper)}: 動きの床の式と既定の寸法を見直す",
                         "numbers": {"not_moved": not_moved, "moved": g["results"].get(g["moved_word"], 0), "reports": g["reports"]},
-                        "why": f"{where}は検査を通って刷られた紙で、「{g['not_moved_word']}」の札が {not_moved} 件（報告 {g['reports']} 件）。",
+                        "why": f"{where}は検査を通って刷られた紙で、「{_label(g['not_moved_word'])}」の札が {not_moved} 件（報告 {g['reports']} 件）。",
                         "evidence": [t for t in g["texts"] if t["kind"] in ("stuck", "impression", "explain", "think")][:MOTION_TEXTS],
                         "record_ids": g["record_ids"], "in_engine": here})
         for d in out[first:]:
@@ -758,7 +769,7 @@ def compare(gs, led):
         for ss, paper, g in sorted(by_tpl[tid], key=lambda x: (_natural(x[0]), x[1])):
             v = version_of.get((f"{tid}.{paper}", ss)) or version_of.get((tid, ss))  # 玩具 1 つの版（雛形の id.形）があれば、それが先
             ver = f"版 {v['version']}（{'・'.join(p['id'] for p in v['proposals'])}）" if v else "—"
-            res = "・".join(f"{k} {n}" for k, n in g["results"].items()) or "—"
+            res = "・".join(f"{_label(k)} {n}" for k, n in g["results"].items()) or "—"  # 札の言葉は束の字なので、表の列を崩させない
             stuck = "、".join(f"手順 {k}: {s['taps']} 回・{s['people']} 人" for k, s in sorted(g["stuck_steps"].items())) or "—"
             quit_ = "、".join(f"手順 {k}: {n}" for k, n in sorted(g["quit_steps"].items())) or "—"
             sheet = reading_of(tid, paper)
@@ -880,6 +891,11 @@ def main(argv=None):
         return 0
     except (OSError, ValueError, KeyError) as e:
         print(f"できない: {type(e).__name__}（置き場か台帳が読めない）", file=sys.stderr)
+        return 4
+    except Exception as e:  # 想定外は「できた」にも「落ちた」にも数えない（手で書き換えた台帳や案の記録の型違いなど）。
+        # トレースバックの 1 を出さない（終了の番号の決まり）。例外の文は出さず型の名だけ: 文に束や台帳の値が入りうる
+        # （落とした中身を出し直さないため。セキュリティの点検 2026-11-07）
+        print(f"できない: {type(e).__name__}", file=sys.stderr)
         return 4
 
 

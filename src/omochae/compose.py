@@ -1,5 +1,6 @@
 """寸法から頁の配置を作る。描画はしない（検査だけを速く回せるようにするため。道具 check_params もここを使う）。"""
 import importlib
+import os
 import pkgutil
 
 from .floors import check_art, check_bom, check_holes, check_layout
@@ -34,6 +35,12 @@ TEMPLATES = _discover()
 TITLE_SIZE, BODY_SIZE, LABEL_SIZE = 5.0, 3.0, 2.8
 LINE = 1.25  # 行送りの倍率。CJK の字面より少し広く取る
 GAP = 4.0
+# 場面の inject（負の対照の差し込み）を使えるのは試験だけにする（セキュリティの点検 2026-11-07）。検査が落とす事を確かめるために、
+# わざと誤った紙を作る差し込みで、試験の外で要る事は無いので、どの場面からでも渡せる形を閉じる。印を環境の値にするのは、凍結の場面を回す tests/run_floors.py が
+# 子に python -m omochae を起こすため（入口の引数を変えずに子へ渡せるのは環境だけ）。場面の JSON に印を置くと、場面を書く人が自分で許せ、
+# 凍結の場面も変わる。見るのは compose の 1 か所: 場面の inject を読む入口（python -m omochae・omochae.foldsim・omochae.fold3d）は
+# みなここを通るので、入口を足しても断り忘れない。tests/run_floors.py は同じ名前を写して持つ（src を読まずに回る写しの tree があるため）。
+INJECT_MARK = "OMOCHAE_INJECT"
 
 
 def _block(texts, lines, x, y, size, width):
@@ -48,6 +55,10 @@ def _block(texts, lines, x, y, size, width):
 def compose(template_id, params, source, page_name="A4", version=1, title=None, inject=None):
     """Returns (merged params, layout dict, failures)。寸法の範囲か物理で落ちたら配置は作らない所までで返す。"""
     tpl, inject = TEMPLATES[template_id], inject or {}
+    if inject and os.environ.get(INJECT_MARK) != "1":
+        # 落ちた（3）でなく呼び方の誤り（4）にする。3 にすると python -m omochae が前の回の紙を消す（断っただけの回に、前の結果を壊す理由は無い）。
+        # 渡された差し込みの名前は返さない（受付の画面などへ、そのまま返りうる文なので）。
+        raise ToolMissing("場面の inject は負の対照の試験だけで使う（凍結の場面は ./run.sh の結果 out/RESULT.md の命令で回す）")
     p = {**tpl.DEFAULTS, **params}
     failures = tpl.check_range(p)
     if failures:  # 範囲の外の値で先を計算すると、別の検査が連鎖して狙いが読めなくなる。
