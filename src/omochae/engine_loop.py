@@ -74,6 +74,12 @@ MAX_TEXTS = 2000
 MAX_GROUPS = 500
 MAX_STEP = 40  # 手順の番号の上限。どの雛形の組み方も 40 手順より短い
 MAX_COUNT = 100000  # 数の欄の上限。上限が無いと、数の欄で番号を運べる
+# 束の大きさの上限（バイト。置き場に置く形の JSON で数える）。上限が無いと、大きな束を一度置くだけで、以後の案作りと並べが毎回
+# その束を確かめ直して止まった（セキュリティの点検 2026-11-07）。値の根拠: 今の見本の束は 3.4 KB、サイトの今の書き出しは 1.7 KB。
+# サイトは群 1 つの文を 2000 件・1 つ 300 字までに切るので、それが詰まった群は約 2 MB になる。8 MB は、その詰まった群が 4 つ入る大きさで、
+# 見本の 2000 倍を越える。8 MB の束を確かめるのは、手元で 10〜15 秒ほど（300 字の文を詰めて測った）。
+# record_ids の件数は今までどおり MAX_COUNT まで（群 1 つの番号は、その群の案のどれにも写るので、群ごとの上限は残す）
+MAX_BUNDLE_BYTES = 8_000_000
 NAME = re.compile(r"[A-Za-z0-9_.-]{1,80}")  # 雛形の id・刷った組・出し元の名
 MEASURE = re.compile(r"[a-z_]{1,30}")
 RECORD_ID = re.compile(r"R-[0-9]{4,8}")
@@ -147,6 +153,10 @@ def check_bundle(b):
     連絡先の形のある文は F13.pii で名指しする（何番目の群の何番目の文か、だけ）。take は、その文を落として先へ進む。"""
     if not isinstance(b, dict):
         return [Failure("F13.bundle", "束", "JSON の物（辞書）でない")]
+    # 大きさは、置き場に置く形（_dump と同じ書き方）で先に見る。上限の中なら、置いた後の束も読める（bundles が同じ上限で読む）。
+    # 先に見るのは、上限の外の束で文ごとの連絡先の形を探して、時間をかけないため
+    if len(json.dumps(b, ensure_ascii=False, indent=1).encode("utf-8")) + 1 > MAX_BUNDLE_BYTES:
+        return [Failure("F13.bundle", "束", f"束は {MAX_BUNDLE_BYTES // 1_000_000} MB まで")]
     out = []
     bad = lambda where, msg: out.append(Failure("F13.bundle", where, msg))
     if set(b) - TOP_KEYS:
@@ -260,6 +270,20 @@ def _load(path):
     return json.loads(pathlib.Path(path).read_text(encoding="utf-8"))
 
 
+class _TooLarge(ValueError):
+    """束のファイルが MAX_BUNDLE_BYTES より大きい（読めない物の 1 つとして受けられるよう、ValueError の仲間にする）。"""
+
+
+def _load_bundle(path):
+    """束のファイルを読む。上限より大きい物は、上限の 1 バイト先までで読むのをやめて _TooLarge（大きなファイルや、
+    終わりの無いファイルを指されても、全部を読もうとして止まらないように）。"""
+    with open(path, "rb") as f:
+        data = f.read(MAX_BUNDLE_BYTES + 1)
+    if len(data) > MAX_BUNDLE_BYTES:
+        raise _TooLarge(MAX_BUNDLE_BYTES)
+    return json.loads(data.decode("utf-8"))
+
+
 def _dump(path, obj, exclusive=False):
     with open(path, "x" if exclusive else "w", encoding="utf-8") as f:
         json.dump(obj, f, ensure_ascii=False, indent=1)
@@ -289,7 +313,7 @@ def bundles():
     latest = {}
     for p in sorted(_dirs()["bundles"].glob("B-*.json")):
         try:
-            b = _load(p)
+            b = _load_bundle(p)  # 上限より大きい束は、読めない束と同じく数えない
         except (OSError, ValueError):
             continue
         if check_bundle(b):
@@ -366,6 +390,9 @@ def groups(bs):
     今の刷った組は、新しい束の値で読む（組は進むので、前の束の「今」は古い）。文も紙の名を持つ（共有の所の案は紙をまたぐ）。"""
     out = {}
     now = {}
+    # 群ごとの、もう入れた記録の番号。前は入れた番号の list を 1 つずつ探していて、件数の 2 乗の時間がかかった
+    # （出し元の違う束が同じ群を持つ時）。並びと中身は前と同じ（入れる前の番号に無い物を、束の並びのまま足す）
+    have_ids = {}
     for b in sorted(bs, key=lambda b: b["exported_at"]):
         now.update(b.get("current_sets", {}))
     for b in bs:
@@ -393,7 +420,10 @@ def groups(bs):
             m["minutes"] = _join(m["minutes"], g.get("minutes"))
             for k, v in g.get("measures", {}).items():
                 m["measures"][k] = _join(m["measures"].get(k), v)
-            m["record_ids"] += [r for r in g.get("record_ids", []) if r not in m["record_ids"]]
+            have = have_ids.setdefault(key, set())
+            new_ids = [r for r in g.get("record_ids", []) if r not in have]
+            m["record_ids"] += new_ids
+            have.update(new_ids)
             # problem は、受け入れた報告の困り事の種類（report_source が付ける。束の文の欄には無い）
             m["texts"] += [{"kind": t["kind"], "step": t.get("step"), "text": t["text"], "count": t.get("count", 1), "paper": paper,
                             **({"problem": t["problem"]} if t.get("problem") else {})} for t in g.get("texts", [])]
@@ -769,7 +799,9 @@ def main(argv=None):
     try:
         if args.cmd in ("check", "take"):
             try:
-                b = _load(args.file)
+                b = _load_bundle(args.file)
+            except _TooLarge:  # 読めない物でなく、決まりの外の束として断る（check_bundle の上限と同じ字）
+                return fail([Failure("F13.bundle", "束", f"束は {MAX_BUNDLE_BYTES // 1_000_000} MB まで")])
             except (OSError, ValueError, RecursionError) as e:
                 print(f"確かめられない: 束が読めない（{type(e).__name__}）", file=sys.stderr)
                 return 4
