@@ -3,6 +3,7 @@
 終了: 0 = 通る / 3 = 落ちる / 4 = 検査できない。1 と 2 は使わない（検査の結果と道具の故障を読み分けるため）。
 """
 import argparse
+import itertools
 import json
 import os
 import pathlib
@@ -53,11 +54,58 @@ def _head_is(path, head):
         return False
 
 
-# PDF を読む時の上限。型紙の PDF は、手元で刷った 3688 枚で 0.10〜0.51 MB（2026-11-10）。30 倍ほどの余裕を持たせ、これより大きい物は
-# この入口の物と言わない（全部を読む前に止める）。開いた後の上限は、object stream を全部合わせた大きさ（1 つずつの max_length は残り）。
-# 同じ 3688 枚では Info の辞書まで 0.5 KB も開かずに届く。圧縮の爆弾（小さな塊が大きく開く物）でも、ここで止まる
-PDF_READ_MAX = 16 * 1024 * 1024
+# PDF を読む時の上限。手元で刷った型紙の PDF 3688 枚（2026-11-10）を測った値から、余裕を持たせて決める。超える物は、この入口の物と
+# 言わない（確かめられない＝消さない側）。どれも、上限いっぱいの最悪の形の入力でも、確かめが 1 秒ほどで終わるための物でもある。
+# - PDF_READ_MAX: ファイルの大きさ。3688 枚は 0.10〜0.51 MB なので 8 倍ほど。全部を読む前に大きさで止める
+# - OBJSTM_MAX: 見る object stream の数。3688 枚はどれも 2 つ
+# - STREAM_IN_MAX: 1 つの object stream の、zlib に渡す前の大きさ。3688 枚は多くて 290 バイト（/Length は別の obj を指す形なので使わない）
+# - INFLATE_MAX: 開いた後の大きさの、全部の object stream の合計。3688 枚は 1 つ多くて 448 バイト。圧縮の爆弾でも、ここで止まる
+# - DICT_MAX: 辞書の終わりの >> を探す幅。Info の辞書は 100 バイトほど
+PDF_READ_MAX = 4 * 1024 * 1024
+OBJSTM_MAX = 16
+STREAM_IN_MAX = 64 * 1024
 INFLATE_MAX = 1024 * 1024
+DICT_MAX = 64 * 1024
+NUM = rb"\d{1,10}"  # obj の番号・位置の桁。int に桁の多すぎる字を渡さない（4300 桁を越えると ValueError）
+
+
+def _dict_at(data, at):
+    """data の at から始まる「<< … >>」の中身。DICT_MAX の幅に >> が無い・入れ子の辞書は None（読まない）。"""
+    found = re.match(rb"\s*<<(.*?)>>", data[at:at + DICT_MAX], re.S)
+    return found.group(1) if found and b"<<" not in found.group(1) else None
+
+
+def _objstm_info(data, num):
+    """object stream の中の番号 num の辞書を、(stream の位置, 中身) で前から順に出す。1 つの stream の中でも最後の物を使う。"""
+    budget = INFLATE_MAX
+    for hit in itertools.islice(re.finditer(rb"/Type\s{0,16}/ObjStm\b", data), OBJSTM_MAX):
+        start = data.rfind(b"<<", max(0, hit.start() - DICT_MAX), hit.start())
+        end = data.find(b">>", hit.end(), hit.end() + DICT_MAX)
+        if start < 0 or end < 0:
+            continue
+        head = data[start + 2:end]
+        go = re.match(rb"\s{0,16}stream\r?\n", data[end + 2:end + 34])
+        first = re.search(rb"/First\s+(" + NUM + rb")\b", head)
+        if b"<<" in head or not go or not first or not re.search(rb"/Filter\s*/FlateDecode\b", head):
+            continue
+        at = end + 2 + go.end()
+        try:
+            # 入力は STREAM_IN_MAX で切ってから渡す。zlib は開き終えた後ろの残りを unused_data に写すので、切らないと stream ごとに
+            # ファイルの後ろを全部写す（小さな stream が多数並ぶと、それだけで遅くなる）
+            body = zlib.decompressobj().decompress(data[at:at + STREAM_IN_MAX], budget)
+        except zlib.error:
+            continue
+        budget -= len(body)
+        first = int(first.group(1))
+        nums = body[:first].split()  # 頭は「番号 位置」の並び
+        if first <= len(body) and len(nums) % 2 == 0 and all(re.fullmatch(NUM, t) for t in nums):
+            pairs = [(int(n), int(off)) for n, off in zip(nums[0::2], nums[1::2])]
+            mine = [off for n, off in pairs if n == num]
+            info = _dict_at(body, first + mine[-1]) if mine else None
+            if info is not None:
+                yield at, info
+        if budget <= 0:
+            return
 
 
 def _pdf_info(data):
@@ -66,38 +114,21 @@ def _pdf_info(data):
     末尾の trailer（cairo 1.18 では XRef の stream の辞書。どちらも圧縮しない）の /Info が指す物を読む。ほかの所に同じ字を置いた PDF を、
     この入口の物と読まないため。Info は、圧縮しない「N 0 obj << … >>」（object stream を使わない cairo 1.16 などの形。その版の実物では
     確かめていない）か、/FlateDecode の object stream の中（cairo 1.18 の形）に在る。object stream のほかの stream（頁の線など）は、
-    辞書が入らないので開かない。開けない stream と、形の読めない stream は飛ばす。"""
-    refs = re.findall(rb"/Info\s+(\d+)\s+0\s+R", data)
-    if not refs:
+    辞書が入らないので開かない。開けない stream と、形の読めない stream は飛ばす。
+    trailer も Info も、ファイルの中で最後に当たった物を使う（後から書き足して直した PDF では、新しい物が後ろに来る）。
+    探し方はどれも、ファイルを 1 度読むだけで済む形にし、候補ごとに見る幅も決める（候補ごとに終わりまで読み直すと、候補の多い物で止まらない）。"""
+    # 最後に当たった物は、頭の (?s:.*) で後ろから探して 1 度で取る（finditer で全部を並べると、候補の多い物で遅い）。search でなく match に
+    # する（search は当たらない時に始まりを 1 つずつずらして、そのたびに終わりまで読み直す）
+    ref = re.match(rb"(?s:.*)/Info\s{0,16}(" + NUM + rb")\s{1,16}0\s{1,16}R\b", data)
+    if ref is None:
         return None
-    num = int(refs[-1])  # 後から書き足した PDF では、新しい trailer が後ろに来る
-    plain = re.search(rb"(?<![0-9])%d\s+0\s+obj\s*<<(.*?)>>" % num, data, re.S)
-    if plain:
-        return plain.group(1)
-    budget = INFLATE_MAX
-    for s in re.finditer(rb"<<([^<>]*/Type\s*/ObjStm\b[^<>]*)>>\s*stream\r?\n", data):
-        first = re.search(rb"/First\s+(\d+)", s.group(1))
-        if not first or not re.search(rb"/Filter\s*/FlateDecode\b", s.group(1)):
-            continue
-        try:
-            body = zlib.decompressobj().decompress(memoryview(data)[s.end():], budget)  # 写さずに渡す（stream ごとに後ろを全部写さない）
-        except zlib.error:
-            continue
-        budget -= len(body)
-        first = int(first.group(1))
-        try:
-            nums = [int(x) for x in body[:first].split()]  # 頭は「番号 位置」の並び
-        except ValueError:
-            nums = []
-        pairs = list(zip(nums[0::2], nums[1::2]))
-        for i, (n, at) in enumerate(pairs):
-            if n == num:
-                stop = first + pairs[i + 1][1] if i + 1 < len(pairs) else len(body)
-                found = re.match(rb"\s*<<(.*?)>>", body[first + at:stop], re.S)
-                return found.group(1) if found else None
-        if budget <= 0:
-            return None
-    return None
+    num = int(ref.group(1))
+    found = list(_objstm_info(data, num))
+    last = re.match(rb"(?s:.*)(?<![0-9])%d\s{1,16}0\s{1,16}obj\b" % num, data)
+    info = _dict_at(data, last.end()) if last else None
+    if info is not None:
+        found.append((last.end(), info))
+    return max(found, key=lambda x: x[0])[1] if found else None
 
 
 def _ours_pdf(path):
@@ -123,7 +154,10 @@ def _ours_pdf(path):
             data = f.read(size + 1) if size <= PDF_READ_MAX else b""
     except (ImportError, OSError):
         return False
-    info = _pdf_info(data) if 0 < len(data) <= PDF_READ_MAX else None
+    try:
+        info = _pdf_info(data) if 0 < len(data) <= PDF_READ_MAX else None
+    except Exception:  # 読めない形のどこで何が起きても、確かめられない（消さない）。検査に落ちた回を 4 にしない
+        return False
     if info is None:
         return False
     when = re.escape(PDF_DATE.translate(str.maketrans("", "", "-T:")).encode("ascii"))

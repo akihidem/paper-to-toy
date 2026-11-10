@@ -9,7 +9,8 @@
    Info の指さない所に欄を置いた・題で欄を偽った PDF も、この入口の物と読まない
 3. 確かめは pdftotext に頼らない（作った時刻をいつも空で出す古い poppler の形の pdftotext を置いても、自分の紙は消える）。
    確かめられない時（大きすぎる・圧縮の爆弾の stream・普通のファイルでない）は消さず、爆弾でも開く大きさは上限で止まる。
-   圧縮していない Info の辞書（object stream を使わない cairo の形）も読む
+   圧縮していない Info の辞書（object stream を使わない cairo の形）も読む。後から書き足して直した Info は新しい方で読む。
+   上限いっぱいの最悪の形の PDF でも確かめは早く終わり、桁の多すぎる番号でも検査に落ちた回は 3 のまま
 4. 刷った後の検査に落ちた時、退けた紙の名に在る別の物を上書きしない
 5. 落ちない回の書き出しは今と同じ（3 つを書き、同じ名の別の物は同じバイトの紙で置き換え、PDF の名を出す）
 """
@@ -75,6 +76,18 @@ def hand_pdf(path, objs, info):
 
 CAIRO, EPOCH = b"/Producer (cairo 1.18.0 (https://cairographics.org))", b"/CreationDate (19700101000000Z)"
 NOW = b"/CreationDate (D:20261110120000+09'00)"
+
+
+def objstm(objs):
+    """object stream 1 つ（番号 9 の obj）。objs は [(番号, 辞書の中身)]。頭の「番号 位置」の並びと /First を、cairo と同じ形で書く。"""
+    head, body = [], b""
+    for n, d in objs:
+        head.append(b"%d %d" % (n, len(body)))
+        body += b"<< " + d + b" >>\n"
+    head = b" ".join(head) + b"\n"
+    z = zlib.compress(head + body)
+    return (b"9 0 obj\n<< /Type /ObjStm /N %d /First %d /Filter /FlateDecode /Length %d >>\nstream\n" % (len(objs), len(head), len(z))
+            + z + b"\nendstream\nendobj\n")
 
 
 def bomb(path):
@@ -191,6 +204,38 @@ with tempfile.TemporaryDirectory() as base:
     # 圧縮していない Info の辞書も読む（object stream を使わない cairo の形）。Info の指す辞書の作り手と時刻が合えば、この入口の物と読む
     hand_pdf(base / "plain.pdf", {1: b"/Type /Catalog", 2: CAIRO + b"\n   " + EPOCH}, 2)
     assert entry._ours_pdf(base / "plain.pdf") is True
+    # 3b. 後から書き足して Info を直した PDF は、後ろの（新しい）方で読む。圧縮しない形と object stream の形の両方で、向きを入れ替えて見る
+    for old, new, want in ((NOW, EPOCH, True), (EPOCH, NOW, False)):
+        plain = b"".join(b"1 0 obj\n<< " + CAIRO + b" " + t + b" >>\nendobj\ntrailer\n<< /Info 1 0 R >>\n" for t in (old, new))
+        (base / "update.pdf").write_bytes(b"%PDF-1.4\n" + plain + b"%%EOF\n")
+        assert entry._ours_pdf(base / "update.pdf") is want, ("圧縮しない形", new)
+        packed = objstm([(2, CAIRO + b" " + old)]) + objstm([(2, CAIRO + b" " + new)])
+        (base / "update.pdf").write_bytes(b"%PDF-1.7\n" + packed + b"trailer\n<< /Info 2 0 R >>\n%%EOF\n")
+        assert entry._ours_pdf(base / "update.pdf") is want, ("object stream の形", new)
+    # 3c. 上限いっぱいの最悪の形の PDF でも、確かめは早く終わり、この入口の物と言わない。前は、>> の無い「5 0 obj <<」が並ぶと候補ごとに
+    # 終わりまで読み直し（160 KB で 40 秒ほど）、番号の合わない小さな object stream が多数並ぶと、そのたびにファイルの後ろを全部写した。
+    # 時間は広い幅で見る（今は 6 つで 1〜2 秒。混んだ機械でも誤って落ちないよう、子の 120 秒の時間切れだけで見る）
+    worst = base / "worst"
+    worst.mkdir()
+    # trailer は >> を持たない形にする（ファイルのどこにも >> が無いと、候補ごとに終わりまで読み直す形が最も遅い）
+    fill = lambda unit, tail=b"trailer /Info 5 0 R\n%%EOF\n": (
+        b"%PDF-1.7\n" + unit * ((entry.PDF_READ_MAX - 16 - len(tail)) // len(unit)) + tail)
+    for name, unit in (("obj_no_close", b"5 0 obj <<"), ("tiny_objstm", objstm([(7, b"/Producer (other)")])),
+                       ("type_objstm", b"/Type /ObjStm "), ("dict_open", b"<< "), ("info_refs", b"/Info 5 0 R "),
+                       ("obj_spaces", b"5" + b" " * 15 + b"0 ")):
+        (worst / f"{name}.pdf").write_bytes(fill(unit))
+        assert (worst / f"{name}.pdf").stat().st_size <= entry.PDF_READ_MAX, name
+    code = "import pathlib, sys, omochae.__main__ as e; print(*(e._ours_pdf(p) for p in sorted(pathlib.Path(sys.argv[1]).iterdir())))"
+    r = subprocess.run([PY, "-c", code, str(worst)], cwd=ROOT, env=ENV, capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0 and r.stdout.split() == ["False"] * 6, (r.returncode, r.stdout, r.stderr[-300:])
+    # 3d. 桁の多すぎる番号（int が受けない 4300 桁より多い）でも、検査に落ちた回は 3 のまま（前は ValueError が確かめの外へ漏れて 4 になった）。
+    # 描く前の検査と、刷った後の検査（退けた紙を置く）の両方で見る
+    huge = lambda p: p.write_bytes(b"%PDF-1.7\ntrailer\n<< /Info " + b"9" * 5000 + b" 0 R >>\n%%EOF\n")
+    for name, sc, env in (("huge_pre", bad, ENV), ("huge_post", marks, INJECT_ENV)):
+        d = case(name, _pdf=huge)
+        r = gen(sc, d / "x", env)
+        assert r.returncode == 3 and all(keep_line(d / f"x{x}") in r.stderr for x in KINDS), (name, r.returncode, r.stderr[-300:])
+    assert "退けた: " in r.stderr and (d / "x.rejected.pdf").exists(), r.stderr
     # 普通のファイルでない物（PDF の名の所・PNG の名の FIFO）。開かずに言うので止まらない。前は所を消そうとして exit 4 だった
     d = case("not_file", _pdf=lambda p: p.mkdir(), _png=lambda p: os.mkfifo(p))
     r = gen(bad, d / "x")
