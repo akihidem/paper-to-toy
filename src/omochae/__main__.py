@@ -4,17 +4,19 @@
 """
 import argparse
 import json
+import os
 import pathlib
 import re
 import shutil
 import sys
+import zlib
 
 # 読み込みは main の囲いより前に走るので、ここで落ちるとトレースバックの 1 になる（#25）。omochae.foldsim もここを通る。
 try:
     from .compose import TEMPLATES, compose
     from .marks import check_image_count, check_pdf
     from .model import ToolMissing, check_name
-    from .tools import run_tool, work_dir
+    from .tools import work_dir
 except Exception as e:
     print(f"検査できない: {type(e).__name__}: {e}", file=sys.stderr)
     sys.exit(4)
@@ -51,28 +53,81 @@ def _head_is(path, head):
         return False
 
 
+# PDF を読む時の上限。型紙の PDF は、手元で刷った 3688 枚で 0.10〜0.51 MB（2026-11-10）。30 倍ほどの余裕を持たせ、これより大きい物は
+# この入口の物と言わない（全部を読む前に止める）。開いた後の上限は、object stream を全部合わせた大きさ（1 つずつの max_length は残り）。
+# 同じ 3688 枚では Info の辞書まで 0.5 KB も開かずに届く。圧縮の爆弾（小さな塊が大きく開く物）でも、ここで止まる
+PDF_READ_MAX = 16 * 1024 * 1024
+INFLATE_MAX = 1024 * 1024
+
+
+def _pdf_info(data):
+    """PDF の Info の辞書（作り手・作った時刻などの欄）の中身のバイト。見つからない・読めない時は None。
+
+    末尾の trailer（cairo 1.18 では XRef の stream の辞書。どちらも圧縮しない）の /Info が指す物を読む。ほかの所に同じ字を置いた PDF を、
+    この入口の物と読まないため。Info は、圧縮しない「N 0 obj << … >>」（object stream を使わない cairo 1.16 などの形。その版の実物では
+    確かめていない）か、/FlateDecode の object stream の中（cairo 1.18 の形）に在る。object stream のほかの stream（頁の線など）は、
+    辞書が入らないので開かない。開けない stream と、形の読めない stream は飛ばす。"""
+    refs = re.findall(rb"/Info\s+(\d+)\s+0\s+R", data)
+    if not refs:
+        return None
+    num = int(refs[-1])  # 後から書き足した PDF では、新しい trailer が後ろに来る
+    plain = re.search(rb"(?<![0-9])%d\s+0\s+obj\s*<<(.*?)>>" % num, data, re.S)
+    if plain:
+        return plain.group(1)
+    budget = INFLATE_MAX
+    for s in re.finditer(rb"<<([^<>]*/Type\s*/ObjStm\b[^<>]*)>>\s*stream\r?\n", data):
+        first = re.search(rb"/First\s+(\d+)", s.group(1))
+        if not first or not re.search(rb"/Filter\s*/FlateDecode\b", s.group(1)):
+            continue
+        try:
+            body = zlib.decompressobj().decompress(memoryview(data)[s.end():], budget)  # 写さずに渡す（stream ごとに後ろを全部写さない）
+        except zlib.error:
+            continue
+        budget -= len(body)
+        first = int(first.group(1))
+        try:
+            nums = [int(x) for x in body[:first].split()]  # 頭は「番号 位置」の並び
+        except ValueError:
+            nums = []
+        pairs = list(zip(nums[0::2], nums[1::2]))
+        for i, (n, at) in enumerate(pairs):
+            if n == num:
+                stop = first + pairs[i + 1][1] if i + 1 < len(pairs) else len(body)
+                found = re.match(rb"\s*<<(.*?)>>", body[first + at:stop], re.S)
+                return found.group(1) if found else None
+        if budget <= 0:
+            return None
+    return None
+
+
 def _ours_pdf(path):
-    """この入口（render.write_all）が書いた PDF か。--out を別の物（同じ名の写真や書類）に向けた時に、それを消さない・上書きしないため
-    （セキュリティの点検 2026-11-07）。3D の入口の _ours（作り方の 3D の JSON か）と同じ種類の直し。
+    """この入口（render.write_all）が書いた PDF か。検査に落ちた時に、--out の所の別の物（同じ名の写真や書類）を消さない・
+    上書きしないため（セキュリティの点検 2026-11-07）。落ちない回は今までどおり置き換える。3D の入口の _ours（作り方の 3D の JSON か）と
+    同じ種類の直し。
 
     なぜ作った時刻の欄で見るか: write_all は cairo で書き、作った時刻の欄を決まった値 PDF_DATE にする。ほかの道具や人の PDF は
-    本当の時刻を持つので、作り手が cairo で時刻が PDF_DATE の PDF は、この入口の紙と読める。紙に新しい印を足さずに済む（刷る紙を変えない）。
-    欄は cairo 1.18 では圧縮した塊に入る（render の注）ので、バイトを探さず、刷った後の検査が使う pdftotext（init.sh が見る道具）の
-    -htmlmeta で読む。pdfinfo は init.sh が見ていないので使わない。日付は poppler の版で、ISO の形に直して出すか（poppler 24.02 は
-    1970-01-01T00:00:00Z）、欄の生の字（19700101000000Z）で出すかが違いうるので、数字だけを比べる。
-    確かめられない時（道具が無い・時間切れ・読めない・普通のファイルでない・render が読み込めない）は、この入口の物と言わない（消さない側）。"""
+    本当の時刻を持つ（cairo も、時刻を決めないと今の時刻を D:2026… の形で書く）ので、Info の作り手が cairo で、作った時刻が PDF_DATE の
+    PDF は、この入口の紙と読める。紙に新しい印を足さずに済む（刷る紙を変えない）。
+    なぜ道具を呼ばずに Python で読むか: poppler の pdftotext -htmlmeta は、22.04 より前の版（Ubuntu 22.04 は 22.02）では作った時刻を
+    いつも空で出すので、それで見ると、この入口の紙を自分の物と読めない。pdfinfo は init.sh が見ていない。poppler の版の下限を要る物にしない。
+    cairo は時刻を「(19700101000000Z)」の形で書く（PDF_DATE から - と T と : を除いた形。頭の D: を付けない。cairo 1.18.0 の実物で確かめた）。
+    確かめられない時（読めない・大きすぎる・普通のファイルでない・Info が見つからない・render が読み込めない）は、この入口の物と
+    言わない（消さない側）。"""
     if not _head_is(path, HEADS[".pdf"]):
         return False
     try:
         from .render import PDF_DATE  # 描く前の検査だけの時は、消す候補が在る時にだけ重い読み込みをする
-        # 絶対のパスで渡す（- で始まる --out を、命令の印と読ませない）。-l 1: 本文は要らないので、大きな PDF でも 1 頁で止める
-        head = run_tool(["pdftotext", "-htmlmeta", "-l", "1", str(path.absolute()), "-"], "pdftotext で読めない").stdout
-    except (ImportError, OSError, ToolMissing):
+        with path.open("rb") as f:
+            # 大きさを先に見る（read に上限の大きさを渡すと、小さな物でも上限の分の置き場を取る）
+            size = os.fstat(f.fileno()).st_size
+            data = f.read(size + 1) if size <= PDF_READ_MAX else b""
+    except (ImportError, OSError):
         return False
-    head = head.decode("utf-8", "replace").split("</head>", 1)[0]  # 題などの値は poppler が &quot; などに直すので、行の形を偽れない
-    meta = dict(re.findall(r'^<meta name="(\w+)" content="([^"]*)"/>$', head, re.M))
-    digits = lambda s: re.sub(r"\D", "", s)
-    return meta.get("Producer", "").startswith("cairo ") and digits(meta.get("CreationDate", "")) == digits(PDF_DATE)
+    info = _pdf_info(data) if 0 < len(data) <= PDF_READ_MAX else None
+    if info is None:
+        return False
+    when = re.escape(PDF_DATE.translate(str.maketrans("", "", "-T:")).encode("ascii"))
+    return bool(re.search(rb"/Producer\s*\(cairo \d", info) and re.search(rb"/CreationDate\s*\((?:D:)?" + when + rb"\)", info))
 
 
 def _keep(path):
@@ -87,7 +142,9 @@ def _drop(stem):
     3 つは通った回にだけ、同じ回に同じ名へ置くので、同じ名の PDF がこの入口の物なら、SVG と PNG も同じ回の物と読む。そのうえで、
     それぞれの頭が、この入口の書く形かも見る（HEADS）。PDF が無い・この入口の物と確かめられない時は、SVG と PNG も消さない。
     前の回の紙が正しい名で残りうるが、消さない事は行で分かる。確かめは消す前に済ませる（PDF を先に消すと、SVG と PNG の確かめの
-    拠り所が無くなる）。"""
+    拠り所が無くなる）。
+    限り: この入口の PDF を残したまま、横の SVG・PNG だけを頭の同じ別の物（PNG の写真など）に替えると、それは消える（ファイルの時刻で
+    同じ回の物かを見る形は、混んだ機械では書く間の時間の幅が読めず誤りうるので採らない）。"""
     ours = _ours_pdf(_named(stem, ".pdf"))
     for ext, head in HEADS.items():
         old = _named(stem, ext)
