@@ -80,4 +80,25 @@ with tempfile.TemporaryDirectory() as d:
     assert not (d / "e.json").exists()
     print("ok no fc-match")
 
+    # 6 git が UTF-8 でない誤りの文を出して落ちる（repo のパスの字など）: 誤りの文は読まず、0 で commit は null
+    sh = "#!/bin/sh\n"
+    bad = path_without(d / "bad-git", "git", extra={"git": sh + "printf 'fatal: \\351\\n' >&2\nexit 128\n"})
+    r = run(d / "f.json", bad)
+    assert r.returncode == 0 and "Traceback" not in r.stderr, (r.returncode, r.stderr[-400:])
+    assert json.loads((d / "f.json").read_text(encoding="utf-8"))["engine"]["commit"] is None
+    # 7 commit がまだ無い repo の git は「HEAD」の字を出して 128 で終わる: 出所を「HEAD」にしない
+    empty_repo = path_without(d / "empty-git", "git", extra={"git": sh + "echo HEAD\nexit 128\n"})
+    r = run(d / "g.json", empty_repo)
+    assert r.returncode == 0, (r.returncode, r.stderr[-400:])
+    assert json.loads((d / "g.json").read_text(encoding="utf-8"))["engine"]["commit"] is None
+    print("ok git errors")
+
+    # 8 想定外の誤り（場面のファイルが無い・--out がフォルダ）も、トレースバックの 1 でなく検査できない（4）
+    e = {**os.environ, "PYTHONPATH": str(ROOT / "src")}
+    for args in (["--scenario", str(d / "no-such.json"), "--commit", "x"],
+                 ["--scenario", SCENARIO, "--out", str(d), "--commit", "x"]):
+        r = subprocess.run([sys.executable, "-m", "omochae.assembly3d", *args], cwd=ROOT, env=e, capture_output=True, text=True, timeout=OUTER)
+        assert r.returncode == 4 and "検査できない" in r.stderr and "Traceback" not in r.stderr, (args, r.returncode, r.stderr[-400:])
+    print("ok unexpected")
+
 print("ok")
