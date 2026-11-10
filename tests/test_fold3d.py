@@ -17,7 +17,7 @@ import tempfile
 
 from omochae import fold3d, ops3d
 from omochae.__main__ import load_source
-from omochae.compose import compose
+from omochae.compose import INJECT_MARK, compose
 from omochae.templates import slider_fan
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -290,7 +290,8 @@ def cli3d(*args, env=ENV):
 
 r = cli3d("--scenario", str(ROOT / "examples/fan_tab.json"))
 assert r.returncode == 0 and "通す 竹串（手順 6）: " in r.stdout and "開く 4 扇（手順 13）: " in r.stdout and not r.stderr, (r.returncode, r.stdout, r.stderr)
-r = cli3d("--scenario", str(ROOT / "tests/frozen/scenarios/neg_overlap.json"))
+# 凍結の負の対照の場面は inject を持つので、tests/run_floors.py と同じく印を渡して回す（印の無い道で断る事は tests/test_inject_gate.py）
+r = cli3d("--scenario", str(ROOT / "tests/frozen/scenarios/neg_overlap.json"), env={**ENV, INJECT_MARK: "1"})
 assert r.returncode == 3 and "F5.overlap" in r.stderr, r.stderr
 with tempfile.TemporaryDirectory() as d:
     def params_file(name, body):
