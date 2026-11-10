@@ -78,8 +78,13 @@ MAX_COUNT = 100000  # 数の欄の上限。上限が無いと、数の欄で番�
 # その束を確かめ直して止まった（セキュリティの点検 2026-11-07）。値の根拠: 今の見本の束は 3.4 KB、サイトの今の書き出しは 1.7 KB。
 # サイトは群 1 つの文を 2000 件・1 つ 300 字までに切るので、それが詰まった群は約 2 MB になる。8 MB は、その詰まった群が 4 つ入る大きさで、
 # 見本の 2000 倍を越える。8 MB の束を確かめるのは、手元で 10〜15 秒ほど（300 字の文を詰めて測った）。
-# record_ids の件数は今までどおり MAX_COUNT まで（群 1 つの番号は、その群の案のどれにも写るので、群ごとの上限は残す）
+# record_ids の件数は今までどおり MAX_COUNT まで（束の中の群 1 つの番号の数）。案には番号を写さず、数（record_count）だけを持たせる
 MAX_BUNDLE_BYTES = 8_000_000
+BUNDLE_TOO_LARGE_JA = f"束は {MAX_BUNDLE_BYTES // 1_000_000} MB まで"
+# 受け入れた報告 1 つの大きさの上限（バイト）。上限が無いと、置き場の大きな報告を案作りのたびに全部読んだ。値の根拠: 受付の入口は
+# 送られる文を 20 KB で断り、報告の検査は文の合計を 4000 字までにする。受付が書く報告は、その 4000 字が全部エスケープされる字でも
+# 30 KB に届かない。100 KB は入口の 5 倍で、受付を通った報告を落とさない
+MAX_REPORT_BYTES = 100_000
 NAME = re.compile(r"[A-Za-z0-9_.-]{1,80}")  # 雛形の id・刷った組・出し元の名
 MEASURE = re.compile(r"[a-z_]{1,30}")
 RECORD_ID = re.compile(r"R-[0-9]{4,8}")
@@ -155,8 +160,11 @@ def check_bundle(b):
         return [Failure("F13.bundle", "束", "JSON の物（辞書）でない")]
     # 大きさは、置き場に置く形（_dump と同じ書き方）で先に見る。上限の中なら、置いた後の束も読める（bundles が同じ上限で読む）。
     # 先に見るのは、上限の外の束で文ごとの連絡先の形を探して、時間をかけないため
-    if len(json.dumps(b, ensure_ascii=False, indent=1).encode("utf-8")) + 1 > MAX_BUNDLE_BYTES:
-        return [Failure("F13.bundle", "束", f"束は {MAX_BUNDLE_BYTES // 1_000_000} MB まで")]
+    size = _size(b)
+    if size is None:
+        return [Failure("F13.bundle", "束", "JSON にできない値がある")]
+    if size > MAX_BUNDLE_BYTES:
+        return [Failure("F13.bundle", "束", BUNDLE_TOO_LARGE_JA)]
     out = []
     bad = lambda where, msg: out.append(Failure("F13.bundle", where, msg))
     if set(b) - TOP_KEYS:
@@ -271,17 +279,26 @@ def _load(path):
 
 
 class _TooLarge(ValueError):
-    """束のファイルが MAX_BUNDLE_BYTES より大きい（読めない物の 1 つとして受けられるよう、ValueError の仲間にする）。"""
+    """ファイルが上限より大きい（読めない物の 1 つとして受けられるよう、ValueError の仲間にする）。"""
 
 
-def _load_bundle(path):
-    """束のファイルを読む。上限より大きい物は、上限の 1 バイト先までで読むのをやめて _TooLarge（大きなファイルや、
-    終わりの無いファイルを指されても、全部を読もうとして止まらないように）。"""
+def _load_bundle(path, limit=MAX_BUNDLE_BYTES):
+    """束（と受け入れた報告）のファイルを読む。上限より大きい物は、上限の 1 バイト先までで読むのをやめて _TooLarge
+    （大きなファイルや、終わりの無いファイルを指されても、全部を読もうとして止まらないように）。"""
     with open(path, "rb") as f:
-        data = f.read(MAX_BUNDLE_BYTES + 1)
-    if len(data) > MAX_BUNDLE_BYTES:
-        raise _TooLarge(MAX_BUNDLE_BYTES)
+        data = f.read(limit + 1)
+    if len(data) > limit:
+        raise _TooLarge(limit)
     return json.loads(data.decode("utf-8"))
+
+
+def _size(obj):
+    """置き場に置く形（_dump と同じ書き方）の大きさ（バイト）。JSON にできない値（set・bytes・輪になった物・深すぎる入れ子）は None
+    （道具として直に呼ばれた時も、トレースバックでなく決まった誤りで返すため）。"""
+    try:
+        return len(json.dumps(obj, ensure_ascii=False, indent=1).encode("utf-8")) + 1
+    except (TypeError, ValueError, RecursionError):
+        return None
 
 
 def _dump(path, obj, exclusive=False):
@@ -303,6 +320,9 @@ def take(b):
         dropped += len(g.get("texts", [])) - len(kept)
         groups.append({**g, "texts": kept})
     clean = {**b, "groups": groups, "dropped_pii": b.get("dropped_pii", 0) + dropped}
+    # 置く形で測り直す。dropped_pii の欄を足すと、確かめた束より大きくなる事があり、上限の端で置いた束を bundles が数えなかった
+    if (_size(clean) or MAX_BUNDLE_BYTES + 1) > MAX_BUNDLE_BYTES:
+        return None, [Failure("F13.bundle", "束", BUNDLE_TOO_LARGE_JA)], 0
     path = _dirs()["bundles"] / f"B-{datetime.datetime.now(TZ):%Y%m%d-%H%M}-{secrets.token_hex(4)}.json"
     _dump(path, clean, exclusive=True)
     return path, [], dropped
@@ -340,7 +360,7 @@ def report_source():
     out, dropped = {}, 0
     for path in sorted(d.glob("*.json")) if d.is_dir() else []:
         try:
-            r = _load(path)
+            r = _load_bundle(path, MAX_REPORT_BYTES)  # 上限より大きい報告は、読めない報告と同じく数えない
         except (OSError, ValueError):
             continue
         if not isinstance(r, dict) or check(r):
@@ -464,7 +484,10 @@ def _key(kind, tid, ss, paper, step=None):
 
 def drafts(gs):
     """群から直しの案（下書き）を起こす。Returns 案の list（まだ置かない）。key は同じ案を 2 度起こさないための鍵。
-    案は行き先・題・数・当たった文だけを持つ。新しい寸法の値は持たない。"""
+    案は行き先・題・数・当たった文だけを持つ。新しい寸法の値は持たない。
+    記録の番号は写さず、群の番号の数（record_count）だけを持つ（セキュリティの点検 2026-11-07）。番号を案ごとに写すと、群 1 つの番号が
+    その群の案の全部に写り、上限の中の束 1 つで置き場が束の数十倍に膨らんで、以後の案作りと一覧が遅くなった。どの記録かは、
+    案の雛形・刷った組・紙（群の鍵）と置き場の束から辿れる。"""
     out = []
     shared = {}
     for (tid, ss, paper), g in sorted(gs.items()):
@@ -486,7 +509,7 @@ def drafts(gs):
                                         "craft_talks": c["talks"], "craft_people": c["people"], "reports": g["reports"]},
                             "why": f"{where}の手順 {step} で、止まったの札が {s['taps']} 回（印のある人 {s['people']} 人）。",
                             "evidence": [t for t in g["texts"] if t["step"] == step and t["kind"] in ("stuck", "question", "craft")],
-                            "record_ids": g["record_ids"], "in_engine": here})
+                            "record_count": len(g["record_ids"]), "in_engine": here})
         # 雛形: 止まったの札は重なっていないが、同じ手順で工夫を話した人が重なった所。止まった段の案が起きる段では、
         # 工夫はその案に付けてあるので、同じ段に 2 つの案を起こさない。
         for step, c in sorted(g["craft_steps"].items()):
@@ -498,7 +521,7 @@ def drafts(gs):
                             "numbers": {"craft_talks": c["talks"], "craft_people": c["people"], "stuck_taps": s["taps"], "stuck_people": s["people"], "reports": g["reports"]},
                             "why": f"{where}の手順 {step} で、作りながら話された工夫が {c['talks']} 件（印のある人 {c['people']} 人）。",
                             "evidence": [t for t in g["texts"] if t["step"] == step and t["kind"] == "craft"],
-                            "record_ids": g["record_ids"], "in_engine": here})
+                            "record_count": len(g["record_ids"]), "in_engine": here})
         # 雛形: 工夫の言葉（作った人が直した点・次の思いつき・作りながら話した工夫・できた後の話）。1 件でも案にする
         # （直した人は、型紙の足りない所を実物で見つけている）。
         craft = [t for t in g["texts"] if t["kind"] in ("fix", "idea", "craft", "keep")]
@@ -508,7 +531,7 @@ def drafts(gs):
                         "title": f"{tid}{_on(paper)}: 作った人の工夫（直した点と思いつき）を、雛形に入れるか見る",
                         "numbers": {"fixes": n_fix, "ideas": n_idea, "craft_talks": n_talk, "keeps": n_keep, "reports": g["reports"]},
                         "why": f"{where}で、作った人が直した点が {n_fix} 件、思いつきが {n_idea} 件、作りながら話した工夫が {n_talk} 件、できた後の話が {n_keep} 件。",
-                        "evidence": craft, "record_ids": g["record_ids"], "in_engine": here})
+                        "evidence": craft, "record_count": len(g["record_ids"]), "in_engine": here})
         # 雛形: ワークショップの型紙レビュー。経験者が読んで人が確かめた指摘なので 1 件から案にする。作っていないので、止まった段・工夫の案には混ぜない。
         reviews = [t for t in g["texts"] if t["kind"] == "review"]
         if reviews:
@@ -517,7 +540,7 @@ def drafts(gs):
                         "title": f"{tid}{_on(paper)}: ワークショップの型紙レビューの指摘を、雛形に入れるか見る",
                         "numbers": {"reviews": n_review, "reports": g["reports"]},
                         "why": f"{where}について、ワークショップの型紙レビューの指摘が {n_review} 件（人が確かめた物）。",
-                        "evidence": reviews, "record_ids": g["record_ids"], "in_engine": here})
+                        "evidence": reviews, "record_count": len(g["record_ids"]), "in_engine": here})
         # 生成の決まり: 検査を通って刷られた紙なのに、動かない側の札が重なった所。「わからない」は動かない側に数えない。
         # 作る前の考え（仮説を見て、どう動くと思ったか）もここに付ける。考えだけでは案にしない。
         not_moved = g["results"].get(g["not_moved_word"], 0) if g["not_moved_word"] else 0
@@ -528,7 +551,7 @@ def drafts(gs):
                         "numbers": {"not_moved": not_moved, "moved": g["results"].get(g["moved_word"], 0), "reports": g["reports"]},
                         "why": f"{where}は検査を通って刷られた紙で、「{g['not_moved_word']}」の札が {not_moved} 件（報告 {g['reports']} 件）。",
                         "evidence": [t for t in g["texts"] if t["kind"] in ("stuck", "impression", "explain", "think")][:MOTION_TEXTS],
-                        "record_ids": g["record_ids"], "in_engine": here})
+                        "record_count": len(g["record_ids"]), "in_engine": here})
         for d in out[first:]:
             d.update(current_set=cur, why=d["why"] + note)
         for t in g["texts"]:
@@ -545,7 +568,7 @@ def drafts(gs):
                         "title": f"共有の所: {SHARED[kind][0]}を見直す",
                         "numbers": {"templates": len(by_tpl), "texts": sum(t["count"] for t in texts)},
                         "why": f"同じ種類の困り事が {len(by_tpl)} つの雛形（{'・'.join(sorted(by_tpl))}）で出た。雛形ごとでなく共有の所に当たるかを見る。",
-                        "evidence": texts, "record_ids": [], "in_engine": True})
+                        "evidence": texts, "record_count": 0, "in_engine": True})
     return out
 
 
@@ -581,7 +604,8 @@ def propose():
             _dump(d / f"{p['id']}.json", p, exclusive=True)
             made.append(p)
         elif old["status"] == "draft" and any(old.get(k) != v for k, v in dr.items()):
-            p = {**old, **dr, "renewed_at": _now()}
+            # 前の形の案が持つ番号の list（record_ids）は、新しくする時に落とす（数は record_count が持つ）。決めた案は書き換えない
+            p = {**{k: v for k, v in old.items() if k != "record_ids"}, **dr, "renewed_at": _now()}
             _dump(d / f"{p['id']}.json", p)
             renewed.append(p)
         else:
@@ -801,7 +825,7 @@ def main(argv=None):
             try:
                 b = _load_bundle(args.file)
             except _TooLarge:  # 読めない物でなく、決まりの外の束として断る（check_bundle の上限と同じ字）
-                return fail([Failure("F13.bundle", "束", f"束は {MAX_BUNDLE_BYTES // 1_000_000} MB まで")])
+                return fail([Failure("F13.bundle", "束", BUNDLE_TOO_LARGE_JA)])
             except (OSError, ValueError, RecursionError) as e:
                 print(f"確かめられない: 束が読めない（{type(e).__name__}）", file=sys.stderr)
                 return 4
