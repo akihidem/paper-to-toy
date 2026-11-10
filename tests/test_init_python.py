@@ -9,6 +9,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -25,12 +26,22 @@ said = re.findall(r"Python (\d+\.\d+) 以上", (ROOT / "README.md").read_text(en
 assert said == [MIN_PY], f"README の版 {said} と init.sh の版 {MIN_PY} が違う"
 
 # 固定した依存の求める版を、init.sh の版が満たす（依存を上げて版がずれたら、ここで落ちる）
-pins = re.findall(r"^([\w-]+)==", (ROOT / "requirements.txt").read_text(encoding="utf-8"), re.M)
+# Python の版の印（; python_version >= "3.12" か < "3.12"）の付いた行は、その版の Python にだけ入る（numpy は Python の版ごとに 2 つ
+# 固定する。2 つが揃う事は tests/test_requirements_pin.py が見る）。読むのは入っている物の版の決まりなので、今の Python に入らない行は
+# 見られない（3.11 で回すと < の行を見る）。>= の行は印の版から上で入るので、下限の代わりに印の版と比べる
+pins = re.findall(r"^([\w-]+)==[^;\n]*(?:;(.*))?$", (ROOT / "requirements.txt").read_text(encoding="utf-8"), re.M)
 assert pins, "requirements.txt に固定した依存が無い"
-for name in pins:
+for name, marker in pins:
+    lowest = MIN_PY
+    if marker:
+        m = re.fullmatch(r'\s*python_version\s*(>=|<)\s*"(\d+\.\d+)"\s*', marker)
+        assert m, f"{name} の印 {marker!r} が読めない（python_version の >= か < だけを使う）"
+        if (sys.version_info[:2] >= ver(m.group(2))) != (m.group(1) == ">="):
+            continue
+        lowest = max(MIN_PY, m.group(2), key=ver) if m.group(1) == ">=" else MIN_PY
     needs = importlib.metadata.metadata(name).get("Requires-Python") or ""
     floor = re.search(r">=\s*(\d+\.\d+)", needs)
-    assert not floor or ver(floor.group(1)) <= ver(MIN_PY), f"{name} は {needs} を求めるが、init.sh は {MIN_PY}"
+    assert not floor or ver(floor.group(1)) <= ver(lowest), f"{name} は {needs} を求めるが、" + (f"この行は Python {lowest} から" if lowest != MIN_PY else f"init.sh は {MIN_PY}")
 
 
 def stub(path, body):
