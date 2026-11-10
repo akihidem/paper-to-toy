@@ -15,6 +15,7 @@
 import json
 import math
 import pathlib
+import re
 import sys
 
 from .compose import TEMPLATES
@@ -809,6 +810,24 @@ def _ours(path):
         return False
 
 
+def _head_commit():
+    """出所に書く git の HEAD。git が無い・repo でない・返らない時は None（出所が分からないだけで、組み立ては作れる）。
+    時間の上限は外の命令と同じ（tools.tool_timeout）。上限が無いと git が返らない時に入口が固まり、git の無い機械では
+    FileNotFoundError のトレースバック（決まりの外の 1）で落ちた（セキュリティの点検 2026-11-07）。
+    上限の値が読めない時の ToolMissing は、ここで受けずに呼ぶ側へ返す（黙って上限無しにも、出所無しにもしない）。"""
+    import subprocess
+    from .tools import tool_timeout
+    limit = tool_timeout()
+    try:
+        # 誤りの文は読まない（字が UTF-8 でないと、読むだけで UnicodeDecodeError のトレースバックになった）
+        r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=limit)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    out = r.stdout.decode("ascii", "replace").strip()
+    # commit がまだ無い repo では「HEAD」の字を出して 128 で終わる。終わりの値と、commit の番号の形（sha1 の 40 字か sha256 の 64 字の 16 進）で見る
+    return out if r.returncode == 0 and re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", out) else None
+
+
 def main(argv=None):
     from .__main__ import Parser  # 呼び方の誤りは 4（ほかの入口と同じ。README の命令の試験が見る）
     ap = Parser(prog="python -m omochae.assembly3d", description="作り方の 3D を、手順と 1 対 1 の段ごとの形にして JSON で出す")
@@ -817,13 +836,29 @@ def main(argv=None):
     ap.add_argument("--commit", help="出所に書く commit（無ければ git の HEAD）")
     ap.add_argument("--record", help="検品の記録（段ごとの絵の一覧 PNG・短い動画 GIF・文 TXT）を書く所。落ちても書く")
     args = ap.parse_args(argv)
+    try:
+        return _run(args)
+    except Exception as e:  # 想定外は「通った」にも「落ちた」にも数えない（ほかの入口と同じ。場面のファイルが無い・欄が無い・--out がフォルダ など）
+        print(f"検査できない: {type(e).__name__}: {e}", file=sys.stderr)
+        return 4
+
+
+def _run(args):
+    from .model import ToolMissing
     commit = args.commit
     if commit is None:
-        import subprocess
-        r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True)
-        commit = r.stdout.strip() or None
+        try:
+            commit = _head_commit()
+        except ToolMissing as e:
+            print(f"検査できない: {e}", file=sys.stderr)
+            return 4
     try:
         data, rules = assemble(args.scenario, commit)
+    except ToolMissing as e:
+        # 字の道具（fc-match。手順の字の幅を測る）が無い・返らない時や、出典の記録が無い時など。形を見ていないので、落ちた（3）とは言わない。
+        # 受けないとトレースバックの 1 になった（git の時と同じ種類。終わりの値は 0・3・4 だけ）
+        print(f"検査できない: {e}", file=sys.stderr)
+        return 4
     except (FoldError, ValueError) as e:
         print(f"作れない: {e}", file=sys.stderr)
         return 3
